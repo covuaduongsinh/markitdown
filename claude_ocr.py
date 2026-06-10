@@ -186,18 +186,19 @@ def find_claude():
 
 
 # DPI cao để nhận diện bàn cờ (cắt hình nét); DPI thấp cho OCR cả trang.
+# Model bàn cờ chỉ nhìn ảnh <=512px nên 250 DPI thường đủ và nhanh hơn ~2.5x.
 BOARD_DPI = 400
 
 
-def _render_page_pair(page, out_dir, page_no, ocr_dpi=200):
-    """Render 1 trang PDF: trả về (đường dẫn PNG ocr_dpi, ảnh PIL BOARD_DPI)."""
+def _render_page_pair(page, out_dir, page_no, ocr_dpi=200, board_dpi=BOARD_DPI):
+    """Render 1 trang PDF: trả về (đường dẫn PNG ocr_dpi, ảnh PIL board_dpi)."""
     from PIL import Image
 
-    hi = page.render(scale=BOARD_DPI / 72.0).to_pil().convert("RGB")
+    hi = page.render(scale=board_dpi / 72.0).to_pil().convert("RGB")
     lo = hi.resize(
         (
-            max(1, hi.width * ocr_dpi // BOARD_DPI),
-            max(1, hi.height * ocr_dpi // BOARD_DPI),
+            max(1, hi.width * ocr_dpi // board_dpi),
+            max(1, hi.height * ocr_dpi // board_dpi),
         ),
         Image.LANCZOS,
     )
@@ -291,7 +292,10 @@ def ocr_image_path(img_path, model="opus", timeout=600, board_fens=None):
     return _normalize_chessboard_blocks(out)
 
 
-def ocr_pdf(pdf_path, model="opus", dpi=200, progress=None, page_timeout=600):
+def ocr_pdf(
+    pdf_path, model="opus", dpi=200, progress=None, page_timeout=600,
+    board_dpi=BOARD_DPI,
+):
     """OCR toàn bộ PDF scan. Trả về Markdown ghép các trang.
 
     Mỗi trang: nhận diện hình bàn cờ -> FEN cục bộ bằng model ONNX (không tốn
@@ -313,9 +317,11 @@ def ocr_pdf(pdf_path, model="opus", dpi=200, progress=None, page_timeout=600):
             for i in range(1, n_pages + 1):
                 if progress is not None:
                     progress(i, n_pages)
-                png, hi_res = _render_page_pair(pdf[i - 1], tmp_dir, i, ocr_dpi=dpi)
+                png, hi_res = _render_page_pair(
+                    pdf[i - 1], tmp_dir, i, ocr_dpi=dpi, board_dpi=board_dpi
+                )
                 board_fens = _page_board_fens(hi_res)
-                del hi_res  # giải phóng ảnh 400 DPI trước khi gọi Claude
+                del hi_res  # giải phóng ảnh DPI cao trước khi gọi Claude
                 try:
                     text = ocr_image_path(
                         png, model=model, timeout=page_timeout, board_fens=board_fens

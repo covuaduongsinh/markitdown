@@ -12,6 +12,8 @@ Pillow. Thiếu thư viện/model -> available() trả False, caller tự fallba
 """
 
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from PIL import Image, ImageEnhance, ImageOps
@@ -43,23 +45,30 @@ ROTATIONS = [0, 90, 180, 270]
 FEN_TAIL = "w - - 0 1"
 
 _sessions = {}
+_sessions_lock = threading.Lock()
 
 
 def _get_session(name):
-    """Lazy-load + cache InferenceSession cho 1 model; None nếu không có."""
+    """Lazy-load + cache InferenceSession cho 1 model; None nếu không có.
+
+    Có lock vì fens_for_page chạy infer_fen song song nhiều thread.
+    """
     if ort is None:
         return None
     if name in _sessions:
         return _sessions[name]
-    path = os.path.join(MODELS_DIR, f"{name}.onnx")
-    sess = None
-    if os.path.isfile(path):
-        try:
-            sess = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
-        except Exception:
-            sess = None
-    _sessions[name] = sess
-    return sess
+    with _sessions_lock:
+        if name in _sessions:
+            return _sessions[name]
+        path = os.path.join(MODELS_DIR, f"{name}.onnx")
+        sess = None
+        if os.path.isfile(path):
+            try:
+                sess = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+            except Exception:
+                sess = None
+        _sessions[name] = sess
+        return sess
 
 
 def available():
@@ -141,12 +150,27 @@ def _mask_to_bbox(mask, img_w, img_h):
     return (x1, y1, x2, y2)
 
 
-def _crop_to_chessboard(pil_img, max_tries=10):
-    """cropToChessboard: pad 5% trắng, lặp bbox đến khi phủ >70% mỗi chiều."""
+def _crop_to_chessboard(pil_img, max_tries=10, work_max_side=1024):
+    """cropToChessboard: pad 5% trắng, lặp bbox đến khi phủ >70% mỗi chiều.
+
+    Vòng lặp bbox chạy trên bản thu nhỏ (cạnh dài <= work_max_side, model chỉ
+    nhìn 512px nên không mất thông tin); hội tụ rồi mới crop ảnh gốc theo tọa
+    độ quy đổi để giữ nguyên độ phân giải cho các stage sau.
+    """
     sess = _get_session("bbox")
     if sess is None:
         return pil_img
-    img = _pad_white(pil_img, pil_img.width * 0.05, pil_img.height * 0.05)
+    full = _pad_white(pil_img, pil_img.width * 0.05, pil_img.height * 0.05)
+
+    scale = min(1.0, work_max_side / max(full.width, full.height, 1))
+    if scale < 1.0:
+        img = full.resize(
+            (max(1, round(full.width * scale)), max(1, round(full.height * scale))),
+            Image.BILINEAR,
+        )
+    else:
+        img = full
+    ox, oy = 0, 0  # gốc viewport hiện tại trên bản thu nhỏ
 
     for _ in range(max_tries):
         if img.width == 0 or img.height == 0:
@@ -158,17 +182,32 @@ def _crop_to_chessboard(pil_img, max_tries=10):
         x1, y1, x2, y2 = bbox
         new_w, new_h = x2 - x1, y2 - y1
         if new_w / img.width > 0.7 and new_h / img.height > 0.7:
-            return img.crop((x1, y1, x2, y2))
-        pad_mult = 0.2 if (img.width < 420 or img.height < 420) else 0.12
+            if scale >= 1.0:
+                return img.crop((x1, y1, x2, y2))
+            return full.crop(
+                (
+                    max(0, int((ox + x1) / scale)),
+                    max(0, int((oy + y1) / scale)),
+                    min(full.width, int(np.ceil((ox + x2) / scale))),
+                    min(full.height, int(np.ceil((oy + y2) / scale))),
+                )
+            )
+        # ngưỡng 420 được chỉnh theo kích thước gốc -> quy đổi qua scale
+        small = img.width / scale < 420 or img.height / scale < 420
+        pad_mult = 0.2 if small else 0.12
         x_add, y_add = new_w * pad_mult, new_h * pad_mult
+        cx1 = int(max(x1 - x_add, 0))
+        cy1 = int(max(y1 - y_add, 0))
         img = img.crop(
             (
-                max(x1 - x_add, 0),
-                max(y1 - y_add, 0),
-                min(x2 + x_add, img.width),
-                min(y2 + y_add, img.height),
+                cx1,
+                cy1,
+                int(min(x2 + x_add, img.width)),
+                int(min(y2 + y_add, img.height)),
             )
         )
+        ox += cx1
+        oy += cy1
     return None
 
 
@@ -194,21 +233,26 @@ def _flip_color_rows(squares):
     return flipped
 
 
-def _board_squares_ensemble(pil_img, num_tries=10):
-    """getBoardFromCropped: ensemble numTries lần, lần lẻ đảo màu, lần >=2 augment."""
+def _board_squares_ensemble(pil_img, num_tries=10, min_tries=4, margin=0.35):
+    """getBoardFromCropped: ensemble numTries lần, lần lẻ đảo màu, lần >=2 augment.
+
+    Dừng sớm sau số lần chẵn (giữ cân bằng cặp thường/đảo màu) >= min_tries khi
+    lưới argmax tích lũy không đổi giữa 2 lần kiểm và mọi ô có biên độ tin cậy
+    (top1 - top2 trung bình) > margin — ảnh rõ nét hội tụ sau ~4 lần.
+    """
     if pil_img.width < 32 or pil_img.height < 32:
         return None
     sess = _get_session("fen")
     if sess is None:
         return None
 
+    base = pil_img.convert("RGB").resize(
+        (BOARD_PIXEL_WIDTH, BOARD_PIXEL_WIDTH), Image.BILINEAR
+    )
     total = np.zeros((64, len(PIECE_TYPES)), dtype=np.float32)
+    prev_grid = None
     for tries in range(num_tries):
-        working = pil_img.convert("RGB").resize(
-            (BOARD_PIXEL_WIDTH, BOARD_PIXEL_WIDTH), Image.BILINEAR
-        )
-        if tries >= 2:
-            working = _augment(working)
+        working = _augment(base) if tries >= 2 else base
         tensor = _to_tensor(working, BOARD_PIXEL_WIDTH)
         color_flipped = tries % 2 == 1
         if color_flipped:
@@ -218,6 +262,19 @@ def _board_squares_ensemble(pil_img, num_tries=10):
         if color_flipped:
             out = _flip_color_rows(out)
         total += out
+
+        done = tries + 1
+        if done % 2 == 0 and done < num_tries:
+            grid = np.argmax(total, axis=1)
+            if (
+                done >= min_tries
+                and prev_grid is not None
+                and np.array_equal(grid, prev_grid)
+            ):
+                top2 = np.sort(total, axis=1)[:, -2:] / done
+                if float(np.min(top2[:, 1] - top2[:, 0])) > margin:
+                    break
+            prev_grid = grid
     return total
 
 
@@ -422,19 +479,27 @@ def fens_for_page(pil_page, num_tries=10):
     """Pipeline trọn gói cho 1 trang: detect -> infer từng hình.
 
     Trả về list (bbox, fen) theo thứ tự đọc; hình nhận diện thất bại bị bỏ qua.
-    Không tìm thấy hình nào qua contour -> thử coi CẢ ảnh là 1 bàn cờ (ảnh chụp
-    riêng 1 sơ đồ, hoặc sơ đồ không có khung viền) — existence model sẽ gác cổng.
+    Các hình được nhận diện song song (onnxruntime thả GIL khi inference),
+    kết quả vẫn theo thứ tự đọc. Không tìm thấy hình nào qua contour -> thử coi
+    CẢ ảnh là 1 bàn cờ (ảnh chụp riêng 1 sơ đồ, hoặc sơ đồ không có khung
+    viền) — existence model sẽ gác cổng.
     """
-    results = []
-    for box in detect_boards(pil_page):
-        crop = pil_page.crop(box)
+
+    def _infer_box(box):
         try:
             # existence đã kiểm trong detect_boards -> bỏ qua cho nhanh
-            fen = infer_fen(crop, num_tries=num_tries, skip_existence=True)
+            return infer_fen(
+                pil_page.crop(box), num_tries=num_tries, skip_existence=True
+            )
         except Exception:
-            fen = None
-        if fen:
-            results.append((box, fen))
+            return None
+
+    results = []
+    boxes = detect_boards(pil_page)
+    if boxes:
+        with ThreadPoolExecutor(max_workers=min(4, len(boxes))) as pool:
+            fens = list(pool.map(_infer_box, boxes))
+        results = [(box, fen) for box, fen in zip(boxes, fens) if fen]
 
     if not results:
         try:

@@ -80,13 +80,21 @@ def _model_from_label(label):
     return (label or "opus").strip().split()[0].lower()
 
 
-def _ocr_to_outputs(file_path, base_name, model):
+def _dpi_from_label(label):
+    """'400 (nét nhất — mặc định)' -> 400; nhãn lạ -> 400."""
+    try:
+        return int((label or "").strip().split()[0])
+    except (ValueError, IndexError):
+        return 400
+
+
+def _ocr_to_outputs(file_path, base_name, model, board_dpi=400):
     """Chạy OCR (PDF hoặc ảnh) qua Claude Code và trả về 4-tuple kết quả."""
     import claude_ocr
 
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".pdf":
-        text = claude_ocr.ocr_pdf(file_path, model=model)
+        text = claude_ocr.ocr_pdf(file_path, model=model, board_dpi=board_dpi)
     else:
         text = claude_ocr.ocr_image_file(file_path, model=model)
 
@@ -98,13 +106,17 @@ def _ocr_to_outputs(file_path, base_name, model):
     return text, text, download_path, status
 
 
-def convert_file(file_path, enable_plugins, use_ocr, model_label, force_ocr=False):
+def convert_file(
+    file_path, enable_plugins, use_ocr, model_label, force_ocr=False,
+    board_dpi_label=None,
+):
     if not file_path:
         return "", "", None, "ℹ️ Hãy chọn hoặc kéo-thả một tệp trước."
 
     base_name = os.path.splitext(os.path.basename(file_path))[0]
     ext = os.path.splitext(file_path)[1].lower()
     model = _model_from_label(model_label)
+    board_dpi = _dpi_from_label(board_dpi_label)
     is_image = ext in IMAGE_EXTS
     is_pdf = ext == ".pdf"
 
@@ -116,7 +128,7 @@ def convert_file(file_path, enable_plugins, use_ocr, model_label, force_ocr=Fals
             # Không có Claude Code -> vẫn thử chuyển đổi thường (ra metadata).
             return _convert(file_path, enable_plugins, base_name)
         try:
-            return _ocr_to_outputs(file_path, base_name, model)
+            return _ocr_to_outputs(file_path, base_name, model, board_dpi)
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
 
@@ -133,7 +145,7 @@ def convert_file(file_path, enable_plugins, use_ocr, model_label, force_ocr=Fals
                 "⚠️ Cần Claude Code (lệnh 'claude') trong PATH để buộc OCR.",
             )
         try:
-            return _ocr_to_outputs(file_path, base_name, model)
+            return _ocr_to_outputs(file_path, base_name, model, board_dpi)
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
 
@@ -152,7 +164,7 @@ def convert_file(file_path, enable_plugins, use_ocr, model_label, force_ocr=Fals
                 "⚠️ PDF scan không có text. Cần Claude Code (lệnh 'claude') trong PATH để OCR.",
             )
         try:
-            return _ocr_to_outputs(file_path, base_name, model)
+            return _ocr_to_outputs(file_path, base_name, model, board_dpi)
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
 
@@ -231,9 +243,14 @@ def _with_download_update(result):
     return preview_md, raw_md, dl, status_md
 
 
-def on_convert_file(file_path, enable_plugins, use_ocr, model_label, force_ocr):
+def on_convert_file(
+    file_path, enable_plugins, use_ocr, model_label, force_ocr, board_dpi_label
+):
     return _with_download_update(
-        convert_file(file_path, enable_plugins, use_ocr, model_label, force_ocr)
+        convert_file(
+            file_path, enable_plugins, use_ocr, model_label, force_ocr,
+            board_dpi_label,
+        )
     )
 
 
@@ -301,6 +318,19 @@ def build_ui():
                         value="opus (chính xác nhất)",
                         label="Model Claude dùng để OCR",
                     )
+                    board_dpi = gr.Dropdown(
+                        choices=[
+                            "400 (nét nhất — mặc định)",
+                            "250 (nhanh hơn ~2.5×)",
+                        ],
+                        value="400 (nét nhất — mặc định)",
+                        label="DPI render trang để nhận diện bàn cờ",
+                        info=(
+                            "Model nhận diện chỉ nhìn ảnh ≤512px nên 250 DPI "
+                            "thường cho kết quả tương đương mà render nhanh hơn "
+                            "hẳn; chọn 400 nếu sơ đồ in nhỏ/mờ."
+                        ),
+                    )
 
                 status = gr.Markdown(_STATUS_HINT, elem_id="status-box")
 
@@ -320,7 +350,7 @@ def build_ui():
         outputs = [preview, raw, download, status]
         btn_file.click(
             on_convert_file,
-            [file_in, enable_plugins, use_ocr, ocr_model, force_ocr],
+            [file_in, enable_plugins, use_ocr, ocr_model, force_ocr, board_dpi],
             outputs,
             show_progress="full",
         )
