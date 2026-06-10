@@ -98,7 +98,7 @@ def _ocr_to_outputs(file_path, base_name, model):
     return text, text, download_path, status
 
 
-def convert_file(file_path, enable_plugins, use_ocr, model_label):
+def convert_file(file_path, enable_plugins, use_ocr, model_label, force_ocr=False):
     if not file_path:
         return "", "", None, "ℹ️ Hãy chọn hoặc kéo-thả một tệp trước."
 
@@ -115,6 +115,23 @@ def convert_file(file_path, enable_plugins, use_ocr, model_label):
         if not find_claude():
             # Không có Claude Code -> vẫn thử chuyển đổi thường (ra metadata).
             return _convert(file_path, enable_plugins, base_name)
+        try:
+            return _ocr_to_outputs(file_path, base_name, model)
+        except Exception as exc:
+            return "", "", None, f"❌ Lỗi OCR: {exc}"
+
+    # PDF + "Buộc OCR": bỏ qua lớp text có sẵn (thường là text rác từ OCR cũ
+    # nhúng trong PDF scan), OCR lại toàn bộ bằng Claude Code.
+    if use_ocr and is_pdf and force_ocr:
+        from claude_ocr import find_claude
+
+        if not find_claude():
+            return (
+                "",
+                "",
+                None,
+                "⚠️ Cần Claude Code (lệnh 'claude') trong PATH để buộc OCR.",
+            )
         try:
             return _ocr_to_outputs(file_path, base_name, model)
         except Exception as exc:
@@ -214,9 +231,9 @@ def _with_download_update(result):
     return preview_md, raw_md, dl, status_md
 
 
-def on_convert_file(file_path, enable_plugins, use_ocr, model_label):
+def on_convert_file(file_path, enable_plugins, use_ocr, model_label, force_ocr):
     return _with_download_update(
-        convert_file(file_path, enable_plugins, use_ocr, model_label)
+        convert_file(file_path, enable_plugins, use_ocr, model_label, force_ocr)
     )
 
 
@@ -266,7 +283,17 @@ def build_ui():
                         info=(
                             "Khi PDF/ảnh không có lớp text, dùng phiên đăng nhập Claude Code "
                             "hiện tại để OCR — không cần API key. Mỗi trang là một lần gọi "
-                            "`claude`, có thể mất vài chục giây và tiêu tốn hạn mức subscription."
+                            "`claude`, có thể mất vài chục giây và tiêu tốn hạn mức subscription. "
+                            "Hình bàn cờ vua sẽ tự động chuyển thành block `chessboard` (FEN) "
+                            "dùng được với plugin Chessboard Viewer trong Obsidian."
+                        ),
+                    )
+                    force_ocr = gr.Checkbox(
+                        label="Buộc OCR toàn bộ (bỏ qua lớp text có sẵn trong PDF)",
+                        value=False,
+                        info=(
+                            "Dùng khi PDF scan có sẵn lớp text rác (OCR cũ kém chất lượng) "
+                            "khiến kết quả chuyển đổi thường bị lỗi — vd: sách cờ vua scan."
                         ),
                     )
                     ocr_model = gr.Dropdown(
@@ -293,7 +320,7 @@ def build_ui():
         outputs = [preview, raw, download, status]
         btn_file.click(
             on_convert_file,
-            [file_in, enable_plugins, use_ocr, ocr_model],
+            [file_in, enable_plugins, use_ocr, ocr_model, force_ocr],
             outputs,
             show_progress="full",
         )
