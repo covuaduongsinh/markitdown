@@ -11,8 +11,10 @@ Sau khi chạy, mở trình duyệt tại http://127.0.0.1:7860
 
 import os
 import re
+import shutil
 import tempfile
 import traceback
+from urllib.parse import quote
 
 import gradio as gr
 from markitdown import MarkItDown
@@ -44,6 +46,48 @@ def _write_md(markdown: str, base_name: str, used_paths=None) -> str:
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(markdown)
     return out_path
+
+
+def _download_panel(paths):
+    """HTML danh sách tệp kết quả, mỗi tệp một nút tải riêng."""
+    if not paths:
+        return ""
+    rows = []
+    for p in paths:
+        name = os.path.basename(p)
+        href = "/gradio_api/file=" + quote(p.replace("\\", "/"))
+        rows.append(
+            f'<div class="dl-row"><span class="dl-name">📝 {name}</span>'
+            f'<a class="dl-btn" href="{href}" download="{name}">⬇️ Tải về</a></div>'
+        )
+    return (
+        '<div class="dl-list"><div class="dl-title">⬇️ Tệp .md kết quả</div>'
+        + "".join(rows)
+        + "</div>"
+    )
+
+
+def _autosave(path, folder):
+    """Copy tệp .md vào thư mục người dùng chọn ngay khi xong.
+
+    Không ghi đè tệp có sẵn (thêm hậu tố _2, _3...).
+    Trả về (đường dẫn đích, None) hoặc (None, thông báo lỗi).
+    """
+    folder = (folder or "").strip()
+    if not folder:
+        return None, "⚠️ Chưa nhập thư mục lưu kết quả."
+    try:
+        os.makedirs(folder, exist_ok=True)
+        dest = os.path.join(folder, os.path.basename(path))
+        root, ext = os.path.splitext(dest)
+        n = 2
+        while os.path.exists(dest):
+            dest = f"{root}_{n}{ext}"
+            n += 1
+        shutil.copy2(path, dest)
+        return dest, None
+    except OSError as exc:
+        return None, f"⚠️ Không lưu được vào thư mục: {exc}"
 
 
 def _convert(source, enable_plugins, base_name, used_paths=None):
@@ -229,6 +273,44 @@ CSS = """
     border-radius: 12px;
     padding: 8px 14px;
 }
+.dl-list {
+    border: 1px solid var(--border-color-primary);
+    background: var(--background-fill-secondary);
+    border-radius: 12px;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.dl-title { font-weight: 600; margin-bottom: 2px; }
+.dl-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid var(--border-color-primary);
+    background: var(--background-fill-primary);
+    border-radius: 8px;
+    padding: 5px 10px;
+}
+.dl-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.dl-btn {
+    flex: 0 0 auto;
+    background: #4f46e5;
+    color: #fff !important;
+    text-decoration: none !important;
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-size: .85rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.dl-btn:hover { background: #4338ca; }
 """
 
 HERO_HTML = """
@@ -246,25 +328,17 @@ _STATUS_HINT = "👋 Chọn tệp hoặc dán URL rồi bấm **Chuyển đổi*
 
 
 def _with_download_update(result):
-    """Đổi đường dẫn tải về thành cập nhật ẩn/hiện cho danh sách tệp kết quả."""
+    """Đổi đường dẫn tải về thành bảng HTML chứa nút tải."""
     preview_md, raw_md, path, status_md = result
-    if path:
-        dl = gr.Files(value=[path], visible=True)
-    else:
-        dl = gr.Files(visible=False)
-    return preview_md, raw_md, dl, status_md
+    return preview_md, raw_md, _download_panel([path] if path else []), status_md
 
 
 def on_convert_files(
-    file_paths, enable_plugins, use_ocr, model_label, force_ocr, board_dpi_label
+    file_paths, enable_plugins, use_ocr, model_label, force_ocr, board_dpi_label,
+    autosave_on, autosave_dir,
 ):
     if not file_paths:
-        yield (
-            "",
-            "",
-            gr.Files(visible=False),
-            "ℹ️ Hãy chọn hoặc kéo-thả ít nhất một tệp trước.",
-        )
+        yield "", "", "", "ℹ️ Hãy chọn hoặc kéo-thả ít nhất một tệp trước."
         return
 
     total = len(file_paths)
@@ -277,7 +351,7 @@ def on_convert_files(
         yield (
             "\n\n---\n\n".join(previews),
             "\n\n".join(raws),
-            gr.Files(value=done_paths, visible=bool(done_paths)),
+            _download_panel(done_paths),
             progress,
         )
 
@@ -285,6 +359,9 @@ def on_convert_files(
             fp, enable_plugins, use_ocr, model_label, force_ocr, board_dpi_label,
             used_paths=done_paths,
         )
+        if path and autosave_on:
+            saved, err = _autosave(path, autosave_dir)
+            st += f"\n  💾 đã lưu: `{saved}`" if saved else f"\n  {err}"
         lines.append(f"**{name}** — {st}")
         if preview:
             previews.append(f"## 📄 {name}\n\n{preview}")
@@ -300,7 +377,7 @@ def on_convert_files(
         yield (
             "\n\n---\n\n".join(previews),
             "\n\n".join(raws),
-            gr.Files(value=done_paths, visible=bool(done_paths)),
+            _download_panel(done_paths),
             summary,
         )
 
@@ -310,7 +387,7 @@ def on_convert_url(url, enable_plugins):
 
 
 def on_clear():
-    return "", "", gr.Files(visible=False), _STATUS_HINT
+    return "", "", "", _STATUS_HINT
 
 
 def build_ui():
@@ -329,6 +406,16 @@ def build_ui():
                         )
                         btn_file = gr.Button(
                             "🚀 Chuyển đổi", variant="primary", size="lg"
+                        )
+                        autosave_on = gr.Checkbox(
+                            label="💾 Tự động lưu .md vào thư mục bên dưới khi mỗi tệp xong",
+                            value=True,
+                        )
+                        autosave_dir = gr.Textbox(
+                            label="Thư mục lưu kết quả",
+                            value=os.path.join(
+                                os.path.expanduser("~"), "Downloads"
+                            ),
                         )
                     with gr.Tab("🔗 Từ URL"):
                         url_in = gr.Textbox(
@@ -359,7 +446,7 @@ def build_ui():
                     )
                     force_ocr = gr.Checkbox(
                         label="Buộc OCR toàn bộ (bỏ qua lớp text có sẵn trong PDF)",
-                        value=False,
+                        value=True,
                         info=(
                             "Dùng khi PDF scan có sẵn lớp text rác (OCR cũ kém chất lượng) "
                             "khiến kết quả chuyển đổi thường bị lỗi — vd: sách cờ vua scan."
@@ -372,10 +459,10 @@ def build_ui():
                     )
                     board_dpi = gr.Dropdown(
                         choices=[
-                            "400 (nét nhất — mặc định)",
-                            "250 (nhanh hơn ~2.5×)",
+                            "400 (nét nhất)",
+                            "250 (nhanh hơn ~2.5× — mặc định)",
                         ],
-                        value="400 (nét nhất — mặc định)",
+                        value="250 (nhanh hơn ~2.5× — mặc định)",
                         label="DPI render trang để nhận diện bàn cờ",
                         info=(
                             "Model nhận diện chỉ nhìn ảnh ≤512px nên 250 DPI "
@@ -386,11 +473,7 @@ def build_ui():
 
                 status = gr.Markdown(_STATUS_HINT, elem_id="status-box")
 
-                downloads = gr.Files(
-                    label="⬇️ Tệp .md kết quả (bấm để tải về)",
-                    visible=False,
-                    interactive=False,
-                )
+                downloads = gr.HTML()
                 btn_clear = gr.Button("🗑️ Xóa kết quả", variant="secondary")
 
             with gr.Column(scale=2):
@@ -405,7 +488,10 @@ def build_ui():
         outputs = [preview, raw, downloads, status]
         btn_file.click(
             on_convert_files,
-            [file_in, enable_plugins, use_ocr, ocr_model, force_ocr, board_dpi],
+            [
+                file_in, enable_plugins, use_ocr, ocr_model, force_ocr,
+                board_dpi, autosave_on, autosave_dir,
+            ],
             outputs,
             show_progress="full",
         )
@@ -421,4 +507,6 @@ def build_ui():
 
 
 if __name__ == "__main__":
-    build_ui().launch(inbrowser=True, theme=THEME, css=CSS)
+    build_ui().launch(
+        inbrowser=True, theme=THEME, css=CSS, allowed_paths=[_OUTPUT_DIR]
+    )
