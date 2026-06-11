@@ -333,15 +333,35 @@ def _with_download_update(result):
     return preview_md, raw_md, _download_panel([path] if path else []), status_md
 
 
+def _translate_to_vn(raw_md, orig_path, model, done_paths):
+    """Dịch raw_md sang tiếng Việt, ghi tệp `<tên gốc>_vn.md`.
+
+    Trả về (đường dẫn tệp _vn hoặc None, dòng status).
+    """
+    import claude_translate
+    from claude_ocr import find_claude
+
+    if not find_claude():
+        return None, "⚠️ Bỏ qua dịch: cần Claude Code (lệnh 'claude') trong PATH."
+    try:
+        vn_text = claude_translate.translate_markdown_vn(raw_md, model=model)
+        vn_name = os.path.splitext(os.path.basename(orig_path))[0] + "_vn"
+        vn_path = _write_md(vn_text, vn_name, done_paths)
+        return vn_path, f"🇻🇳 Đã dịch sang tiếng Việt — {len(vn_text):,} ký tự"
+    except Exception as exc:
+        return None, f"⚠️ Lỗi dịch sang tiếng Việt: {exc}"
+
+
 def on_convert_files(
     file_paths, enable_plugins, use_ocr, model_label, force_ocr, board_dpi_label,
-    autosave_on, autosave_dir,
+    translate_vn, autosave_on, autosave_dir,
 ):
     if not file_paths:
         yield "", "", "", "ℹ️ Hãy chọn hoặc kéo-thả ít nhất một tệp trước."
         return
 
     total = len(file_paths)
+    n_ok = 0  # số tệp nguồn chuyển đổi thành công (không tính tệp _vn)
     done_paths, previews, raws, lines = [], [], [], []
 
     for i, fp in enumerate(file_paths, 1):
@@ -362,18 +382,40 @@ def on_convert_files(
         if path and autosave_on:
             saved, err = _autosave(path, autosave_dir)
             st += f"\n  💾 đã lưu: `{saved}`" if saved else f"\n  {err}"
+        if path:
+            n_ok += 1
+            done_paths.append(path)
+
+        # Dịch sang tiếng Việt -> tạo thêm tệp _vn.md (nếu được bật).
+        if translate_vn and path and (raw_md or "").strip():
+            progress = "\n\n".join(
+                lines + [f"**{name}** — {st}",
+                         f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**…"]
+            )
+            yield (
+                "\n\n---\n\n".join(previews),
+                "\n\n".join(raws),
+                _download_panel(done_paths),
+                progress,
+            )
+            model = _model_from_label(model_label)
+            vn_path, vn_st = _translate_to_vn(raw_md, path, model, done_paths)
+            st += f"\n  {vn_st}"
+            if vn_path:
+                if autosave_on:
+                    saved, err = _autosave(vn_path, autosave_dir)
+                    st += f" · 💾 đã lưu: `{saved}`" if saved else f"\n  {err}"
+                done_paths.append(vn_path)
         lines.append(f"**{name}** — {st}")
         if preview:
             previews.append(f"## 📄 {name}\n\n{preview}")
         if raw_md:
             raws.append(raw_md)
-        if path:
-            done_paths.append(path)
 
         # Tệp xong tới đâu hiện kết quả và cho tải về ngay tới đó.
         summary = "\n\n".join(lines)
         if i == total:
-            summary = f"🏁 Xong {len(done_paths)}/{total} tệp.\n\n" + summary
+            summary = f"🏁 Xong {n_ok}/{total} tệp.\n\n" + summary
         yield (
             "\n\n---\n\n".join(previews),
             "\n\n".join(raws),
@@ -452,6 +494,16 @@ def build_ui():
                             "khiến kết quả chuyển đổi thường bị lỗi — vd: sách cờ vua scan."
                         ),
                     )
+                    translate_vn = gr.Checkbox(
+                        label="🇻🇳 Dịch kết quả sang tiếng Việt (tạo thêm tệp _vn.md)",
+                        value=True,
+                        info=(
+                            "Sau khi tạo tệp .md gốc, dịch sang tiếng Việt bằng Claude "
+                            "Code và ghi thêm tệp cùng tên có hậu tố _vn. Ký hiệu nước "
+                            "đi chuyển sang tiếng Việt (V/H/X/T/M), block FEN bàn cờ "
+                            "giữ nguyên không dịch. Bỏ tích nếu không cần dịch."
+                        ),
+                    )
                     ocr_model = gr.Dropdown(
                         choices=["opus (chính xác nhất)", "sonnet (nhanh/nhẹ hơn)"],
                         value="opus (chính xác nhất)",
@@ -490,7 +542,7 @@ def build_ui():
             on_convert_files,
             [
                 file_in, enable_plugins, use_ocr, ocr_model, force_ocr,
-                board_dpi, autosave_on, autosave_dir,
+                board_dpi, translate_vn, autosave_on, autosave_dir,
             ],
             outputs,
             show_progress="full",
