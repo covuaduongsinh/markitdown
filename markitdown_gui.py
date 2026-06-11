@@ -28,15 +28,25 @@ def _safe_filename(name: str) -> str:
     return name or "ketqua"
 
 
-def _write_md(markdown: str, base_name: str) -> str:
-    """Ghi nội dung Markdown ra tệp .md trong thư mục tạm, trả về đường dẫn."""
+def _write_md(markdown: str, base_name: str, used_paths=None) -> str:
+    """Ghi nội dung Markdown ra tệp .md trong thư mục tạm, trả về đường dẫn.
+
+    `used_paths`: các đường dẫn đã xuất trong cùng lô — nếu trùng thì
+    thêm hậu tố _2, _3... để không ghi đè kết quả của tệp trước.
+    """
     out_path = os.path.join(_OUTPUT_DIR, _safe_filename(base_name) + ".md")
+    if used_paths:
+        root, ext = os.path.splitext(out_path)
+        n = 2
+        while out_path in used_paths:
+            out_path = f"{root}_{n}{ext}"
+            n += 1
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(markdown)
     return out_path
 
 
-def _convert(source, enable_plugins, base_name):
+def _convert(source, enable_plugins, base_name, used_paths=None):
     """Lõi chuyển đổi dùng chung cho cả tệp lẫn URL.
 
     Trả về (preview_md, raw_md, download_path, status_md).
@@ -56,7 +66,7 @@ def _convert(source, enable_plugins, base_name):
 
         title = getattr(result, "title", None)
         name = _safe_filename(title) if title else base_name
-        download_path = _write_md(text, name)
+        download_path = _write_md(text, name, used_paths)
 
         status = f"✅ Thành công — {len(text):,} ký tự"
         if title:
@@ -88,7 +98,7 @@ def _dpi_from_label(label):
         return 400
 
 
-def _ocr_to_outputs(file_path, base_name, model, board_dpi=400):
+def _ocr_to_outputs(file_path, base_name, model, board_dpi=400, used_paths=None):
     """Chạy OCR (PDF hoặc ảnh) qua Claude Code và trả về 4-tuple kết quả."""
     import claude_ocr
 
@@ -101,14 +111,14 @@ def _ocr_to_outputs(file_path, base_name, model, board_dpi=400):
     if not text.strip():
         return "", "", None, "⚠️ OCR xong nhưng không trích được nội dung."
 
-    download_path = _write_md(text, base_name)
+    download_path = _write_md(text, base_name, used_paths)
     status = f"✅ Đã OCR bằng Claude Code (model: {model}) — {len(text):,} ký tự"
     return text, text, download_path, status
 
 
 def convert_file(
     file_path, enable_plugins, use_ocr, model_label, force_ocr=False,
-    board_dpi_label=None,
+    board_dpi_label=None, used_paths=None,
 ):
     if not file_path:
         return "", "", None, "ℹ️ Hãy chọn hoặc kéo-thả một tệp trước."
@@ -126,9 +136,9 @@ def convert_file(
 
         if not find_claude():
             # Không có Claude Code -> vẫn thử chuyển đổi thường (ra metadata).
-            return _convert(file_path, enable_plugins, base_name)
+            return _convert(file_path, enable_plugins, base_name, used_paths)
         try:
-            return _ocr_to_outputs(file_path, base_name, model, board_dpi)
+            return _ocr_to_outputs(file_path, base_name, model, board_dpi, used_paths)
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
 
@@ -145,12 +155,14 @@ def convert_file(
                 "⚠️ Cần Claude Code (lệnh 'claude') trong PATH để buộc OCR.",
             )
         try:
-            return _ocr_to_outputs(file_path, base_name, model, board_dpi)
+            return _ocr_to_outputs(file_path, base_name, model, board_dpi, used_paths)
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
 
     # Chuyển đổi thường trước.
-    preview, raw_md, download, status = _convert(file_path, enable_plugins, base_name)
+    preview, raw_md, download, status = _convert(
+        file_path, enable_plugins, base_name, used_paths
+    )
 
     # PDF scan (không có lớp text) -> OCR fallback nếu được bật.
     if use_ocr and is_pdf and not (raw_md or "").strip():
@@ -164,7 +176,7 @@ def convert_file(
                 "⚠️ PDF scan không có text. Cần Claude Code (lệnh 'claude') trong PATH để OCR.",
             )
         try:
-            return _ocr_to_outputs(file_path, base_name, model, board_dpi)
+            return _ocr_to_outputs(file_path, base_name, model, board_dpi, used_paths)
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
 
@@ -234,24 +246,63 @@ _STATUS_HINT = "👋 Chọn tệp hoặc dán URL rồi bấm **Chuyển đổi*
 
 
 def _with_download_update(result):
-    """Đổi đường dẫn tải về thành cập nhật ẩn/hiện cho DownloadButton."""
+    """Đổi đường dẫn tải về thành cập nhật ẩn/hiện cho danh sách tệp kết quả."""
     preview_md, raw_md, path, status_md = result
     if path:
-        dl = gr.DownloadButton(value=path, visible=True)
+        dl = gr.Files(value=[path], visible=True)
     else:
-        dl = gr.DownloadButton(visible=False)
+        dl = gr.Files(visible=False)
     return preview_md, raw_md, dl, status_md
 
 
-def on_convert_file(
-    file_path, enable_plugins, use_ocr, model_label, force_ocr, board_dpi_label
+def on_convert_files(
+    file_paths, enable_plugins, use_ocr, model_label, force_ocr, board_dpi_label
 ):
-    return _with_download_update(
-        convert_file(
-            file_path, enable_plugins, use_ocr, model_label, force_ocr,
-            board_dpi_label,
+    if not file_paths:
+        yield (
+            "",
+            "",
+            gr.Files(visible=False),
+            "ℹ️ Hãy chọn hoặc kéo-thả ít nhất một tệp trước.",
         )
-    )
+        return
+
+    total = len(file_paths)
+    done_paths, previews, raws, lines = [], [], [], []
+
+    for i, fp in enumerate(file_paths, 1):
+        name = os.path.basename(fp)
+        # Báo tiến độ trước khi xử lý, giữ nguyên kết quả các tệp đã xong.
+        progress = "\n\n".join(lines + [f"⏳ Đang xử lý {i}/{total}: **{name}**…"])
+        yield (
+            "\n\n---\n\n".join(previews),
+            "\n\n".join(raws),
+            gr.Files(value=done_paths, visible=bool(done_paths)),
+            progress,
+        )
+
+        preview, raw_md, path, st = convert_file(
+            fp, enable_plugins, use_ocr, model_label, force_ocr, board_dpi_label,
+            used_paths=done_paths,
+        )
+        lines.append(f"**{name}** — {st}")
+        if preview:
+            previews.append(f"## 📄 {name}\n\n{preview}")
+        if raw_md:
+            raws.append(raw_md)
+        if path:
+            done_paths.append(path)
+
+        # Tệp xong tới đâu hiện kết quả và cho tải về ngay tới đó.
+        summary = "\n\n".join(lines)
+        if i == total:
+            summary = f"🏁 Xong {len(done_paths)}/{total} tệp.\n\n" + summary
+        yield (
+            "\n\n---\n\n".join(previews),
+            "\n\n".join(raws),
+            gr.Files(value=done_paths, visible=bool(done_paths)),
+            summary,
+        )
 
 
 def on_convert_url(url, enable_plugins):
@@ -259,7 +310,7 @@ def on_convert_url(url, enable_plugins):
 
 
 def on_clear():
-    return "", "", gr.DownloadButton(visible=False), _STATUS_HINT
+    return "", "", gr.Files(visible=False), _STATUS_HINT
 
 
 def build_ui():
@@ -271,8 +322,9 @@ def build_ui():
                 with gr.Tabs():
                     with gr.Tab("📁 Từ tệp"):
                         file_in = gr.File(
-                            label="Kéo-thả tệp vào đây hoặc bấm để chọn",
+                            label="Kéo-thả một hoặc nhiều tệp vào đây, hoặc bấm để chọn",
                             type="filepath",
+                            file_count="multiple",
                             height=170,
                         )
                         btn_file = gr.Button(
@@ -334,9 +386,12 @@ def build_ui():
 
                 status = gr.Markdown(_STATUS_HINT, elem_id="status-box")
 
-                with gr.Row():
-                    download = gr.DownloadButton("⬇️ Tải tệp .md", visible=False)
-                    btn_clear = gr.Button("🗑️ Xóa kết quả", variant="secondary")
+                downloads = gr.Files(
+                    label="⬇️ Tệp .md kết quả (bấm để tải về)",
+                    visible=False,
+                    interactive=False,
+                )
+                btn_clear = gr.Button("🗑️ Xóa kết quả", variant="secondary")
 
             with gr.Column(scale=2):
                 with gr.Tabs():
@@ -347,9 +402,9 @@ def build_ui():
                             label="Markdown (.md)", language="markdown", max_lines=24
                         )
 
-        outputs = [preview, raw, download, status]
+        outputs = [preview, raw, downloads, status]
         btn_file.click(
-            on_convert_file,
+            on_convert_files,
             [file_in, enable_plugins, use_ocr, ocr_model, force_ocr, board_dpi],
             outputs,
             show_progress="full",
