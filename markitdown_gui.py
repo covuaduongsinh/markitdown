@@ -10,9 +10,12 @@ Sau khi chạy, mở trình duyệt tại http://127.0.0.1:7860
 """
 
 import os
+import queue
 import re
 import shutil
 import tempfile
+import threading
+import time
 import traceback
 from urllib.parse import quote
 
@@ -128,6 +131,15 @@ def _convert(source, enable_plugins, base_name, used_paths=None):
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff"}
 
+# Nhãn 2 chế độ xử lý trên giao diện.
+MODE_CHESS = "📚 Sách cờ vua (mặc định)"
+MODE_GENERAL = "📄 Tài liệu thường (chế độ gốc)"
+
+
+def _is_chess_mode(label):
+    """Nhãn chế độ -> True nếu là chế độ sách cờ vua (mặc định khi nhãn lạ)."""
+    return label != MODE_GENERAL
+
 
 def _model_from_label(label):
     """'opus (chính xác nhất)' -> 'opus'."""
@@ -142,15 +154,21 @@ def _dpi_from_label(label):
         return 400
 
 
-def _ocr_to_outputs(file_path, base_name, model, board_dpi=400, used_paths=None):
+def _ocr_to_outputs(
+    file_path, base_name, model, board_dpi=400, used_paths=None, chess=True,
+    progress=None,
+):
     """Chạy OCR (PDF hoặc ảnh) qua Claude Code và trả về 4-tuple kết quả."""
     import claude_ocr
 
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".pdf":
-        text = claude_ocr.ocr_pdf(file_path, model=model, board_dpi=board_dpi)
+        text = claude_ocr.ocr_pdf(
+            file_path, model=model, board_dpi=board_dpi, chess=chess,
+            progress=progress,
+        )
     else:
-        text = claude_ocr.ocr_image_file(file_path, model=model)
+        text = claude_ocr.ocr_image_file(file_path, model=model, chess=chess)
 
     if not text.strip():
         return "", "", None, "⚠️ OCR xong nhưng không trích được nội dung."
@@ -162,7 +180,7 @@ def _ocr_to_outputs(file_path, base_name, model, board_dpi=400, used_paths=None)
 
 def convert_file(
     file_path, enable_plugins, use_ocr, model_label, force_ocr=False,
-    board_dpi_label=None, used_paths=None,
+    board_dpi_label=None, used_paths=None, chess=True, progress=None,
 ):
     if not file_path:
         return "", "", None, "ℹ️ Hãy chọn hoặc kéo-thả một tệp trước."
@@ -182,7 +200,10 @@ def convert_file(
             # Không có Claude Code -> vẫn thử chuyển đổi thường (ra metadata).
             return _convert(file_path, enable_plugins, base_name, used_paths)
         try:
-            return _ocr_to_outputs(file_path, base_name, model, board_dpi, used_paths)
+            return _ocr_to_outputs(
+                file_path, base_name, model, board_dpi, used_paths, chess=chess,
+                progress=progress,
+            )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
 
@@ -199,7 +220,10 @@ def convert_file(
                 "⚠️ Cần Claude Code (lệnh 'claude') trong PATH để buộc OCR.",
             )
         try:
-            return _ocr_to_outputs(file_path, base_name, model, board_dpi, used_paths)
+            return _ocr_to_outputs(
+                file_path, base_name, model, board_dpi, used_paths, chess=chess,
+                progress=progress,
+            )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
 
@@ -220,7 +244,10 @@ def convert_file(
                 "⚠️ PDF scan không có text. Cần Claude Code (lệnh 'claude') trong PATH để OCR.",
             )
         try:
-            return _ocr_to_outputs(file_path, base_name, model, board_dpi, used_paths)
+            return _ocr_to_outputs(
+                file_path, base_name, model, board_dpi, used_paths, chess=chess,
+                progress=progress,
+            )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
 
@@ -333,9 +360,10 @@ def _with_download_update(result):
     return preview_md, raw_md, _download_panel([path] if path else []), status_md
 
 
-def _translate_to_vn(raw_md, orig_path, model, done_paths):
+def _translate_to_vn(raw_md, orig_path, model, done_paths, chess=True, progress=None):
     """Dịch raw_md sang tiếng Việt, ghi tệp `<tên gốc>_vn.md`.
 
+    chess: True -> dịch theo quy tắc cờ vua; False -> dịch tài liệu thường.
     Trả về (đường dẫn tệp _vn hoặc None, dòng status).
     """
     import claude_translate
@@ -344,7 +372,9 @@ def _translate_to_vn(raw_md, orig_path, model, done_paths):
     if not find_claude():
         return None, "⚠️ Bỏ qua dịch: cần Claude Code (lệnh 'claude') trong PATH."
     try:
-        vn_text = claude_translate.translate_markdown_vn(raw_md, model=model)
+        vn_text = claude_translate.translate_markdown_vn(
+            raw_md, model=model, chess=chess, progress=progress
+        )
         vn_name = os.path.splitext(os.path.basename(orig_path))[0] + "_vn"
         vn_path = _write_md(vn_text, vn_name, done_paths)
         return vn_path, f"🇻🇳 Đã dịch sang tiếng Việt — {len(vn_text):,} ký tự"
@@ -352,14 +382,60 @@ def _translate_to_vn(raw_md, orig_path, model, done_paths):
         return None, f"⚠️ Lỗi dịch sang tiếng Việt: {exc}"
 
 
+def _stream_job(func, kwargs, label, unit):
+    """Chạy func(**kwargs, progress=...) trong thread nền, generator yield
+    dòng tiến độ đều đặn (≤5s/lần) để kết nối SSE của Gradio không bị rớt
+    khi tác vụ kéo dài. Kết thúc trả về kết quả của func (qua StopIteration).
+
+    unit: tên đơn vị tiến độ hiển thị ("trang", "đoạn"...).
+    """
+    q = queue.Queue()
+    out = {}
+
+    def run():
+        try:
+            out["result"] = func(progress=lambda i, n: q.put((i, n)), **kwargs)
+        except BaseException as exc:
+            out["error"] = exc
+        finally:
+            q.put(None)  # báo hiệu kết thúc
+
+    threading.Thread(target=run, daemon=True).start()
+    start = time.monotonic()
+    suffix = ""
+    finished = False
+    while not finished:
+        try:
+            msgs = [q.get(timeout=5)]
+        except queue.Empty:
+            msgs = []  # không có tiến độ mới -> vẫn yield keep-alive
+        while True:  # gộp các message dồn lại, chỉ giữ cái mới nhất
+            try:
+                msgs.append(q.get_nowait())
+            except queue.Empty:
+                break
+        for m in msgs:
+            if m is None:
+                finished = True
+            else:
+                suffix = f" — {unit} {m[0]}/{m[1]}"
+        if finished:
+            break
+        yield f"{label}{suffix} · {int(time.monotonic() - start)}s…"
+    if "error" in out:
+        raise out["error"]
+    return out.get("result")
+
+
 def on_convert_files(
-    file_paths, enable_plugins, use_ocr, model_label, force_ocr, board_dpi_label,
-    translate_vn, autosave_on, autosave_dir,
+    file_paths, mode_label, enable_plugins, use_ocr, model_label, force_ocr,
+    board_dpi_label, translate_vn, autosave_on, autosave_dir,
 ):
     if not file_paths:
         yield "", "", "", "ℹ️ Hãy chọn hoặc kéo-thả ít nhất một tệp trước."
         return
 
+    chess = _is_chess_mode(mode_label)
     total = len(file_paths)
     n_ok = 0  # số tệp nguồn chuyển đổi thành công (không tính tệp _vn)
     done_paths, previews, raws, lines = [], [], [], []
@@ -375,10 +451,28 @@ def on_convert_files(
             progress,
         )
 
-        preview, raw_md, path, st = convert_file(
-            fp, enable_plugins, use_ocr, model_label, force_ocr, board_dpi_label,
-            used_paths=done_paths,
+        # Chạy trong thread nền, yield tiến độ từng trang để giữ kết nối.
+        job = _stream_job(
+            convert_file,
+            dict(
+                file_path=fp, enable_plugins=enable_plugins, use_ocr=use_ocr,
+                model_label=model_label, force_ocr=force_ocr,
+                board_dpi_label=board_dpi_label, used_paths=done_paths,
+                chess=chess,
+            ),
+            label=f"⏳ Đang xử lý {i}/{total}: **{name}**",
+            unit="trang",
         )
+        while True:
+            try:
+                st_line = next(job)
+            except StopIteration as stop:
+                preview, raw_md, path, st = stop.value
+                break
+            # Yield tiến độ chỉ cập nhật status (gr.skip các ô còn lại
+            # để giảm payload gửi về trình duyệt).
+            yield gr.skip(), gr.skip(), gr.skip(), "\n\n".join(lines + [st_line])
+
         if path and autosave_on:
             saved, err = _autosave(path, autosave_dir)
             st += f"\n  💾 đã lưu: `{saved}`" if saved else f"\n  {err}"
@@ -388,18 +482,35 @@ def on_convert_files(
 
         # Dịch sang tiếng Việt -> tạo thêm tệp _vn.md (nếu được bật).
         if translate_vn and path and (raw_md or "").strip():
-            progress = "\n\n".join(
-                lines + [f"**{name}** — {st}",
-                         f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**…"]
-            )
             yield (
                 "\n\n---\n\n".join(previews),
                 "\n\n".join(raws),
                 _download_panel(done_paths),
-                progress,
+                "\n\n".join(
+                    lines + [f"**{name}** — {st}",
+                             f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**…"]
+                ),
             )
             model = _model_from_label(model_label)
-            vn_path, vn_st = _translate_to_vn(raw_md, path, model, done_paths)
+            job = _stream_job(
+                _translate_to_vn,
+                dict(
+                    raw_md=raw_md, orig_path=path, model=model,
+                    done_paths=done_paths, chess=chess,
+                ),
+                label=f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**",
+                unit="đoạn",
+            )
+            while True:
+                try:
+                    st_line = next(job)
+                except StopIteration as stop:
+                    vn_path, vn_st = stop.value
+                    break
+                yield (
+                    gr.skip(), gr.skip(), gr.skip(),
+                    "\n\n".join(lines + [f"**{name}** — {st}", st_line]),
+                )
             st += f"\n  {vn_st}"
             if vn_path:
                 if autosave_on:
@@ -445,6 +556,17 @@ def build_ui():
                             type="filepath",
                             file_count="multiple",
                             height=170,
+                        )
+                        mode = gr.Radio(
+                            choices=[MODE_CHESS, MODE_GENERAL],
+                            value=MODE_CHESS,
+                            label="Chế độ xử lý",
+                            info=(
+                                "Sách cờ vua: OCR nhận diện bàn cờ thành block FEN, "
+                                "dịch theo ký hiệu cờ vua (V/H/X/T/M). "
+                                "Tài liệu thường: chuyển đổi gốc của phần mềm + dịch "
+                                "thông thường cho các tài liệu còn lại."
+                            ),
                         )
                         btn_file = gr.Button(
                             "🚀 Chuyển đổi", variant="primary", size="lg"
@@ -499,15 +621,21 @@ def build_ui():
                         value=True,
                         info=(
                             "Sau khi tạo tệp .md gốc, dịch sang tiếng Việt bằng Claude "
-                            "Code và ghi thêm tệp cùng tên có hậu tố _vn. Ký hiệu nước "
-                            "đi chuyển sang tiếng Việt (V/H/X/T/M), block FEN bàn cờ "
-                            "giữ nguyên không dịch. Bỏ tích nếu không cần dịch."
+                            "Code và ghi thêm tệp cùng tên có hậu tố _vn. Chế độ sách "
+                            "cờ vua: ký hiệu nước đi chuyển sang tiếng Việt (V/H/X/T/M), "
+                            "block FEN bàn cờ giữ nguyên. Chế độ tài liệu thường: dịch "
+                            "thông thường, giữ nguyên các code block. "
+                            "Bỏ tích nếu không cần dịch."
                         ),
                     )
                     ocr_model = gr.Dropdown(
-                        choices=["opus (chính xác nhất)", "sonnet (nhanh/nhẹ hơn)"],
-                        value="opus (chính xác nhất)",
-                        label="Model Claude dùng để OCR",
+                        choices=[
+                            "sonnet (nhanh, đủ tốt — mặc định)",
+                            "opus (chính xác nhất, chậm)",
+                            "haiku (nhanh nhất)",
+                        ],
+                        value="sonnet (nhanh, đủ tốt — mặc định)",
+                        label="Model Claude dùng để OCR và dịch",
                     )
                     board_dpi = gr.Dropdown(
                         choices=[
@@ -538,10 +666,15 @@ def build_ui():
                         )
 
         outputs = [preview, raw, downloads, status]
+        # Đổi chế độ -> chỉnh mặc định "Buộc OCR": sách cờ vua thường là PDF
+        # scan có text rác nên bật; tài liệu thường có lớp text tốt nên tắt.
+        mode.change(
+            lambda m: gr.update(value=_is_chess_mode(m)), mode, force_ocr
+        )
         btn_file.click(
             on_convert_files,
             [
-                file_in, enable_plugins, use_ocr, ocr_model, force_ocr,
+                file_in, mode, enable_plugins, use_ocr, ocr_model, force_ocr,
                 board_dpi, translate_vn, autosave_on, autosave_dir,
             ],
             outputs,

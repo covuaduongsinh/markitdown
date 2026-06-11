@@ -52,4 +52,39 @@ assert ct._placeholders_in("⟦CHESSBOARD_1⟧") <= ct._placeholders_in(
 # 5. Văn bản rỗng
 assert ct._split_chunks("") == []
 
+# 6. Chế độ tài liệu thường (chess=False): bảo vệ MỌI fenced code block
+MD_GEN = """# Intro
+
+Run this command:
+
+```bash
+pip install markitdown
+```
+
+Some text between blocks.
+
+```chessboard
+fen: 8/8/8/8/8/8/8/K6k w - - 0 1
+```
+
+```python
+print("hello")
+```
+"""
+text_g, blocks_g = ct._extract_boards(MD_GEN, chess=False)
+assert len(blocks_g) == 3, blocks_g  # cả bash, chessboard lẫn python
+assert "```" not in text_g
+assert ct._restore_boards(text_g, blocks_g) == MD_GEN, "round-trip thường khác gốc!"
+
+# 7. Chế độ cờ vua trên cùng md: chỉ tách block chessboard
+text_c, blocks_c = ct._extract_boards(MD_GEN, chess=True)
+assert len(blocks_c) == 1, blocks_c
+assert "```bash" in text_c and "```python" in text_c
+assert ct._restore_boards(text_c, blocks_c) == MD_GEN
+
+# 8. Hai bộ instruction tồn tại và khác nhau
+assert ct.TRANSLATE_INSTRUCTION_CHESS != ct.TRANSLATE_INSTRUCTION_GENERAL
+assert "V; Q" in ct.TRANSLATE_INSTRUCTION_CHESS or "K → V" in ct.TRANSLATE_INSTRUCTION_CHESS
+assert "cờ vua" not in ct.TRANSLATE_INSTRUCTION_GENERAL.split("PLACEHOLDER")[0]
+
 print("Tất cả test round-trip OK")

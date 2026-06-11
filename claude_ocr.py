@@ -89,20 +89,29 @@ _PROMPT_CHESS_GIVEN = (
     "nhận diện từng ô theo khả năng tốt nhất, cùng định dạng block.\n\n"
 )
 
+# Footer dùng chung cho mọi chế độ.
+_PROMPT_FOOTER_PLAIN = (
+    "CHỈ trả về nội dung Markdown đã trích, KHÔNG thêm lời mở đầu, giải thích hay nhận xét."
+)
+
 _PROMPT_FOOTER = (
     "Về ký hiệu nước đi cờ vua trong văn bản: giữ NGUYÊN VĂN như sách in (số thứ tự nước "
     "'12.' hoặc '12...', các ký hiệu đánh giá !, ?, !!, ??, !?, ?!, ±, =, +-, -+...). "
     "Nếu sách in quân cờ bằng hình (figurine) thì chuyển về chữ cái SAN quốc tế tương ứng "
     "K, Q, R, B, N. KHÔNG diễn giải hay bình luận thêm về nước đi.\n\n"
-    "CHỈ trả về nội dung Markdown đã trích, KHÔNG thêm lời mở đầu, giải thích hay nhận xét."
-)
+) + _PROMPT_FOOTER_PLAIN
 
 # Giữ tên cũ cho tương thích (prompt khi Claude phải tự nhận diện bàn cờ).
 PROMPT_VI = _PROMPT_HEADER + _PROMPT_CHESS_SELF + _PROMPT_FOOTER
 
 
-def _build_prompt(img_path, board_fens=None):
-    """Ghép prompt OCR: có FEN tính sẵn thì yêu cầu dùng nguyên văn."""
+def _build_prompt(img_path, board_fens=None, chess=True):
+    """Ghép prompt OCR: có FEN tính sẵn thì yêu cầu dùng nguyên văn.
+
+    chess=False (chế độ tài liệu thường): bỏ toàn bộ phần bàn cờ vua.
+    """
+    if not chess:
+        return _PROMPT_HEADER.format(path=img_path) + _PROMPT_FOOTER_PLAIN
     if board_fens:
         fen_list = "\n".join(f"{i}. {fen}" for i, fen in enumerate(board_fens, 1))
         chess_part = _PROMPT_CHESS_GIVEN.format(n=len(board_fens), fen_list=fen_list)
@@ -185,6 +194,30 @@ def find_claude():
     return shutil.which("claude")
 
 
+def _claude_fast_flags(effort="low"):
+    """Flags thêm vào mọi lệnh `claude -p` để chạy nhanh nhất có thể.
+
+    Quan trọng nhất là --effort: override effortLevel trong settings người
+    dùng (nếu đặt xhigh, model sẽ "suy nghĩ" hàng chục nghìn token cho mỗi
+    trang — OCR/dịch chỉ là chép chữ nên không cần). Các flag còn lại bỏ
+    việc nạp user settings/plugin/MCP và ghi session log mỗi lần gọi.
+    """
+    return [
+        "--effort", effort,
+        "--setting-sources", "project",
+        "--strict-mcp-config",
+        "--no-session-persistence",
+    ]
+
+
+def _claude_env():
+    """Env cho tiến trình `claude`: tắt auto-update/telemetry khi khởi động."""
+    env = os.environ.copy()
+    env["DISABLE_AUTOUPDATER"] = "1"
+    env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+    return env
+
+
 # DPI cao để nhận diện bàn cờ (cắt hình nét); DPI thấp cho OCR cả trang.
 # Model bàn cờ chỉ nhìn ảnh <=512px nên 250 DPI thường đủ và nhanh hơn ~2.5x.
 BOARD_DPI = 400
@@ -207,6 +240,15 @@ def _render_page_pair(page, out_dir, page_no, ocr_dpi=200, board_dpi=BOARD_DPI):
     return out_path, hi
 
 
+def _render_page(page, out_dir, page_no, dpi=200):
+    """Render 1 trang PDF thẳng ở DPI cho OCR (chế độ thường, không cần ảnh nét
+    cao để nhận diện bàn cờ). Trả về đường dẫn PNG."""
+    lo = page.render(scale=dpi / 72.0).to_pil().convert("RGB")
+    out_path = os.path.join(out_dir, f"page_{page_no:03d}.png")
+    lo.save(out_path, format="PNG")
+    return out_path
+
+
 def _page_board_fens(pil_page):
     """Nhận diện FEN các hình bàn cờ trên trang bằng model ONNX cục bộ.
 
@@ -222,12 +264,14 @@ def _page_board_fens(pil_page):
         return None
 
 
-def ocr_image_path(img_path, model="opus", timeout=600, board_fens=None):
+def ocr_image_path(img_path, model="opus", timeout=600, board_fens=None, chess=True):
     """Gọi Claude Code headless để OCR một ảnh. Trả về Markdown trích được.
 
     board_fens: danh sách FEN của các hình bàn cờ trên trang (đã nhận diện cục
     bộ bằng model ONNX, theo thứ tự đọc) — Claude sẽ dùng nguyên văn thay vì tự
     nhận diện.
+    chess=False (chế độ tài liệu thường): OCR bằng prompt thường, không có phần
+    nhận diện bàn cờ / block chessboard.
     """
     claude = find_claude()
     if not claude:
@@ -238,8 +282,11 @@ def ocr_image_path(img_path, model="opus", timeout=600, board_fens=None):
 
     img_path = os.path.abspath(img_path)
     img_dir = os.path.dirname(img_path)
-    prompt = _build_prompt(img_path, board_fens)
+    prompt = _build_prompt(img_path, board_fens, chess=chess)
 
+    # OCR chỉ là chép chữ -> effort low; riêng khi Claude phải TỰ nhận diện
+    # bàn cờ thành FEN (không có FEN tính sẵn) thì cần suy luận -> medium.
+    effort = "medium" if (chess and not board_fens) else "low"
     cmd = [
         claude,
         "-p",
@@ -254,7 +301,7 @@ def ocr_image_path(img_path, model="opus", timeout=600, board_fens=None):
         img_dir,
         "--model",
         model,
-    ]
+    ] + _claude_fast_flags(effort)
 
     try:
         proc = subprocess.run(
@@ -266,6 +313,7 @@ def ocr_image_path(img_path, model="opus", timeout=600, board_fens=None):
             timeout=timeout,
             cwd=img_dir,
             stdin=subprocess.DEVNULL,
+            env=_claude_env(),
         )
     except subprocess.TimeoutExpired as exc:
         raise ClaudeOCRError(f"Claude Code quá thời gian ({timeout}s) khi OCR.") from exc
@@ -278,31 +326,58 @@ def ocr_image_path(img_path, model="opus", timeout=600, board_fens=None):
     if not out:
         raise ClaudeOCRError("Claude Code không trả về dữ liệu.")
 
+    # Chế độ thường không sinh block chessboard nên không cần hậu kiểm.
+    post = _normalize_chessboard_blocks if chess else (lambda s: s)
+
     # --output-format json: stdout là một object có trường 'result' chứa văn bản cuối.
     try:
         data = json.loads(out)
     except json.JSONDecodeError:
         # Phòng khi đầu ra không phải JSON thuần (lẫn log) -> dùng nguyên văn.
-        return _normalize_chessboard_blocks(out)
+        return post(out)
 
     if isinstance(data, dict):
         result = data.get("result")
         if isinstance(result, str):
-            return _normalize_chessboard_blocks(result.strip())
-    return _normalize_chessboard_blocks(out)
+            return post(result.strip())
+    return post(out)
+
+
+# Số trang OCR song song (mỗi trang là một tiến trình `claude` riêng).
+OCR_WORKERS = 8
+
+
+def _ocr_page(png, model, page_timeout, board_fens, chess):
+    """OCR 1 trang với 1 lần thử lại. Trả về Markdown; vẫn lỗi thì raise."""
+    try:
+        return ocr_image_path(
+            png, model=model, timeout=page_timeout,
+            board_fens=board_fens, chess=chess,
+        )
+    except ClaudeOCRError:
+        return ocr_image_path(
+            png, model=model, timeout=page_timeout,
+            board_fens=board_fens, chess=chess,
+        )
 
 
 def ocr_pdf(
     pdf_path, model="opus", dpi=200, progress=None, page_timeout=600,
-    board_dpi=BOARD_DPI,
+    board_dpi=BOARD_DPI, chess=True, workers=OCR_WORKERS,
 ):
     """OCR toàn bộ PDF scan. Trả về Markdown ghép các trang.
 
     Mỗi trang: nhận diện hình bàn cờ -> FEN cục bộ bằng model ONNX (không tốn
-    quota Claude), rồi OCR văn bản bằng Claude với FEN đã tính sẵn.
+    quota Claude), rồi OCR văn bản bằng Claude với FEN đã tính sẵn. Các trang
+    được OCR song song `workers` trang một lúc, kết quả ghép đúng thứ tự.
+    chess=False (chế độ tài liệu thường): bỏ hoàn toàn bước nhận diện bàn cờ,
+    OCR bằng prompt thường — render trang nhanh hơn vì không cần ảnh DPI cao.
+    progress(i, n): được gọi mỗi khi xong thêm một trang (i = số trang đã xong).
     Trang nào lỗi (quá thời gian, claude trục trặc...) sẽ được thử lại 1 lần;
     vẫn lỗi thì ghi chú vào kết quả và TIẾP TỤC các trang sau, không hủy cả file.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     import pypdfium2 as pdfium
 
     tmp_dir = tempfile.mkdtemp(prefix="mid_ocr_")
@@ -312,55 +387,74 @@ def ocr_pdf(
             n_pages = len(pdf)
             if n_pages == 0:
                 raise ClaudeOCRError("PDF không có trang nào.")
-            parts = []
+            parts = [None] * n_pages
             n_failed = 0
-            for i in range(1, n_pages + 1):
-                if progress is not None:
-                    progress(i, n_pages)
-                png, hi_res = _render_page_pair(
-                    pdf[i - 1], tmp_dir, i, ocr_dpi=dpi, board_dpi=board_dpi
-                )
-                board_fens = _page_board_fens(hi_res)
-                del hi_res  # giải phóng ảnh DPI cao trước khi gọi Claude
-                try:
-                    text = ocr_image_path(
-                        png, model=model, timeout=page_timeout, board_fens=board_fens
-                    )
-                except ClaudeOCRError:
-                    try:  # thử lại 1 lần rồi mới bỏ qua trang
-                        text = ocr_image_path(
-                            png, model=model, timeout=page_timeout, board_fens=board_fens
+            n_done = 0
+            if progress is not None:
+                progress(0, n_pages)
+            with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+                # Gối render với OCR: trang nào render + nhận diện FEN xong
+                # là đưa vào pool OCR ngay, không chờ render hết file.
+                # Render vẫn ở thread chính vì pypdfium2 không thread-safe.
+                futures = {}
+                for i in range(1, n_pages + 1):
+                    if chess:
+                        png, hi_res = _render_page_pair(
+                            pdf[i - 1], tmp_dir, i, ocr_dpi=dpi, board_dpi=board_dpi
                         )
+                        board_fens = _page_board_fens(hi_res)
+                        del hi_res  # giải phóng ảnh DPI cao trước khi gọi Claude
+                    else:
+                        png = _render_page(pdf[i - 1], tmp_dir, i, dpi=dpi)
+                        board_fens = None
+                    fut = pool.submit(
+                        _ocr_page, png, model, page_timeout, board_fens, chess
+                    )
+                    futures[fut] = i
+                for fut in as_completed(futures):
+                    i = futures[fut]
+                    try:
+                        text = fut.result()
                     except ClaudeOCRError as exc:
                         n_failed += 1
-                        parts.append(f"## Trang {i}\n\n*[Lỗi OCR trang này: {exc}]*")
-                        continue
-                if text.strip():
-                    parts.append(f"## Trang {i}\n\n{text.strip()}")
-                else:
-                    parts.append(f"## Trang {i}\n\n*[Không trích được nội dung]*")
-            if n_failed == n_pages:
-                raise ClaudeOCRError(
-                    f"OCR thất bại ở toàn bộ {n_failed} trang. "
-                    "Hãy kiểm tra Claude Code còn đăng nhập/hạn mức không."
-                )
-            return "\n\n".join(parts).strip()
+                        parts[i - 1] = f"## Trang {i}\n\n*[Lỗi OCR trang này: {exc}]*"
+                    else:
+                        if text.strip():
+                            parts[i - 1] = f"## Trang {i}\n\n{text.strip()}"
+                        else:
+                            parts[i - 1] = (
+                                f"## Trang {i}\n\n*[Không trích được nội dung]*"
+                            )
+                    n_done += 1
+                    if progress is not None:
+                        progress(n_done, n_pages)
         finally:
             pdf.close()
+        if n_failed == n_pages:
+            raise ClaudeOCRError(
+                f"OCR thất bại ở toàn bộ {n_failed} trang. "
+                "Hãy kiểm tra Claude Code còn đăng nhập/hạn mức không."
+            )
+        return "\n\n".join(parts).strip()
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def ocr_image_file(img_path, model="opus", page_timeout=600):
-    """OCR một tệp ảnh đơn lẻ (jpg/png...)."""
-    board_fens = None
-    try:
-        from PIL import Image
+def ocr_image_file(img_path, model="opus", page_timeout=600, chess=True):
+    """OCR một tệp ảnh đơn lẻ (jpg/png...).
 
-        with Image.open(img_path) as im:
-            board_fens = _page_board_fens(im.convert("RGB"))
-    except Exception:
-        board_fens = None
+    chess=False: bỏ bước nhận diện bàn cờ, OCR bằng prompt thường.
+    """
+    board_fens = None
+    if chess:
+        try:
+            from PIL import Image
+
+            with Image.open(img_path) as im:
+                board_fens = _page_board_fens(im.convert("RGB"))
+        except Exception:
+            board_fens = None
     return ocr_image_path(
-        img_path, model=model, timeout=page_timeout, board_fens=board_fens
+        img_path, model=model, timeout=page_timeout, board_fens=board_fens,
+        chess=chess,
     )

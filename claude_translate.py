@@ -6,24 +6,29 @@ Cùng cơ chế với claude_ocr.py: gọi CLI `claude -p` dùng phiên đăng n
 Claude Code hiện có, KHÔNG cần API key. Nội dung cần dịch được đưa qua
 stdin để tránh giới hạn độ dài command line trên Windows.
 
-Các block ```chessboard (FEN bàn cờ) được tách ra thành placeholder trước
-khi dịch và khôi phục nguyên văn sau khi dịch — đảm bảo FEN không bao giờ
-bị dịch/sửa/mất.
+Hai chế độ dịch:
+- chess=True (sách cờ vua): quy tắc ký hiệu cờ vua, block ```chessboard (FEN)
+  được tách thành placeholder trước khi dịch và khôi phục nguyên văn sau —
+  đảm bảo FEN không bao giờ bị dịch/sửa/mất.
+- chess=False (tài liệu thường): dịch thông thường, MỌI fenced code block
+  được bảo vệ theo cùng cơ chế placeholder.
 """
 
 import json
 import re
 import subprocess
 
-from claude_ocr import ClaudeOCRError, find_claude
+from claude_ocr import ClaudeOCRError, _claude_env, _claude_fast_flags, find_claude
 
 # Regex block chessboard — giống _CHESSBOARD_BLOCK_RE trong claude_ocr.py.
 _CHESSBOARD_BLOCK_RE = re.compile(r"```[ \t]*chessboard[^\n]*\n(.*?)```", re.DOTALL)
+# Chế độ tài liệu thường: bảo vệ MỌI fenced code block (code/lệnh không được dịch).
+_CODE_BLOCK_RE = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
 
 _PLACEHOLDER_FMT = "⟦CHESSBOARD_{n}⟧"
 _PLACEHOLDER_RE = re.compile(r"⟦CHESSBOARD_(\d+)⟧")
 
-TRANSLATE_INSTRUCTION = (
+TRANSLATE_INSTRUCTION_CHESS = (
     "Bạn nhận được (qua stdin) nội dung Markdown trích từ một cuốn sách cờ vua. "
     "Hãy DỊCH toàn bộ phần văn bản sang tiếng Việt, giữ nguyên cấu trúc Markdown.\n\n"
     "=====================\n"
@@ -78,16 +83,59 @@ TRANSLATE_INSTRUCTION = (
     "giải thích hay nhận xét."
 )
 
+# Giữ tên cũ cho tương thích.
+TRANSLATE_INSTRUCTION = TRANSLATE_INSTRUCTION_CHESS
 
-def _extract_boards(md):
-    """Thay từng block ```chessboard bằng placeholder, trả (md, list block gốc)."""
+# Prompt dịch cho tài liệu thường (chế độ gốc, không quy tắc cờ vua).
+TRANSLATE_INSTRUCTION_GENERAL = (
+    "Bạn nhận được (qua stdin) nội dung Markdown trích từ một tài liệu. "
+    "Hãy DỊCH toàn bộ phần văn bản sang tiếng Việt, giữ nguyên cấu trúc Markdown "
+    "(heading, đoạn văn, bảng, danh sách, liên kết).\n\n"
+    "=====================\n"
+    "I. PLACEHOLDER\n"
+    "=====================\n"
+    "- Các dòng dạng ⟦CHESSBOARD_1⟧, ⟦CHESSBOARD_2⟧... là placeholder cho các khối "
+    "nội dung phải giữ nguyên (code, lệnh...).\n"
+    "- BẮT BUỘC giữ NGUYÊN VĂN từng placeholder, đúng vị trí tương ứng, trên dòng riêng.\n"
+    "- KHÔNG dịch, KHÔNG sửa, KHÔNG xóa, KHÔNG thêm placeholder.\n\n"
+    "=====================\n"
+    "II. QUY TẮC DỊCH\n"
+    "=====================\n"
+    "- Dịch tự nhiên, chính xác, đúng thuật ngữ chuyên ngành của tài liệu.\n"
+    "- KHÔNG dịch: tên riêng, tên thương hiệu, URL, đường dẫn tệp, mã/lệnh, "
+    "ký hiệu toán học.\n"
+    "- Thuật ngữ kỹ thuật không có từ tiếng Việt thông dụng thì giữ nguyên "
+    "tiếng Anh.\n\n"
+    "=====================\n"
+    "III. ĐỊNH DẠNG TRUNG THỰC\n"
+    "=====================\n"
+    "- KHÔNG tự ý in đậm, làm đẹp hay thay đổi format.\n"
+    "- Chỗ nào bản gốc in đậm (**...**) thì bản dịch giữ in đậm; "
+    "bản gốc không in đậm thì TUYỆT ĐỐI không thêm.\n"
+    "- Giữ nguyên các heading đã có sẵn trong bản gốc (vd: \"## Trang 5\").\n"
+    "- Không bỏ sót nội dung.\n\n"
+    "=====================\n"
+    "IV. OUTPUT\n"
+    "=====================\n"
+    "CHỈ trả về nội dung Markdown đã dịch, KHÔNG thêm lời mở đầu, "
+    "giải thích hay nhận xét."
+)
+
+
+def _extract_boards(md, chess=True):
+    """Thay từng block cần giữ nguyên bằng placeholder, trả (md, list block gốc).
+
+    chess=True: chỉ tách block ```chessboard. chess=False: tách MỌI fenced
+    code block (tài liệu thường — code/lệnh không được dịch).
+    """
     blocks = []
 
     def repl(match):
         blocks.append(match.group(0))
         return _PLACEHOLDER_FMT.format(n=len(blocks))
 
-    return _CHESSBOARD_BLOCK_RE.sub(repl, md), blocks
+    pattern = _CHESSBOARD_BLOCK_RE if chess else _CODE_BLOCK_RE
+    return pattern.sub(repl, md), blocks
 
 
 def _restore_boards(md, blocks):
@@ -129,7 +177,7 @@ def _split_chunks(md, max_chars=6000):
     return chunks
 
 
-def _call_claude(chunk, model="opus", timeout=600):
+def _call_claude(chunk, model="opus", timeout=600, instruction=None):
     """Gọi `claude -p` dịch một chunk (đưa qua stdin). Trả về text đã dịch."""
     claude = find_claude()
     if not claude:
@@ -138,15 +186,16 @@ def _call_claude(chunk, model="opus", timeout=600):
             "Hãy đảm bảo Claude Code đã được cài và đăng nhập."
         )
 
+    # Dịch không cần extended thinking -> effort low (override settings).
     cmd = [
         claude,
         "-p",
-        TRANSLATE_INSTRUCTION,
+        instruction or TRANSLATE_INSTRUCTION_CHESS,
         "--output-format",
         "json",
         "--model",
         model,
-    ]
+    ] + _claude_fast_flags("low")
 
     try:
         proc = subprocess.run(
@@ -157,6 +206,7 @@ def _call_claude(chunk, model="opus", timeout=600):
             encoding="utf-8",
             errors="replace",
             timeout=timeout,
+            env=_claude_env(),
         )
     except subprocess.TimeoutExpired as exc:
         raise ClaudeOCRError(
@@ -188,40 +238,71 @@ def _placeholders_in(text):
     return set(_PLACEHOLDER_RE.findall(text))
 
 
-def translate_markdown_vn(md, model="opus", progress=None, timeout=600):
-    """Dịch Markdown sang tiếng Việt, giữ nguyên các block ```chessboard.
+# Số chunk dịch song song (mỗi chunk là một tiến trình `claude` riêng).
+TRANSLATE_WORKERS = 8
 
-    progress: callable(i, n) báo tiến độ theo chunk (tùy chọn).
-    Chunk lỗi (sau 1 lần thử lại) hoặc bị mất placeholder bàn cờ -> giữ
-    nguyên văn chunk gốc kèm ghi chú, không hủy cả bản dịch.
+
+def _translate_chunk(chunk, model, timeout, instruction):
+    """Dịch 1 chunk với 1 lần thử lại + hậu kiểm placeholder.
+
+    Chunk lỗi hoặc bị mất placeholder -> trả về nguyên văn chunk kèm ghi chú,
+    không raise (để không hủy cả bản dịch).
     """
-    text, blocks = _extract_boards(md)
+    translated = None
+    err = None
+    for _attempt in range(2):  # thử lại 1 lần nếu lỗi
+        try:
+            translated = _call_claude(
+                chunk, model=model, timeout=timeout, instruction=instruction
+            )
+            break
+        except ClaudeOCRError as exc:
+            err = exc
+    if translated is None:
+        return f"{chunk}\n\n*[Lỗi dịch đoạn này: {err}]*"
+    # An toàn: bản dịch phải giữ đủ placeholder của chunk gốc,
+    # nếu thiếu thì dùng lại nguyên văn để không mất bàn cờ/code nào.
+    if not _placeholders_in(chunk) <= _placeholders_in(translated):
+        return f"{chunk}\n\n*[Đoạn này dịch bị mất khối bàn cờ/code nên giữ nguyên văn]*"
+    return translated
+
+
+def translate_markdown_vn(
+    md, model="opus", progress=None, timeout=600, chess=True,
+    workers=TRANSLATE_WORKERS,
+):
+    """Dịch Markdown sang tiếng Việt.
+
+    chess=True (sách cờ vua): dịch theo quy tắc ký hiệu cờ vua (V/H/X/T/M...),
+    giữ nguyên các block ```chessboard.
+    chess=False (tài liệu thường): dịch thông thường, giữ nguyên mọi code block.
+
+    Các chunk được dịch song song `workers` chunk một lúc, ghép đúng thứ tự.
+    progress: callable(i, n) — gọi mỗi khi xong thêm một chunk (i = số đã xong).
+    Chunk lỗi (sau 1 lần thử lại) hoặc bị mất placeholder -> giữ nguyên văn
+    chunk gốc kèm ghi chú, không hủy cả bản dịch.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    instruction = TRANSLATE_INSTRUCTION_CHESS if chess else TRANSLATE_INSTRUCTION_GENERAL
+    text, blocks = _extract_boards(md, chess=chess)
     chunks = _split_chunks(text)
     if not chunks:
         return md
 
-    out_parts = []
-    for i, chunk in enumerate(chunks, 1):
-        if progress is not None:
-            progress(i, len(chunks))
-        translated = None
-        err = None
-        for _attempt in range(2):  # thử lại 1 lần nếu lỗi
-            try:
-                translated = _call_claude(chunk, model=model, timeout=timeout)
-                break
-            except ClaudeOCRError as exc:
-                err = exc
-        if translated is None:
-            out_parts.append(f"{chunk}\n\n*[Lỗi dịch đoạn này: {err}]*")
-            continue
-        # An toàn: bản dịch phải giữ đủ placeholder bàn cờ của chunk gốc,
-        # nếu thiếu thì dùng lại nguyên văn để không mất bàn cờ nào.
-        if not _placeholders_in(chunk) <= _placeholders_in(translated):
-            out_parts.append(
-                f"{chunk}\n\n*[Đoạn này dịch bị mất hình bàn cờ nên giữ nguyên văn]*"
-            )
-            continue
-        out_parts.append(translated)
+    out_parts = [None] * len(chunks)
+    n_done = 0
+    if progress is not None:
+        progress(0, len(chunks))
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = {
+            pool.submit(_translate_chunk, chunk, model, timeout, instruction): idx
+            for idx, chunk in enumerate(chunks)
+        }
+        for fut in as_completed(futures):
+            out_parts[futures[fut]] = fut.result()
+            n_done += 1
+            if progress is not None:
+                progress(n_done, len(chunks))
 
     return _restore_boards("\n\n".join(out_parts).strip(), blocks)
