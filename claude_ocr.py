@@ -115,14 +115,29 @@ _PROMPT_FOOTER = (
     "K, Q, R, B, N. KHÔNG diễn giải hay bình luận thêm về nước đi.\n\n"
 ) + _PROMPT_FOOTER_PLAIN
 
+# Footer cho SÁCH TIẾNG NGA: giữ nguyên chữ quân cờ Nga; figurine -> chữ cái Nga
+# (KHÔNG đổi sang Latin) để cả trang đồng nhất một bảng chữ cái, tránh đụng độ
+# K (Vua, Latin từ figurine) với К (Mã, Cyrillic). Bước dịch sẽ đổi Кр/Ф/Л/С/К
+# sang V/H/X/T/M.
+_PROMPT_FOOTER_RU = (
+    "Về ký hiệu nước đi cờ vua trong văn bản (sách tiếng Nga): giữ NGUYÊN VĂN như sách in "
+    "— chữ cái quân cờ tiếng Nga (Кр, Ф, Л, С, К, п), số thứ tự nước '12.' hoặc '12...', "
+    "các ký hiệu đánh giá !, ?, !!, ??, !?, ?!, ±, =, +-, -+... KHÔNG dịch và KHÔNG chuyển "
+    "chữ Nga sang chữ Latin. Nếu sách in quân cờ bằng hình (figurine) thì chuyển về chữ "
+    "cái quân cờ TIẾNG NGA tương ứng: ♔/♚→Кр, ♕/♛→Ф, ♖/♜→Л, ♗/♝→С, ♘/♞→К, ♙/♟→không có "
+    "chữ. KHÔNG diễn giải hay bình luận thêm về nước đi.\n\n"
+) + _PROMPT_FOOTER_PLAIN
+
 # Giữ tên cũ cho tương thích (prompt khi Claude phải tự nhận diện bàn cờ).
 PROMPT_VI = _PROMPT_HEADER + _PROMPT_CHESS_SELF + _PROMPT_FOOTER
 
 
-def _build_prompt(img_path, board_fens=None, chess=True):
+def _build_prompt(img_path, board_fens=None, chess=True, chess_lang="en"):
     """Ghép prompt OCR: có FEN tính sẵn thì yêu cầu dùng nguyên văn.
 
     chess=False (chế độ tài liệu thường): bỏ toàn bộ phần bàn cờ vua.
+    chess_lang="ru": footer giữ ký hiệu tiếng Nga và đổi figurine sang chữ Nga;
+    "en" (mặc định): footer chuẩn (figurine -> SAN quốc tế K/Q/R/B/N).
     """
     if not chess:
         return _PROMPT_HEADER.format(path=img_path) + _PROMPT_FOOTER_PLAIN
@@ -131,7 +146,8 @@ def _build_prompt(img_path, board_fens=None, chess=True):
         chess_part = _PROMPT_CHESS_GIVEN.format(n=len(board_fens), fen_list=fen_list)
     else:
         chess_part = _PROMPT_CHESS_SELF
-    return _PROMPT_HEADER.format(path=img_path) + chess_part + _PROMPT_FOOTER
+    footer = _PROMPT_FOOTER_RU if chess_lang == "ru" else _PROMPT_FOOTER
+    return _PROMPT_HEADER.format(path=img_path) + chess_part + footer
 
 # --- Hậu kiểm block ```chessboard --------------------------------------------
 
@@ -278,7 +294,10 @@ def _page_board_fens(pil_page):
         return None
 
 
-def ocr_image_path(img_path, model="opus", timeout=600, board_fens=None, chess=True):
+def ocr_image_path(
+    img_path, model="opus", timeout=600, board_fens=None, chess=True,
+    chess_lang="en",
+):
     """Gọi Claude Code headless để OCR một ảnh. Trả về Markdown trích được.
 
     board_fens: danh sách FEN của các hình bàn cờ trên trang (đã nhận diện cục
@@ -286,6 +305,7 @@ def ocr_image_path(img_path, model="opus", timeout=600, board_fens=None, chess=T
     nhận diện.
     chess=False (chế độ tài liệu thường): OCR bằng prompt thường, không có phần
     nhận diện bàn cờ / block chessboard.
+    chess_lang="ru": dùng footer tiếng Nga (giữ ký hiệu Кр/Ф/Л/С/К).
     """
     claude = find_claude()
     if not claude:
@@ -296,7 +316,7 @@ def ocr_image_path(img_path, model="opus", timeout=600, board_fens=None, chess=T
 
     img_path = os.path.abspath(img_path)
     img_dir = os.path.dirname(img_path)
-    prompt = _build_prompt(img_path, board_fens, chess=chess)
+    prompt = _build_prompt(img_path, board_fens, chess=chess, chess_lang=chess_lang)
 
     # OCR chỉ là chép chữ -> effort low; riêng khi Claude phải TỰ nhận diện
     # bàn cờ thành FEN (không có FEN tính sẵn) thì cần suy luận -> medium.
@@ -361,23 +381,23 @@ def ocr_image_path(img_path, model="opus", timeout=600, board_fens=None, chess=T
 OCR_WORKERS = 8
 
 
-def _ocr_page(png, model, page_timeout, board_fens, chess):
+def _ocr_page(png, model, page_timeout, board_fens, chess, chess_lang="en"):
     """OCR 1 trang với 1 lần thử lại. Trả về Markdown; vẫn lỗi thì raise."""
     try:
         return ocr_image_path(
             png, model=model, timeout=page_timeout,
-            board_fens=board_fens, chess=chess,
+            board_fens=board_fens, chess=chess, chess_lang=chess_lang,
         )
     except ClaudeOCRError:
         return ocr_image_path(
             png, model=model, timeout=page_timeout,
-            board_fens=board_fens, chess=chess,
+            board_fens=board_fens, chess=chess, chess_lang=chess_lang,
         )
 
 
 def ocr_pdf(
     pdf_path, model="opus", dpi=200, progress=None, page_timeout=600,
-    board_dpi=BOARD_DPI, chess=True, workers=OCR_WORKERS,
+    board_dpi=BOARD_DPI, chess=True, workers=OCR_WORKERS, chess_lang="en",
 ):
     """OCR toàn bộ PDF scan. Trả về Markdown ghép các trang.
 
@@ -422,7 +442,8 @@ def ocr_pdf(
                         png = _render_page(pdf[i - 1], tmp_dir, i, dpi=dpi)
                         board_fens = None
                     fut = pool.submit(
-                        _ocr_page, png, model, page_timeout, board_fens, chess
+                        _ocr_page, png, model, page_timeout, board_fens, chess,
+                        chess_lang,
                     )
                     futures[fut] = i
                 for fut in as_completed(futures):
@@ -454,10 +475,11 @@ def ocr_pdf(
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def ocr_image_file(img_path, model="opus", page_timeout=600, chess=True):
+def ocr_image_file(img_path, model="opus", page_timeout=600, chess=True, chess_lang="en"):
     """OCR một tệp ảnh đơn lẻ (jpg/png...).
 
     chess=False: bỏ bước nhận diện bàn cờ, OCR bằng prompt thường.
+    chess_lang="ru": dùng footer tiếng Nga (giữ ký hiệu Кр/Ф/Л/С/К).
     """
     board_fens = None
     if chess:
@@ -470,5 +492,5 @@ def ocr_image_file(img_path, model="opus", page_timeout=600, chess=True):
             board_fens = None
     return ocr_image_path(
         img_path, model=model, timeout=page_timeout, board_fens=board_fens,
-        chess=chess,
+        chess=chess, chess_lang=chess_lang,
     )

@@ -9,7 +9,8 @@ stdin để tránh giới hạn độ dài command line trên Windows.
 Hai chế độ dịch:
 - chess=True (sách cờ vua): quy tắc ký hiệu cờ vua, block ```chessboard (FEN)
   được tách thành placeholder trước khi dịch và khôi phục nguyên văn sau —
-  đảm bảo FEN không bao giờ bị dịch/sửa/mất.
+  đảm bảo FEN không bao giờ bị dịch/sửa/mất. chess_lang="en" dịch ký hiệu
+  tiếng Anh (K/Q/R/B/N), chess_lang="ru" dịch ký hiệu tiếng Nga (Кр/Ф/Л/С/К).
 - chess=False (tài liệu thường): dịch thông thường, MỌI fenced code block
   được bảo vệ theo cùng cơ chế placeholder.
 """
@@ -28,7 +29,11 @@ _CODE_BLOCK_RE = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
 _PLACEHOLDER_FMT = "⟦CHESSBOARD_{n}⟧"
 _PLACEHOLDER_RE = re.compile(r"⟦CHESSBOARD_(\d+)⟧")
 
-TRANSLATE_INSTRUCTION_CHESS = (
+# Prompt sách cờ vua được ghép từ 3 mảnh: phần đầu (intro + mục I) và phần đuôi
+# (mục III–VI) dùng chung cho cả tiếng Anh lẫn tiếng Nga; chỉ mục II (ký hiệu
+# nước đi) khác nhau theo ngôn ngữ nguồn. Nhờ vậy hai prompt không bị lệch khi
+# sửa các phần dùng chung.
+_CHESS_HEAD = (
     "Bạn nhận được (qua stdin) nội dung Markdown trích từ một cuốn sách cờ vua. "
     "Hãy DỊCH toàn bộ phần văn bản sang tiếng Việt, giữ nguyên cấu trúc Markdown.\n\n"
     "=====================\n"
@@ -37,6 +42,10 @@ TRANSLATE_INSTRUCTION_CHESS = (
     "- Các dòng dạng ⟦CHESSBOARD_1⟧, ⟦CHESSBOARD_2⟧... là placeholder cho hình bàn cờ.\n"
     "- BẮT BUỘC giữ NGUYÊN VĂN từng placeholder, đúng vị trí tương ứng, trên dòng riêng.\n"
     "- KHÔNG dịch, KHÔNG sửa, KHÔNG xóa, KHÔNG thêm placeholder.\n\n"
+)
+
+# Mục II cho sách tiếng Anh (ký hiệu SAN quốc tế K, Q, R, B, N).
+_CHESS_II_EN = (
     "=====================\n"
     "II. KÝ HIỆU NƯỚC ĐI\n"
     "=====================\n"
@@ -45,11 +54,42 @@ TRANSLATE_INSTRUCTION_CHESS = (
     "B. Notation: K → V; Q → H; R → X; B → T; N → M; Tốt không có ký hiệu.\n"
     "   Ví dụ: Nf3 → Mf3; Qxd5 → Hxd5; Bc4 → Tc4; exd5 → exd5; "
     "O-O → 0-0; O-O-O → 0-0-0.\n"
-    "C. Icon quân cờ (figurine): ♔ → V; ♕ → H; ♖ → X; ♗ → T; ♘ → M; "
-    "♙ → không ký hiệu.\n"
+    "C. Icon quân cờ (figurine): ♔/♚ → V; ♕/♛ → H; ♖/♜ → X; ♗/♝ → T; ♘/♞ → M; "
+    "♙/♟ → không ký hiệu.\n"
     "D. Giữ nguyên tọa độ a-h, 1-8.\n"
     "E. Thuật ngữ: check → chiếu; checkmate → chiếu hết; capture → ăn quân.\n"
     "F. Giữ nguyên các ký hiệu đánh giá: !, ?, !!, ??, !?, ?!, ±, =, +-, -+, +...\n\n"
+)
+
+# Mục II cho sách tiếng Nga (ký hiệu Cyrillic Кр, Ф, Л, С, К). Lưu ý: К đứng một
+# mình = Mã (ngược với tiếng Anh K = Vua), và phải tách Кр (Vua) trước К (Mã).
+_CHESS_II_RU = (
+    "=====================\n"
+    "II. KÝ HIỆU NƯỚC ĐI (SÁCH TIẾNG NGA)\n"
+    "=====================\n"
+    "A. Tên quân (tiếng Nga → tiếng Việt): Король → Vua; Ферзь → Hậu; "
+    "Ладья → Xe; Слон → Tượng; Конь → Mã; Пешка → Tốt.\n"
+    "B. Notation — ký tự quân cờ trong sách Nga. Chấp nhận cả chữ Cyrillic lẫn "
+    "chữ Latin trông giống do OCR (К↔K, С↔C, Р↔p):\n"
+    "   - Кр (chữ К/K có 'р'/'p' NGAY SAU) → V (Vua). Ví dụ: Крg1 → Vg1.\n"
+    "   - Ф → H (Hậu).\n"
+    "   - Л → X (Xe).\n"
+    "   - С (hoặc Latin C) → T (Tượng).\n"
+    "   - К (hoặc Latin K) KHÔNG có 'р'/'p' theo sau → M (Mã).\n"
+    "   - Tốt KHÔNG có ký hiệu; nước tốt giữ nguyên (e4, d5, exd5...).\n"
+    "   QUAN TRỌNG: phải kiểm tra 'Кр' (Vua) TRƯỚC 'К' (Mã); chỉ khi К đứng một "
+    "mình (không có р/p liền sau) mới là Mã.\n"
+    "   Ví dụ: Кf3 → Mf3; Фxd5 → Hxd5; Сc4 → Tc4; Крg1 → Vg1; exd5 → exd5; "
+    "O-O → 0-0; O-O-O → 0-0-0.\n"
+    "C. Icon quân cờ (figurine), giữ nguyên ý nghĩa bất kể ngôn ngữ: "
+    "♔/♚ → V; ♕/♛ → H; ♖/♜ → X; ♗/♝ → T; ♘/♞ → M; ♙/♟ → không ký hiệu.\n"
+    "D. Giữ nguyên tọa độ a-h, 1-8.\n"
+    "E. Thuật ngữ: шах/check → chiếu; мат/checkmate → chiếu hết; "
+    "взятие/capture → ăn quân.\n"
+    "F. Giữ nguyên các ký hiệu đánh giá: !, ?, !!, ??, !?, ?!, ±, =, +-, -+, +...\n\n"
+)
+
+_CHESS_TAIL = (
     "=====================\n"
     "III. FORMAT NƯỚC ĐI (BẮT BUỘC)\n"
     "=====================\n"
@@ -82,6 +122,9 @@ TRANSLATE_INSTRUCTION_CHESS = (
     "CHỈ trả về nội dung Markdown đã dịch, KHÔNG thêm lời mở đầu, "
     "giải thích hay nhận xét."
 )
+
+TRANSLATE_INSTRUCTION_CHESS = _CHESS_HEAD + _CHESS_II_EN + _CHESS_TAIL
+TRANSLATE_INSTRUCTION_CHESS_RU = _CHESS_HEAD + _CHESS_II_RU + _CHESS_TAIL
 
 # Giữ tên cũ cho tương thích.
 TRANSLATE_INSTRUCTION = TRANSLATE_INSTRUCTION_CHESS
@@ -273,12 +316,14 @@ def _translate_chunk(chunk, model, timeout, instruction):
 
 def translate_markdown_vn(
     md, model="opus", progress=None, timeout=600, chess=True,
-    workers=TRANSLATE_WORKERS,
+    workers=TRANSLATE_WORKERS, chess_lang="en",
 ):
     """Dịch Markdown sang tiếng Việt.
 
     chess=True (sách cờ vua): dịch theo quy tắc ký hiệu cờ vua (V/H/X/T/M...),
-    giữ nguyên các block ```chessboard.
+    giữ nguyên các block ```chessboard. chess_lang chọn bảng ký hiệu nguồn:
+    "en" (mặc định) = ký hiệu tiếng Anh K/Q/R/B/N; "ru" = ký hiệu tiếng Nga
+    Кр/Ф/Л/С/К. Output tiếng Việt giống nhau, chỉ khác ký hiệu nguồn.
     chess=False (tài liệu thường): dịch thông thường, giữ nguyên mọi code block.
 
     Các chunk được dịch song song `workers` chunk một lúc, ghép đúng thứ tự.
@@ -288,7 +333,12 @@ def translate_markdown_vn(
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    instruction = TRANSLATE_INSTRUCTION_CHESS if chess else TRANSLATE_INSTRUCTION_GENERAL
+    if not chess:
+        instruction = TRANSLATE_INSTRUCTION_GENERAL
+    elif chess_lang == "ru":
+        instruction = TRANSLATE_INSTRUCTION_CHESS_RU
+    else:
+        instruction = TRANSLATE_INSTRUCTION_CHESS
     text, blocks = _extract_boards(md, chess=chess)
     chunks = _split_chunks(text)
     if not chunks:
