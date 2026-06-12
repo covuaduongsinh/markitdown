@@ -26,13 +26,27 @@ except Exception:
 # Ánh xạ nhãn model trên giao diện -> alias dùng cho `--model`
 MODEL_ALIASES = {"opus", "sonnet", "haiku"}
 
+# Quy tắc dọn các thành phần phụ trợ của trang in (header/footer/số trang).
+# Dùng chung cho mọi chế độ -> nối vào cuối _PROMPT_HEADER.
+_PROMPT_CLEANUP = (
+    "Loại bỏ các thành phần phụ trợ của trang in, KHÔNG đưa vào Markdown:\n"
+    "- Tiêu đề chạy đầu trang (header): tên sách, tên chương... in tách biệt phía trên thân trang.\n"
+    "- Chân trang (footer) và số trang.\n"
+    "- Phần cố định lặp lại ở mọi trang (vd: tên sách/chương ở mép trên hoặc mép dưới).\n"
+    "Mỗi lần bạn chỉ thấy MỘT trang, nên nhận biết các thành phần này qua VỊ TRÍ "
+    "(ở mép trên/dưới, tách rời phần thân) và nội dung (tên sách/chương, số trang), "
+    "không cần so sánh giữa các trang.\n"
+    "Nếu KHÔNG chắc một dòng có phải header/footer/số trang hay không thì GIỮ NGUYÊN "
+    "dòng đó và ghi chú ngay sau: (cần kiểm tra).\n\n"
+)
+
 _PROMPT_HEADER = (
     "Hãy đọc ảnh tài liệu tại đường dẫn: {path}\n\n"
     "Đây có thể là tài liệu tiếng Việt được scan, có thể có watermark hoặc dấu mộc. "
     "Nhiệm vụ của bạn là OCR: trích xuất TOÀN BỘ nội dung văn bản nhìn thấy trong ảnh "
     "và trình bày lại dưới dạng Markdown, giữ đúng cấu trúc (tiêu đề, đoạn văn, bảng, "
     "danh sách). Bỏ qua hoa văn/watermark trang trí.\n\n"
-)
+) + _PROMPT_CLEANUP
 
 _PROMPT_BLOCK_RULES = (
     "Quy tắc BẮT BUỘC cho block: không dùng dấu nháy kép; FEN nằm trên đúng 1 dòng; "
@@ -417,14 +431,14 @@ def ocr_pdf(
                         text = fut.result()
                     except ClaudeOCRError as exc:
                         n_failed += 1
-                        parts[i - 1] = f"## Trang {i}\n\n*[Lỗi OCR trang này: {exc}]*"
+                        # Không chèn heading '## Trang N' (rác/số trang); chỉ để lại
+                        # ghi chú inline kèm số trang để dễ dò trang lỗi.
+                        parts[i - 1] = f"*[Lỗi OCR trang {i}: {exc}]*"
                     else:
                         if text.strip():
-                            parts[i - 1] = f"## Trang {i}\n\n{text.strip()}"
+                            parts[i - 1] = text.strip()
                         else:
-                            parts[i - 1] = (
-                                f"## Trang {i}\n\n*[Không trích được nội dung]*"
-                            )
+                            parts[i - 1] = f"*[Trang {i}: không trích được nội dung]*"
                     n_done += 1
                     if progress is not None:
                         progress(n_done, n_pages)

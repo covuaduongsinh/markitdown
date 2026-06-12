@@ -68,7 +68,7 @@ TRANSLATE_INSTRUCTION_CHESS = (
     "- \"Chapter 1\" → \"# Chương 1\"; \"Game 1\" → \"### Ván 1\"; "
     "\"Example\" → \"### Ví dụ\".\n"
     "- Mỗi heading trên dòng riêng, không gộp với nội dung.\n"
-    "- Giữ nguyên các heading đã có sẵn trong bản gốc (vd: \"## Trang 5\").\n\n"
+    "- Giữ nguyên các heading đã có sẵn trong bản gốc (vd: \"## Phần mở đầu\").\n\n"
     "=====================\n"
     "V. ĐỊNH DẠNG TRUNG THỰC\n"
     "=====================\n"
@@ -112,7 +112,7 @@ TRANSLATE_INSTRUCTION_GENERAL = (
     "- KHÔNG tự ý in đậm, làm đẹp hay thay đổi format.\n"
     "- Chỗ nào bản gốc in đậm (**...**) thì bản dịch giữ in đậm; "
     "bản gốc không in đậm thì TUYỆT ĐỐI không thêm.\n"
-    "- Giữ nguyên các heading đã có sẵn trong bản gốc (vd: \"## Trang 5\").\n"
+    "- Giữ nguyên các heading đã có sẵn trong bản gốc (vd: \"## Phần mở đầu\").\n"
     "- Không bỏ sót nội dung.\n\n"
     "=====================\n"
     "IV. OUTPUT\n"
@@ -151,17 +151,21 @@ def _restore_boards(md, blocks):
 
 
 def _split_chunks(md, max_chars=6000):
-    """Chia Markdown thành các chunk <= max_chars, cắt tại ranh giới '\\n## '.
+    """Chia Markdown thành các chunk <= max_chars, cắt tại heading '## ' hoặc
+    ranh giới đoạn (dòng trống).
 
-    Đầu ra của ocr_pdf có header '## Trang N' cho mỗi trang nên thường mỗi
-    chunk gộp được vài trang. Đoạn nào tự nó dài hơn max_chars thì giữ
-    nguyên thành 1 chunk (không cắt giữa chừng).
+    Đầu ra của ocr_pdf không còn chèn '## Trang N', nên ngoài heading '## ' ta
+    cắt thêm tại dòng trống để các trang không có heading vẫn được chia nhỏ
+    (tránh dồn cả sách thành 1 chunk khổng lồ). Đoạn nào tự nó dài hơn
+    max_chars thì giữ nguyên thành 1 chunk (không cắt giữa chừng).
     """
     md = md.strip()
     if not md:
         return []
-    # Tách giữ nguyên nội dung: mỗi phần tử bắt đầu bằng '## ' (trừ phần đầu).
-    parts = re.split(r"\n(?=## )", md)
+    # Tách giữ nguyên nội dung: lookahead không nuốt ký tự nên mỗi lần chỉ bỏ
+    # đúng 1 '\n', ghép lại bằng '\n' tái tạo chính xác bản gốc. Cắt trước
+    # heading '## ' hoặc trước một dòng trống (ranh giới đoạn).
+    parts = re.split(r"\n(?=## |\n)", md)
     chunks = []
     cur = ""
     for part in parts:
