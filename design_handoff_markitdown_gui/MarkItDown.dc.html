@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;0,900;1,400&family=Roboto+Condensed:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: rgba(110,116,134,.32); border-radius: 999px; }
+  @keyframes mid-spin { to { transform: rotate(360deg); } }
+  @keyframes mid-pulse { 0%,100% { opacity:1; } 50% { opacity:.45; } }
+  @keyframes mid-rise { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+  select { font-family:'Roboto',sans-serif; }
+</style>
+</helmet>
+
+<div style="font-family:'Roboto','Segoe UI',system-ui,sans-serif; min-height:100vh; background:{{ c.bg }}; color:{{ c.text }};">
+
+  <!-- ===================== TOP BAR ===================== -->
+  <div style="position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:14px; padding:13px 26px; background:#2B3990; color:#fff; box-shadow:0 2px 14px rgba(21,29,73,.28);">
+    <img src="assets/symbol-white.svg" style="width:24px; height:26px; display:block;">
+    <span style="font-weight:900; font-size:19px; letter-spacing:-0.01em;">MarkItDown</span>
+    <span style="font-weight:300; font-size:12.5px; opacity:.85; letter-spacing:.03em; border-left:1px solid rgba(255,255,255,.25); padding-left:14px;">Cờ vua Dương Sinh — tài liệu &amp; sách cờ → Markdown</span>
+    <div style="margin-left:auto; display:flex; align-items:center; gap:14px;">
+      <div style="display:flex; gap:6px;">
+        <span style="font-size:11px; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); border-radius:999px; padding:3px 10px;">PDF</span>
+        <span style="font-size:11px; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); border-radius:999px; padding:3px 10px;">Word · Excel</span>
+        <span style="font-size:11px; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); border-radius:999px; padding:3px 10px;">Ảnh · URL</span>
+        <span style="font-size:11px; background:rgba(246,185,43,.22); border:1px solid rgba(246,185,43,.5); color:#FCE29A; border-radius:999px; padding:3px 10px; font-weight:600;">Sách cờ vua</span>
+      </div>
+      <button onClick="{{ toggleTheme }}" style="display:flex; align-items:center; gap:7px; cursor:pointer; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); color:#fff; border-radius:999px; padding:6px 13px; font-family:'Roboto'; font-size:12.5px; font-weight:600;">
+        {{ themeIcon }}
+        {{ themeLabel }}
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================== WORKSPACE ===================== -->
+  <div style="max-width:1340px; margin:0 auto; padding:24px 26px 60px; display:grid; grid-template-columns:412px minmax(0,1fr); gap:22px; align-items:start;">
+
+    <!-- =============== LEFT: CONTROLS =============== -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+      <!-- input panel -->
+      <div style="background:{{ c.panel }}; border:1px solid {{ c.border }}; border-radius:18px; box-shadow:{{ c.shadow }}; overflow:hidden;">
+        <!-- input tabs -->
+        <div style="display:flex; padding:6px; gap:4px; background:{{ c.inset }}; border-bottom:1px solid {{ c.border }};">
+          <button onClick="{{ tabFile }}" style="{{ tabFileStyle }}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            Từ tệp
+          </button>
+          <button onClick="{{ tabUrl }}" style="{{ tabUrlStyle }}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Từ URL
+          </button>
+        </div>
+
+        <div style="padding:16px;">
+          <!-- FILE TAB -->
+          <sc-if value="{{ isFileTab }}" hint-placeholder-val="{{ true }}">
+            <div onClick="{{ addFiles }}" style="border:2px dashed {{ c.borderStrong }}; background:{{ c.dropBg }}; border-radius:14px; padding:22px 18px; text-align:center; cursor:pointer;">
+              <span style="display:inline-flex; width:46px; height:46px; align-items:center; justify-content:center; border-radius:13px; background:{{ c.navySoft }}; margin-bottom:10px;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2B3990" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </span>
+              <div style="font-weight:700; font-size:14.5px; color:{{ c.text }};">Kéo-thả tệp vào đây</div>
+              <div style="font-size:12px; color:{{ c.subtext }}; margin-top:3px;">hoặc bấm để chọn — PDF, Word, Excel, PPT, ảnh</div>
+            </div>
+
+            <!-- queue -->
+            <sc-if value="{{ hasFiles }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin:15px 2px 9px;">
+                <span style="font-family:'Roboto Condensed'; font-weight:700; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:{{ c.subtext }};">{{ queueLabel }}</span>
+                <button onClick="{{ clearFiles }}" style="background:none; border:none; cursor:pointer; font-family:'Roboto'; font-size:12px; color:{{ c.faint }};">Xóa hết</button>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:8px;">
+                <sc-for list="{{ files }}" as="f" hint-placeholder-count="3">
+                  <div style="display:flex; align-items:center; gap:11px; padding:10px 12px; background:{{ c.inset }}; border:1px solid {{ c.border }}; border-radius:11px;">
+                    <span style="width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; background:{{ f.iconBg }}; flex:0 0 auto;">{{ f.iconEl }}</span>
+                    <div style="flex:1; min-width:0;">
+                      <div style="font-weight:600; font-size:13.5px; color:{{ c.text }}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ f.name }}</div>
+                      <div style="font-size:11.5px; color:{{ c.subtext }}; margin-top:1px;">{{ f.meta }}</div>
+                    </div>
+                    <button onClick="{{ f.onRemove }}" style="background:none; border:none; cursor:pointer; color:{{ c.faint }}; display:flex; padding:4px;">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <!-- URL TAB -->
+          <sc-if value="{{ isUrlTab }}" hint-placeholder-val="{{ false }}">
+            <div style="position:relative;">
+              <span style="position:absolute; left:13px; top:50%; transform:translateY(-50%); color:{{ c.faint }}; display:flex;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              </span>
+              <input value="{{ url }}" onInput="{{ onUrl }}" placeholder="https://… hoặc link YouTube / Wikipedia" style="width:100%; padding:13px 14px 13px 38px; border:1px solid {{ c.borderStrong }}; background:{{ c.dropBg }}; color:{{ c.text }}; border-radius:12px; font-family:'Roboto'; font-size:13.5px; outline:none;">
+            </div>
+            <div style="font-size:12px; color:{{ c.subtext }}; margin-top:9px; line-height:1.5;">Hỗ trợ YouTube, Wikipedia, RSS và trang web bất kỳ. Nội dung được tải về và chuyển thành Markdown.</div>
+          </sc-if>
+        </div>
+      </div>
+
+      <!-- mode panel -->
+      <div style="background:{{ c.panel }}; border:1px solid {{ c.border }}; border-radius:18px; box-shadow:{{ c.shadow }}; padding:16px;">
+        <div style="font-family:'Roboto Condensed'; font-weight:700; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:{{ c.subtext }}; margin-bottom:11px;">Chế độ xử lý</div>
+        <div style="display:flex; flex-direction:column; gap:9px;">
+          <div onClick="{{ pickChessEn }}" style="{{ modeEnStyle }}">
+            <img src="assets/pieces/wn.svg" style="width:30px; height:30px; flex:0 0 auto;">
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:700; font-size:14px; color:{{ c.text }};">Sách cờ vua — ký hiệu Anh</div>
+              <div style="font-size:11.5px; color:{{ c.subtext }}; margin-top:1px;">Nhận diện bàn cờ → FEN · K/Q/R/B/N → V/H/X/T/M</div>
+            </div>
+            {{ checkEn }}
+          </div>
+          <div onClick="{{ pickChessRu }}" style="{{ modeRuStyle }}">
+            <img src="assets/pieces/bn.svg" style="width:30px; height:30px; flex:0 0 auto;">
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:700; font-size:14px; color:{{ c.text }};">Sách cờ vua — ký hiệu Nga</div>
+              <div style="font-size:11.5px; color:{{ c.subtext }}; margin-top:1px;">Кр/Ф/Л/С/К → V/H/X/T/M · xử lý figurine</div>
+            </div>
+            {{ checkRu }}
+          </div>
+          <div onClick="{{ pickDoc }}" style="{{ modeDocStyle }}">
+            <span style="width:30px; height:30px; display:flex; align-items:center; justify-content:center; flex:0 0 auto;">
+              <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="{{ c.subtext }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </span>
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:700; font-size:14px; color:{{ c.text }};">Tài liệu thường</div>
+              <div style="font-size:11.5px; color:{{ c.subtext }}; margin-top:1px;">Chuyển đổi gốc của MarkItDown + dịch thông thường</div>
+            </div>
+            {{ checkDoc }}
+          </div>
+        </div>
+      </div>
+
+      <!-- preset + convert panel -->
+      <div style="background:{{ c.panel }}; border:1px solid {{ c.border }}; border-radius:18px; box-shadow:{{ c.shadow }}; padding:16px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:11px;">
+          <span style="font-family:'Roboto Condensed'; font-weight:700; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:{{ c.subtext }};">Mức chất lượng</span>
+          <span style="font-size:11.5px; color:{{ c.subtext }};">{{ presetHint }}</span>
+        </div>
+        <div style="display:flex; background:{{ c.inset }}; border:1px solid {{ c.border }}; border-radius:12px; padding:4px; gap:4px;">
+          <button onClick="{{ presetSaver }}" style="{{ presetSaverStyle }}">Tiết kiệm</button>
+          <button onClick="{{ presetBalanced }}" style="{{ presetBalancedStyle }}">Cân bằng</button>
+          <button onClick="{{ presetAccurate }}" style="{{ presetAccurateStyle }}">Chính xác</button>
+        </div>
+
+        <button onClick="{{ convert }}" style="{{ convertStyle }}">
+          {{ convertIcon }}
+          {{ convertLabel }}
+        </button>
+
+        <!-- advanced -->
+        <button onClick="{{ toggleAdvanced }}" style="width:100%; margin-top:11px; display:flex; align-items:center; gap:9px; padding:11px 13px; background:none; border:1px solid {{ c.border }}; border-radius:11px; cursor:pointer; color:{{ c.subtext }}; font-family:'Roboto'; font-size:13px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span style="font-weight:600; white-space:nowrap;">Tùy chọn nâng cao</span>
+          <span style="margin-left:auto; transform:rotate({{ advChevron }}); transition:transform .2s ease; display:flex;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+        </button>
+
+        <sc-if value="{{ advancedOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:11px; display:flex; flex-direction:column; gap:13px; padding-top:3px;">
+            <!-- toggles -->
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <sc-for list="{{ toggles }}" as="t" hint-placeholder-count="4">
+                <div onClick="{{ t.onToggle }}" style="display:flex; align-items:flex-start; gap:11px; cursor:pointer;">
+                  <span style="{{ t.switchStyle }}"><span style="{{ t.knobStyle }}"></span></span>
+                  <div style="flex:1;">
+                    <div style="font-size:13px; font-weight:600; color:{{ c.text }};">{{ t.label }}</div>
+                    <div style="font-size:11px; color:{{ c.subtext }}; margin-top:1px; line-height:1.4;">{{ t.desc }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="height:1px; background:{{ c.border }};"></div>
+            <!-- selects -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:11px;">
+              <sc-for list="{{ selects }}" as="s" hint-placeholder-count="6">
+                <div>
+                  <div style="font-size:11px; font-weight:600; color:{{ c.subtext }}; margin-bottom:5px;">{{ s.label }}</div>
+                  {{ s.field }}
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <!-- =============== RIGHT: PREVIEW =============== -->
+    <div style="background:{{ c.panel }}; border:1px solid {{ c.border }}; border-radius:18px; box-shadow:{{ c.shadow }}; overflow:hidden; min-height:640px; display:flex; flex-direction:column;">
+      <!-- header tabs + status -->
+      <div style="display:flex; align-items:center; gap:6px; padding:10px 18px; border-bottom:1px solid {{ c.border }}; background:{{ c.inset }};">
+        <button onClick="{{ previewShow }}" style="{{ previewTabStyle }}">Xem trước</button>
+        <button onClick="{{ rawShow }}" style="{{ rawTabStyle }}">Mã .md</button>
+        <span style="margin-left:auto;">{{ statusChip }}</span>
+      </div>
+
+      <div style="flex:1; position:relative;">
+        <!-- IDLE -->
+        <sc-if value="{{ showIdle }}" hint-placeholder-val="{{ true }}">
+          <div style="height:100%; min-height:560px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:40px;">
+            <span style="display:inline-flex; width:78px; height:78px; align-items:center; justify-content:center; border-radius:20px; background:{{ c.navySoft }}; margin-bottom:18px;">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#2B3990" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+            </span>
+            <div style="font-weight:800; font-size:18px; color:{{ c.text }};">Kết quả Markdown sẽ hiện ở đây</div>
+            <div style="font-size:14px; color:{{ c.subtext }}; margin-top:7px; max-width:340px; line-height:1.55;">Chọn tệp hoặc dán URL bên trái, chọn chế độ rồi bấm <b style="color:#2B3990;">Chuyển đổi</b>. Sơ đồ cờ vua sẽ tự thành bàn cờ FEN.</div>
+          </div>
+        </sc-if>
+
+        <!-- RUNNING -->
+        <sc-if value="{{ showRunning }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:26px 30px;">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+              <span style="width:20px; height:20px; border:2.5px solid {{ c.navySoft }}; border-top-color:#2B3990; border-radius:50%; display:inline-block; animation:mid-spin .8s linear infinite;"></span>
+              <span style="font-weight:800; font-size:17px; color:{{ c.text }};">{{ runningTitle }}</span>
+            </div>
+            <div style="font-size:13px; color:{{ c.subtext }}; margin-bottom:18px;">{{ runningSub }}</div>
+            <div style="height:9px; background:{{ c.inset }}; border-radius:999px; overflow:hidden; margin-bottom:24px;">
+              <div style="height:100%; width:{{ progressPct }}; background:linear-gradient(90deg,#2B3990,#F6B92B); border-radius:999px; transition:width .25s ease;"></div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:9px;">
+              <sc-for list="{{ runFiles }}" as="r" hint-placeholder-count="3">
+                <div style="display:flex; align-items:center; gap:12px; padding:12px 14px; background:{{ c.inset }}; border:1px solid {{ c.border }}; border-radius:12px;">
+                  <span style="flex:0 0 auto;">{{ r.statusIcon }}</span>
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-weight:600; font-size:13.5px; color:{{ c.text }};">{{ r.name }}</div>
+                    <div style="font-size:11.5px; color:{{ c.subtext }}; margin-top:1px;">{{ r.detail }}</div>
+                  </div>
+                  <span style="font-size:12px; font-weight:700; color:{{ r.tagColor }};">{{ r.tag }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- DONE: preview -->
+        <sc-if value="{{ showPreview }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:30px 36px; animation:mid-rise .3s ease;">
+            <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:{{ c.subtext }}; margin-bottom:14px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span style="font-weight:600;">khai_cuoc_y_vn.md</span>
+              <span style="opacity:.6;">· đã dịch sang tiếng Việt</span>
+            </div>
+            <h1 style="font-weight:900; font-size:28px; line-height:1.15; margin:0 0 14px; color:{{ c.text }};">Chương 2 — Khai cuộc Ý</h1>
+            <p style="font-size:15px; line-height:1.7; color:{{ c.body }}; margin:0 0 18px;">Khai cuộc Ý <i>(Giuoco Piano)</i> là một trong những khai cuộc cổ điển lâu đời nhất, nhấn mạnh vào phát triển quân nhanh và kiểm soát trung tâm. Trắng đưa tượng ra <b>Tc4</b> nhắm vào điểm yếu <b>f7</b> của Đen.</p>
+            <h2 style="font-weight:800; font-size:19px; margin:0 0 12px; color:{{ c.text }};">Thế cờ cơ bản</h2>
+            <div style="display:flex; gap:20px; align-items:center; flex-wrap:wrap; padding:18px; background:{{ c.inset }}; border:1px solid {{ c.border }}; border-radius:14px; margin-bottom:18px;">
+              {{ board }}
+              <div style="flex:1; min-width:200px;">
+                <span style="font-family:'Roboto Mono',monospace; font-size:11px; color:#2B3990; font-weight:600; background:{{ c.navySoft }}; padding:4px 9px; border-radius:6px; display:inline-block;">```chessboard```</span>
+                <div style="font-family:'Roboto Mono',monospace; font-size:11.5px; color:{{ c.subtext }}; margin-top:9px; line-height:1.6; word-break:break-all;">fen: r1bqkb1r/pppp1ppp/<br>2n2n2/4p3/2B1P3/<br>5N2/PPPP1PPP/RNBQK2R</div>
+                <div style="font-size:12.5px; color:{{ c.subtext }}; margin-top:10px; line-height:1.5;">Sơ đồ tự chuyển thành block FEN — mở bằng Chessboard Viewer trong Obsidian.</div>
+              </div>
+            </div>
+            <p style="font-size:15px; line-height:1.7; color:{{ c.body }}; margin:0 0 8px;"><b>Nước đi chính:</b></p>
+            <div style="font-family:'Roboto Mono',monospace; font-size:13px; color:{{ c.text }}; background:{{ c.inset }}; border:1px solid {{ c.border }}; border-radius:10px; padding:13px 15px; margin-bottom:18px; line-height:1.8;">1. e4 e5　2. Mf3 Mc6　3. Tc4 Tc5　4. c3 Mf6</div>
+            <table style="width:100%; border-collapse:collapse; font-size:13.5px; margin-bottom:6px;">
+              <thead>
+                <tr>
+                  <th style="text-align:left; padding:9px 12px; border-bottom:2px solid {{ c.borderStrong }}; color:{{ c.text }}; font-weight:700;">Nước đi</th>
+                  <th style="text-align:left; padding:9px 12px; border-bottom:2px solid {{ c.borderStrong }}; color:{{ c.text }}; font-weight:700;">Ý tưởng</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td style="padding:9px 12px; border-bottom:1px solid {{ c.border }}; color:{{ c.body }};">Tc4</td><td style="padding:9px 12px; border-bottom:1px solid {{ c.border }}; color:{{ c.body }};">Nhắm tượng vào điểm f7 yếu</td></tr>
+                <tr><td style="padding:9px 12px; border-bottom:1px solid {{ c.border }}; color:{{ c.body }};">c3</td><td style="padding:9px 12px; border-bottom:1px solid {{ c.border }}; color:{{ c.body }};">Chuẩn bị d4 chiếm trung tâm</td></tr>
+                <tr><td style="padding:9px 12px; color:{{ c.body }};">Mf6</td><td style="padding:9px 12px; color:{{ c.body }};">Đen phản công vào e4</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </sc-if>
+
+        <!-- DONE: raw -->
+        <sc-if value="{{ showRaw }}" hint-placeholder-val="{{ false }}">
+          <pre style="margin:0; padding:26px 30px; font-family:'Roboto Mono',monospace; font-size:12.5px; line-height:1.65; color:{{ c.body }}; white-space:pre-wrap; word-break:break-word; animation:mid-rise .3s ease;">{{ rawMd }}</pre>
+        </sc-if>
+      </div>
+
+      <!-- downloads footer -->
+      <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+        <div style="border-top:1px solid {{ c.border }}; background:{{ c.inset }}; padding:14px 18px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+            <span style="font-family:'Roboto Condensed'; font-weight:700; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:{{ c.subtext }};">Tệp .md kết quả · {{ resultCount }}</span>
+            <button onClick="{{ convert }}" style="background:none; border:none; cursor:pointer; font-family:'Roboto'; font-size:12px; font-weight:600; color:#2B3990; display:flex; align-items:center; gap:5px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Chạy lại</button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <sc-for list="{{ results }}" as="r" hint-placeholder-count="3">
+              <div style="display:flex; align-items:center; gap:10px; padding:9px 12px; background:{{ c.panel }}; border:1px solid {{ c.border }}; border-radius:10px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1FA98F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <div style="flex:1; min-width:0;">
+                  <div style="font-weight:600; font-size:13px; color:{{ c.text }}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ r.name }}</div>
+                  <div style="font-size:11px; color:{{ c.subtext }};">{{ r.meta }}</div>
+                </div>
+                <button style="font-size:11.5px; font-weight:700; color:#fff; background:#2B3990; border:none; cursor:pointer; padding:6px 14px; border-radius:999px; display:flex; align-items:center; gap:5px; flex:0 0 auto;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Tải về
+                </button>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1360, &quot;height&quot;: 860}}">
+class Component extends DCLogic {
+  state = {
+    theme: 'light',
+    inputTab: 'file',
+    url: '',
+    files: [
+      { id: 'f1', name: 'khai_cuoc_y.pdf', type: 'chesspdf', pages: 12, size: '4.2 MB' },
+      { id: 'f2', name: 'chien_thuat_trung_cuoc.pdf', type: 'chesspdf', pages: 6, size: '2.1 MB' },
+      { id: 'f3', name: 'the_co_mau.png', type: 'img', pages: 1, size: '860 KB' },
+    ],
+    mode: 'chess_en',
+    preset: 'balanced',
+    advancedOpen: false,
+    opt: { forceOcr: true, translateVn: true, merge: true, plugins: false, autosave: true, ocrModel: 'sonnet', ocrEffort: 'auto', trModel: 'haiku', trEffort: 'low', dpi: '250', pages: '1' },
+    running: false,
+    done: false,
+    progress: 0,
+    runFiles: [],
+    results: [],
+    previewTab: 'preview',
+    _seq: 4,
+  };
+
+  _timer = null;
+  componentWillUnmount() { if (this._timer) clearInterval(this._timer); }
+
+  // ---------- palette ----------
+  palette() {
+    if (this.state.theme === 'dark') {
+      return {
+        bg: '#0E1430', panel: '#1A2356', inset: '#141C49', dropBg: '#141C49',
+        text: '#F2F4FB', body: '#D4D9EE', subtext: '#A6AED2', faint: '#7C84AC',
+        border: 'rgba(255,255,255,0.10)', borderStrong: 'rgba(255,255,255,0.20)',
+        navySoft: 'rgba(99,120,214,0.20)', sunSoft: 'rgba(246,185,43,0.16)',
+        shadow: '0 16px 40px rgba(0,0,0,0.34)',
+      };
+    }
+    return {
+      bg: '#F1F3F9', panel: '#FFFFFF', inset: '#F5F6FB', dropBg: '#FCFCFE',
+      text: '#16203A', body: '#3A4254', subtext: '#6E7486', faint: '#A2A7B6',
+      border: '#E3E5EC', borderStrong: '#D2D6E4',
+      navySoft: '#E9EBF6', sunSoft: '#FDF1D2',
+      shadow: '0 12px 32px rgba(21,29,73,0.10)',
+    };
+  }
+
+  presetOpts(preset, mode) {
+    const chess = mode !== 'general';
+    const base = { forceOcr: chess, translateVn: true, plugins: false, autosave: true };
+    if (preset === 'saver') return { ...base, merge: true, ocrModel: 'haiku', ocrEffort: 'low', trModel: 'haiku', trEffort: 'low', dpi: '250', pages: '2' };
+    if (preset === 'accurate') return { ...base, merge: false, ocrModel: 'opus', ocrEffort: 'high', trModel: 'sonnet', trEffort: 'medium', dpi: '400', pages: '1' };
+    return { ...base, merge: true, ocrModel: 'sonnet', ocrEffort: 'auto', trModel: 'haiku', trEffort: 'low', dpi: '250', pages: '1' };
+  }
+
+  // ---------- chess board element ----------
+  boardEl(fen, px) {
+    const map = { p: 'bp', n: 'bn', b: 'bb', r: 'br', q: 'bq', k: 'bk', P: 'wp', N: 'wn', B: 'wb', R: 'wr', Q: 'wq', K: 'wk' };
+    const rows = fen.split(' ')[0].split('/');
+    const cells = [];
+    rows.forEach((row, r) => {
+      let f = 0;
+      for (const ch of row) {
+        if (/\d/.test(ch)) { const n = +ch; for (let k = 0; k < n; k++) { cells.push({ r, f, p: null }); f++; } }
+        else { cells.push({ r, f, p: map[ch] }); f++; }
+      }
+    });
+    const sq = px / 8;
+    const children = cells.map((cl, i) => {
+      const light = (cl.r + cl.f) % 2 === 0;
+      return React.createElement('div', {
+        key: i,
+        style: { width: sq, height: sq, background: light ? '#F6F2E4' : '#46B49A', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+      }, cl.p ? React.createElement('img', { src: 'assets/pieces/' + cl.p + '.svg', style: { width: sq * 0.82, height: sq * 0.82, display: 'block' } }) : null);
+    });
+    return React.createElement('div', {
+      style: { width: px, height: px, display: 'grid', gridTemplateColumns: 'repeat(8,1fr)', border: '5px solid #2B3990', borderRadius: 8, overflow: 'hidden', boxShadow: '0 8px 22px rgba(43,57,144,0.22)', flex: '0 0 auto' },
+    }, children);
+  }
+
+  fileIcon(type) {
+    if (type === 'chesspdf') return React.createElement('img', { src: 'assets/pieces/wn.svg', style: { width: 20, height: 20 } });
+    if (type === 'img') return React.createElement('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: '#3DA0E3', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' },
+      React.createElement('rect', { x: 3, y: 3, width: 18, height: 18, rx: 2, ry: 2 }),
+      React.createElement('circle', { cx: 8.5, cy: 8.5, r: 1.5 }),
+      React.createElement('polyline', { points: '21 15 16 10 5 21' }));
+    if (type === 'url') return React.createElement('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: '#3DA0E3', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' },
+      React.createElement('path', { d: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71' }),
+      React.createElement('path', { d: 'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71' }));
+    return React.createElement('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: '#EE5A52', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' },
+      React.createElement('path', { d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' }),
+      React.createElement('polyline', { points: '14 2 14 8 20 8' }));
+  }
+
+  iconBg(type) {
+    const c = this.palette();
+    if (type === 'chesspdf') return c.sunSoft;
+    if (type === 'img') return this.state.theme === 'dark' ? 'rgba(61,160,227,0.18)' : '#E3F0FA';
+    return this.state.theme === 'dark' ? 'rgba(238,90,82,0.16)' : '#FCE6E4';
+  }
+
+  // ---------- handlers ----------
+  setMode(m) { this.setState({ mode: m, opt: this.presetOpts(this.state.preset, m) }); }
+  setPreset(p) { this.setState({ preset: p, opt: this.presetOpts(p, this.state.mode) }); }
+  removeFile(id) { this.setState(s => ({ files: s.files.filter(f => f.id !== id) })); }
+  addSample() {
+    const samples = [
+      { name: 'tan_thu_co_vua.pdf', type: 'chesspdf', pages: 9, size: '3.4 MB' },
+      { name: 'bao_cao_giai_dau.docx', type: 'doc', pages: 4, size: '320 KB' },
+      { name: 'so_do_the_tran.jpg', type: 'img', pages: 1, size: '1.1 MB' },
+    ];
+    const s = samples[this.state._seq % samples.length];
+    const id = 'f' + this.state._seq;
+    this.setState(st => ({ files: [...st.files, { id, ...s }], _seq: st._seq + 1 }));
+  }
+
+  convert() {
+    if (this.state.running) return;
+    const src = this.state.inputTab === 'url'
+      ? (this.state.url.trim() ? [{ id: 'u1', name: 'trang_web.md', type: 'url', pages: 1 }] : [])
+      : this.state.files;
+    if (!src.length) return;
+    if (this._timer) clearInterval(this._timer);
+    const runFiles = src.map(f => ({ id: f.id, name: f.name, type: f.type, pages: f.pages || 1, page: 0, state: 'wait' }));
+    runFiles[0].state = 'run';
+    this.setState({ running: true, done: false, progress: 0, results: [], runFiles, previewTab: 'preview' });
+
+    const totalPages = src.reduce((a, f) => a + (f.pages || 1), 0);
+    let donePages = 0, fi = 0, fp = 0;
+    this._timer = setInterval(() => {
+      const rf = this.state.runFiles.map(x => ({ ...x }));
+      const cur = rf[fi];
+      if (!cur) { clearInterval(this._timer); return; }
+      fp++; donePages++;
+      cur.page = fp; cur.state = 'run';
+      if (fp >= cur.pages) { cur.state = 'done'; fi++; fp = 0; if (rf[fi]) rf[fi].state = 'run'; }
+      const pct = Math.min(100, Math.round((donePages / totalPages) * 100));
+      this.setState({ runFiles: rf, progress: pct });
+      if (fi >= src.length) {
+        clearInterval(this._timer); this._timer = null;
+        const chess = this.state.mode !== 'general';
+        const suffix = (chess || this.state.opt.translateVn) ? '_vn' : '';
+        const results = src.map(f => {
+          const base = f.name.replace(/\.[^.]+$/, '');
+          const diagrams = f.type === 'chesspdf' ? Math.max(1, Math.round(f.pages / 2)) : (f.type === 'img' ? 1 : 0);
+          const chars = (f.pages * 3400 + 800).toLocaleString('vi-VN');
+          let meta;
+          if (f.type === 'url') meta = 'Trang web · ' + chars + ' ký tự';
+          else if (diagrams) meta = f.pages + ' trang · ' + diagrams + ' sơ đồ → FEN · ' + chars + ' ký tự';
+          else meta = f.pages + ' trang · ' + chars + ' ký tự';
+          return { id: f.id, name: base + suffix + '.md', meta };
+        });
+        setTimeout(() => this.setState({ running: false, done: true, results, progress: 100 }), 280);
+      }
+    }, 150);
+  }
+
+  // ---------- render ----------
+  renderVals() {
+    const st = this.state;
+    const c = this.palette();
+    const isDark = st.theme === 'dark';
+
+    // theme button
+    const moon = React.createElement('svg', { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, React.createElement('path', { d: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z' }));
+    const sun = React.createElement('svg', { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: '#F6B92B', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, React.createElement('circle', { cx: 12, cy: 12, r: 5 }), React.createElement('line', { x1: 12, y1: 1, x2: 12, y2: 3 }), React.createElement('line', { x1: 12, y1: 21, x2: 12, y2: 23 }), React.createElement('line', { x1: 4.2, y1: 4.2, x2: 5.6, y2: 5.6 }), React.createElement('line', { x1: 18.4, y1: 18.4, x2: 19.8, y2: 19.8 }), React.createElement('line', { x1: 1, y1: 12, x2: 3, y2: 12 }), React.createElement('line', { x1: 21, y1: 12, x2: 23, y2: 12 }), React.createElement('line', { x1: 4.2, y1: 19.8, x2: 5.6, y2: 18.4 }), React.createElement('line', { x1: 18.4, y1: 5.6, x2: 19.8, y2: 4.2 }));
+
+    // tabs
+    const tabBase = 'flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:9px;border:none;border-radius:9px;cursor:pointer;font-family:Roboto;font-size:13px;font-weight:600;transition:all .16s ease;';
+    const tabOn = tabBase + 'background:' + c.panel + ';color:#2B3990;box-shadow:0 2px 6px rgba(21,29,73,.10);';
+    const tabOff = tabBase + 'background:transparent;color:' + c.subtext + ';';
+
+    // mode cards
+    const modeStyle = (on) => 'display:flex;align-items:center;gap:12px;padding:12px 13px;border-radius:12px;cursor:pointer;transition:all .16s ease;'
+      + (on ? 'background:' + c.sunSoft + ';border:1.5px solid #F6B92B;box-shadow:0 4px 14px rgba(246,185,43,.18);'
+        : 'background:' + c.inset + ';border:1px solid ' + c.border + ';');
+    const check = (on) => on
+      ? React.createElement('span', { style: { width: 20, height: 20, borderRadius: 999, background: '#F6B92B', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' } },
+          React.createElement('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none', stroke: '#2B2207', strokeWidth: 3.5, strokeLinecap: 'round', strokeLinejoin: 'round' }, React.createElement('polyline', { points: '20 6 9 17 4 12' })))
+      : React.createElement('span', { style: { width: 18, height: 18, borderRadius: 999, border: '2px solid ' + c.borderStrong, flex: '0 0 auto' } });
+
+    // preset
+    const presetStyle = (on) => 'flex:1;white-space:nowrap;padding:10px 4px;border:none;border-radius:9px;cursor:pointer;font-family:Roboto;font-size:13px;font-weight:700;transition:all .16s ease;'
+      + (on ? 'background:#2B3990;color:#fff;box-shadow:0 4px 12px rgba(43,57,144,.30);' : 'background:transparent;color:' + c.subtext + ';');
+    const presetHints = { saver: 'haiku · effort thấp · gộp OCR+dịch', balanced: 'sonnet · auto · dịch riêng', accurate: 'opus · effort cao · 400 DPI' };
+
+    // convert button
+    const canConvert = st.inputTab === 'url' ? !!st.url.trim() : st.files.length > 0;
+    const nFiles = st.inputTab === 'url' ? (st.url.trim() ? 1 : 0) : st.files.length;
+    const convertStyle = 'width:100%;margin-top:13px;border:none;border-radius:12px;padding:14px;display:flex;align-items:center;justify-content:center;gap:9px;font-family:Roboto;font-weight:700;font-size:15px;transition:all .16s ease;'
+      + (st.running ? 'background:' + c.inset + ';color:' + c.faint + ';cursor:default;border:1px solid ' + c.border + ';'
+        : (canConvert ? 'background:#2B3990;color:#fff;cursor:pointer;box-shadow:0 10px 26px rgba(43,57,144,.28);'
+          : 'background:' + c.inset + ';color:' + c.faint + ';cursor:not-allowed;border:1px solid ' + c.border + ';'));
+    const convertIcon = st.running
+      ? React.createElement('span', { style: { width: 17, height: 17, border: '2.4px solid ' + c.faint, borderTopColor: 'transparent', borderRadius: 999, display: 'inline-block', animation: 'mid-spin .8s linear infinite' } })
+      : React.createElement('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round' }, React.createElement('polyline', { points: '13 17 18 12 13 7' }), React.createElement('polyline', { points: '6 17 11 12 6 7' }));
+    const convertLabel = st.running ? 'Đang chuyển đổi…' : (nFiles > 0 ? 'Chuyển đổi ' + nFiles + ' tệp' : 'Chuyển đổi');
+
+    // toggles (advanced)
+    const chess = st.mode !== 'general';
+    const swStyle = (on) => 'width:38px;height:22px;border-radius:999px;flex:0 0 auto;position:relative;transition:background .18s ease;margin-top:1px;background:' + (on ? '#2B3990' : (isDark ? 'rgba(255,255,255,.18)' : '#D2D6E4')) + ';';
+    const knobStyle = (on) => 'position:absolute;top:2px;left:' + (on ? '18px' : '2px') + ';width:18px;height:18px;border-radius:999px;background:#fff;transition:left .18s ease;box-shadow:0 1px 3px rgba(0,0,0,.25);';
+    const tgl = (key, label, desc) => ({ key, label, desc, onToggle: () => this.setState(s => ({ opt: { ...s.opt, [key]: !s.opt[key] } })), switchStyle: swStyle(st.opt[key]), knobStyle: knobStyle(st.opt[key]) });
+    const toggles = [
+      tgl('forceOcr', 'Buộc OCR toàn bộ', 'Bỏ lớp text rác trong PDF scan, OCR lại bằng Claude Code.'),
+      tgl('translateVn', 'Dịch sang tiếng Việt', 'Tạo thêm tệp _vn.md. Ký hiệu cờ → V/H/X/T/M.'),
+      tgl('merge', 'OCR + dịch gộp 1 bước', 'Mỗi trang vừa OCR vừa dịch — tiết kiệm ~30–40% hạn mức.'),
+      tgl('autosave', 'Tự động lưu .md ra đĩa', 'Lưu cạnh file gốc ngay khi mỗi tệp xong.'),
+    ];
+
+    // selects
+    const chevSvg = React.createElement('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.4, strokeLinecap: 'round', strokeLinejoin: 'round' }, React.createElement('polyline', { points: '6 9 12 15 18 9' }));
+    const sel = (key, label, pairs) => {
+      const options = pairs.map(([v, l]) => React.createElement('option', { key: v, value: v }, l));
+      const selectEl = React.createElement('select', {
+        value: st.opt[key],
+        onChange: (e) => { const v = e.target.value; this.setState(s => ({ opt: { ...s.opt, [key]: v } })); },
+        style: { width: '100%', appearance: 'none', WebkitAppearance: 'none', padding: '9px 28px 9px 11px', border: '1px solid ' + c.border, background: c.inset, color: c.text, borderRadius: 9, fontSize: 12.5, cursor: 'pointer', outline: 'none' },
+      }, options);
+      const chev = React.createElement('span', { style: { position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: c.faint, display: 'flex' } }, chevSvg);
+      const field = React.createElement('div', { style: { position: 'relative' } }, selectEl, chev);
+      return { key, label, field };
+    };
+    const selects = [
+      sel('ocrModel', 'Model OCR', [['haiku', 'Haiku — nhanh'], ['sonnet', 'Sonnet — cân bằng'], ['opus', 'Opus — chính xác']]),
+      sel('ocrEffort', 'Effort OCR', [['low', 'Thấp'], ['auto', 'Auto'], ['medium', 'Trung bình'], ['high', 'Cao']]),
+      sel('trModel', 'Model dịch', [['haiku', 'Haiku — tiết kiệm'], ['sonnet', 'Sonnet'], ['opus', 'Opus']]),
+      sel('trEffort', 'Effort dịch', [['low', 'Thấp'], ['medium', 'Trung bình'], ['high', 'Cao']]),
+      sel('dpi', 'DPI bàn cờ', [['250', '250 — nhanh'], ['400', '400 — nét nhất']]),
+      sel('pages', 'Trang / lần OCR', [['1', '1 trang'], ['2', '2 trang'], ['3', '3 trang']]),
+    ];
+
+    // status chip
+    let statusChip;
+    if (st.running) statusChip = React.createElement('span', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#D99A12' } }, React.createElement('span', { style: { width: 7, height: 7, borderRadius: 999, background: '#F6B92B', animation: 'mid-pulse 1s ease infinite' } }), 'Đang xử lý…');
+    else if (st.done) statusChip = React.createElement('span', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#1FA98F' } }, React.createElement('span', { style: { width: 7, height: 7, borderRadius: 999, background: '#1FA98F' } }), 'Xong ' + st.results.length + '/' + st.results.length + ' tệp');
+    else statusChip = React.createElement('span', { style: { fontSize: 12, color: c.faint } }, 'Chưa chạy');
+
+    // run files (during running)
+    const runFiles = st.runFiles.map(r => {
+      let statusIcon, tag, tagColor, detail;
+      if (r.state === 'done') {
+        statusIcon = React.createElement('span', { style: { width: 26, height: 26, borderRadius: 999, background: '#DFF3EE', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, React.createElement('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: '#1FA98F', strokeWidth: 3, strokeLinecap: 'round', strokeLinejoin: 'round' }, React.createElement('polyline', { points: '20 6 9 17 4 12' })));
+        tag = 'Xong'; tagColor = '#1FA98F'; detail = (r.type === 'img' ? 'OCR + dịch hoàn tất' : r.pages + ' trang đã OCR + dịch');
+      } else if (r.state === 'run') {
+        statusIcon = React.createElement('span', { style: { width: 26, height: 26, border: '2.5px solid ' + c.navySoft, borderTopColor: '#2B3990', borderRadius: 999, display: 'inline-block', animation: 'mid-spin .8s linear infinite' } });
+        tag = r.type === 'img' ? '' : ('trang ' + r.page + '/' + r.pages); tagColor = '#D99A12'; detail = chess ? 'Đang OCR + nhận diện bàn cờ…' : 'Đang chuyển đổi…';
+      } else {
+        statusIcon = React.createElement('span', { style: { width: 26, height: 26, borderRadius: 999, border: '2px solid ' + c.border, display: 'inline-block' } });
+        tag = 'Chờ'; tagColor = c.faint; detail = 'Trong hàng đợi';
+      }
+      return { id: r.id, name: r.name, detail, tag, tagColor, statusIcon };
+    });
+
+    // files for queue
+    const files = st.files.map(f => ({
+      id: f.id, name: f.name, meta: (f.type === 'img' ? 'Ảnh' : (f.type === 'doc' ? 'Word' : (f.type === 'chesspdf' ? 'PDF sách cờ' : 'PDF'))) + ' · ' + f.size + (f.pages > 1 ? ' · ' + f.pages + ' trang' : ''),
+      iconEl: this.fileIcon(f.type), iconBg: this.iconBg(f.type), onRemove: () => this.removeFile(f.id),
+    }));
+
+    const doneRaw = st.done && st.previewTab === 'raw';
+    const donePrev = st.done && st.previewTab === 'preview';
+
+    const previewTabBtn = (on) => 'border:none;background:none;cursor:pointer;font-family:Roboto;font-size:13px;font-weight:' + (on ? '700' : '500') + ';padding:7px 13px;border-radius:8px;color:' + (on ? '#fff' : c.subtext) + ';' + (on ? 'background:#2B3990;' : '');
+
+    const rawMd = [
+      '# Chương 2 — Khai cuộc Ý',
+      '',
+      'Khai cuộc Ý *(Giuoco Piano)* là một trong những khai cuộc cổ',
+      'điển lâu đời nhất, nhấn mạnh phát triển quân nhanh và kiểm',
+      'soát trung tâm.',
+      '',
+      '## Thế cờ cơ bản',
+      '',
+      '```chessboard',
+      'fen: r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R',
+      '```',
+      '',
+      '1. e4 e5  2. Mf3 Mc6  3. Tc4 Tc5  4. c3 Mf6',
+      '',
+      '| Nước đi | Ý tưởng |',
+      '| --- | --- |',
+      '| Tc4 | Nhắm tượng vào điểm f7 yếu |',
+      '| c3  | Chuẩn bị d4 chiếm trung tâm |',
+      '| Mf6 | Đen phản công vào e4 |',
+    ].join('\n');
+
+    return {
+      c, isDark,
+      themeIcon: isDark ? sun : moon,
+      themeLabel: isDark ? 'Sáng' : 'Tối',
+      toggleTheme: () => this.setState({ theme: isDark ? 'light' : 'dark' }),
+
+      isFileTab: st.inputTab === 'file', isUrlTab: st.inputTab === 'url',
+      tabFile: () => this.setState({ inputTab: 'file' }), tabUrl: () => this.setState({ inputTab: 'url' }),
+      tabFileStyle: st.inputTab === 'file' ? tabOn : tabOff,
+      tabUrlStyle: st.inputTab === 'url' ? tabOn : tabOff,
+      url: st.url, onUrl: (e) => this.setState({ url: e.target.value }),
+
+      files, hasFiles: st.files.length > 0,
+      queueLabel: st.files.length + ' tệp trong hàng đợi',
+      addFiles: () => this.addSample(),
+      clearFiles: () => this.setState({ files: [] }),
+
+      modeEnStyle: modeStyle(st.mode === 'chess_en'),
+      modeRuStyle: modeStyle(st.mode === 'chess_ru'),
+      modeDocStyle: modeStyle(st.mode === 'general'),
+      checkEn: check(st.mode === 'chess_en'), checkRu: check(st.mode === 'chess_ru'), checkDoc: check(st.mode === 'general'),
+      pickChessEn: () => this.setMode('chess_en'), pickChessRu: () => this.setMode('chess_ru'), pickDoc: () => this.setMode('general'),
+
+      presetSaverStyle: presetStyle(st.preset === 'saver'),
+      presetBalancedStyle: presetStyle(st.preset === 'balanced'),
+      presetAccurateStyle: presetStyle(st.preset === 'accurate'),
+      presetSaver: () => this.setPreset('saver'), presetBalanced: () => this.setPreset('balanced'), presetAccurate: () => this.setPreset('accurate'),
+      presetHint: presetHints[st.preset],
+
+      convertStyle, convertIcon, convertLabel, convert: () => this.convert(),
+
+      advancedOpen: st.advancedOpen, advChevron: st.advancedOpen ? '180deg' : '0deg',
+      toggleAdvanced: () => this.setState(s => ({ advancedOpen: !s.advancedOpen })),
+      toggles, selects,
+
+      previewShow: () => this.setState({ previewTab: 'preview' }), rawShow: () => this.setState({ previewTab: 'raw' }),
+      previewTabStyle: previewTabBtn(st.previewTab === 'preview'), rawTabStyle: previewTabBtn(st.previewTab === 'raw'),
+      statusChip,
+
+      showIdle: !st.running && !st.done,
+      showRunning: st.running,
+      showPreview: donePrev, showRaw: doneRaw, isDone: st.done,
+      runningTitle: 'Đang chuyển đổi ' + st.runFiles.length + ' tệp',
+      runningSub: chess ? 'OCR bằng Claude Code · nhận diện sơ đồ cờ → FEN · dịch sang tiếng Việt' : 'Chuyển đổi sang Markdown · dịch sang tiếng Việt',
+      progressPct: st.progress + '%',
+      runFiles,
+      board: this.boardEl('r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R', 188),
+      rawMd,
+      results: st.results, resultCount: st.results.length + ' tệp',
+    };
+  }
+}
+</script>
+</body>
+</html>

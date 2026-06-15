@@ -131,23 +131,150 @@ _PROMPT_FOOTER_RU = (
 # Giữ tên cũ cho tương thích (prompt khi Claude phải tự nhận diện bàn cờ).
 PROMPT_VI = _PROMPT_HEADER + _PROMPT_CHESS_SELF + _PROMPT_FOOTER
 
+# === Chế độ GỘP OCR + DỊCH (translate_to="vi") =================================
+# Thay vì OCR giữ nguyên văn rồi dịch ở bước riêng, yêu cầu Claude vừa OCR vừa
+# dịch sang tiếng Việt trong CÙNG một lần gọi -> bỏ hẳn pass dịch (tiết kiệm
+# hạn mức). Quy tắc ký hiệu nước đi tái dùng nguyên các hằng trong
+# claude_translate.py (_CHESS_II_EN/_CHESS_II_RU/_CHESS_TAIL) để giữ MỘT nguồn
+# chân lý duy nhất, tránh viết trùng và lệch quy tắc.
+# Banner đặt ở ĐẦU prompt gộp để "ngôn ngữ đầu ra = tiếng Việt" là điều model
+# đọc TRƯỚC TIÊN — footer dịch nằm cuối dễ bị bỏ qua ở chế độ nhiều trang hoặc
+# effort thấp (model OCR xong rồi quên dịch).
+_PROMPT_MERGE_BANNER = (
+    "‼️ YÊU CẦU QUAN TRỌNG NHẤT — NGÔN NGỮ ĐẦU RA = TIẾNG VIỆT: Hãy OCR rồi DỊCH "
+    "toàn bộ văn bản sang TIẾNG VIỆT. TUYỆT ĐỐI KHÔNG để nguyên văn bản tiếng "
+    "Anh/Nga (chỉ giữ nguyên tên riêng, tọa độ a-h/1-8, ký hiệu nước đi và block "
+    "```chessboard). Quy tắc chi tiết ở phần dưới.\n\n"
+)
 
-def _build_prompt(img_path, board_fens=None, chess=True, chess_lang="en"):
+_PROMPT_MERGE_INTRO = (
+    "NGÔN NGỮ ĐẦU RA — QUAN TRỌNG: Sau khi OCR, hãy DỊCH toàn bộ phần VĂN BẢN sang "
+    "TIẾNG VIỆT ngay trong bước này. Đầu ra là Markdown tiếng Việt, giữ nguyên cấu "
+    "trúc (tiêu đề, đoạn, bảng, danh sách). KHÔNG để lại văn bản tiếng Anh/Nga chưa "
+    "dịch (trừ tên riêng, tọa độ a-h/1-8 và ký hiệu nước đi theo quy tắc dưới). "
+    "Giữ NGUYÊN VĂN các block ```chessboard (FEN) — KHÔNG dịch, KHÔNG sửa.\n\n"
+)
+
+# Quy tắc dịch cho chế độ tài liệu thường (gộp). Ngắn gọn, không phụ thuộc
+# claude_translate vì đây không phải phần dễ sai như ký hiệu cờ vua.
+_PROMPT_MERGE_GENERAL = (
+    "QUY TẮC DỊCH:\n"
+    "- Dịch tự nhiên, chính xác, đúng thuật ngữ chuyên ngành của tài liệu.\n"
+    "- KHÔNG dịch: tên riêng, tên thương hiệu, URL, đường dẫn tệp, mã/lệnh, "
+    "ký hiệu toán học.\n"
+    "- Thuật ngữ kỹ thuật không có từ tiếng Việt thông dụng thì giữ nguyên "
+    "tiếng Anh.\n"
+    "- Giữ format trung thực: bản gốc in đậm (**...**) thì giữ in đậm; bản gốc "
+    "không in đậm thì TUYỆT ĐỐI không thêm.\n\n"
+) + _PROMPT_FOOTER_PLAIN
+
+
+def _merge_footer(chess, chess_lang):
+    """Footer cho chế độ gộp OCR+dịch: dịch sang tiếng Việt thay vì giữ nguyên văn."""
+    if not chess:
+        return _PROMPT_MERGE_INTRO + _PROMPT_MERGE_GENERAL
+    # Tái dùng quy tắc ký hiệu + format từ bước dịch để đồng nhất hoàn toàn.
+    from claude_translate import _CHESS_II_EN, _CHESS_II_RU, _CHESS_TAIL
+
+    notation = _CHESS_II_RU if chess_lang == "ru" else _CHESS_II_EN
+    return _PROMPT_MERGE_INTRO + notation + _CHESS_TAIL
+
+
+def _build_prompt(img_path, board_fens=None, chess=True, chess_lang="en",
+                  translate_to=None):
     """Ghép prompt OCR: có FEN tính sẵn thì yêu cầu dùng nguyên văn.
 
     chess=False (chế độ tài liệu thường): bỏ toàn bộ phần bàn cờ vua.
     chess_lang="ru": footer giữ ký hiệu tiếng Nga và đổi figurine sang chữ Nga;
     "en" (mặc định): footer chuẩn (figurine -> SAN quốc tế K/Q/R/B/N).
+    translate_to="vi": chế độ gộp — vừa OCR vừa dịch sang tiếng Việt trong cùng
+    một lần gọi (footer dịch thay cho footer giữ nguyên văn).
     """
+    head = _PROMPT_HEADER.format(path=img_path)
+    banner = _PROMPT_MERGE_BANNER if translate_to == "vi" else ""
+    if translate_to == "vi":
+        footer = _merge_footer(chess, chess_lang)
+    elif chess:
+        footer = _PROMPT_FOOTER_RU if chess_lang == "ru" else _PROMPT_FOOTER
+    else:
+        footer = _PROMPT_FOOTER_PLAIN
     if not chess:
-        return _PROMPT_HEADER.format(path=img_path) + _PROMPT_FOOTER_PLAIN
+        return banner + head + footer
     if board_fens:
         fen_list = "\n".join(f"{i}. {fen}" for i, fen in enumerate(board_fens, 1))
         chess_part = _PROMPT_CHESS_GIVEN.format(n=len(board_fens), fen_list=fen_list)
     else:
         chess_part = _PROMPT_CHESS_SELF
-    footer = _PROMPT_FOOTER_RU if chess_lang == "ru" else _PROMPT_FOOTER
-    return _PROMPT_HEADER.format(path=img_path) + chess_part + footer
+    return banner + head + chess_part + footer
+
+
+# === Gộp nhiều trang vào 1 lần gọi (pages_per_call > 1) ========================
+# Marker model phải in giữa hai trang liên tiếp để ta tách lại đúng từng trang.
+_PAGE_BREAK = "<<<<<--- HET_TRANG --->>>>>"
+
+_PROMPT_MULTI_HEADER = (
+    "Hãy đọc (OCR) {n} trang tài liệu sau, MỖI trang là một ảnh riêng — đọc bằng "
+    "công cụ Read theo đúng đường dẫn:\n"
+    "{page_list}\n\n"
+    "Xử lý LẦN LƯỢT từng trang theo đúng thứ tự trên (TRANG 1, TRANG 2, ...). "
+    "Giữa hai trang liên tiếp, in ĐÚNG MỘT dòng marker dưới đây trên dòng riêng, "
+    "KHÔNG thêm gì khác trên dòng đó, và KHÔNG in marker trước TRANG 1 hay sau "
+    "trang cuối cùng:\n"
+    "{marker}\n\n"
+    "Với MỖI trang: trích TOÀN BỘ nội dung văn bản nhìn thấy và trình bày lại "
+    "dưới dạng Markdown, giữ đúng cấu trúc (tiêu đề, đoạn văn, bảng, danh sách). "
+    "Bỏ qua hoa văn/watermark trang trí.\n\n"
+) + _PROMPT_CLEANUP
+
+# Quy tắc bàn cờ tổng quát cho nhiều trang (FEN sẵn của từng trang nằm trong
+# page_list). Diễn đạt theo "từng trang" thay vì một trang đơn lẻ.
+_PROMPT_MULTI_CHESS = (
+    "VỀ HÌNH BÀN CỜ VUA (áp dụng riêng cho TỪNG trang):\n"
+    "- Nếu trang có dòng 'FEN đã nhận diện sẵn': khi gặp hình bàn cờ thứ i trên "
+    "trang đó, chèn NGAY TẠI VỊ TRÍ hình (TRƯỚC phần nước đi liên quan) một block "
+    "dùng NGUYÊN VĂN FEN thứ i của trang đó — KHÔNG tự nhận diện lại, KHÔNG sửa "
+    "FEN. Riêng lượt đi: nếu chú thích/nước kế cho thấy Đen đi trước ('Đen đi', "
+    "nước dạng '1...') thì đổi trường lượt đi của FEN từ w thành b.\n"
+    "- Nếu trang KHÔNG có FEN sẵn mà lại có hình bàn cờ: tự quan sát từng ô a1..h8, "
+    "sinh FEN đầy đủ 6 trường (lượt đi suy từ chú thích, không rõ dùng w; quyền "
+    "nhập thành -; ô bắt tốt qua đường -; số nước nửa 0; số nước đầy đủ 1).\n"
+    "- Thế cờ KHÔNG đủ 2 quân Vua (đúng 1 K trắng và 1 k đen) thì thêm dòng "
+    "`strict: false` ngay dưới dòng fen.\n\n"
+) + _PROMPT_BLOCK_RULES
+
+
+def _build_prompt_multi(pages, chess=True, chess_lang="en", translate_to=None):
+    """Ghép prompt OCR cho một NHÓM trang (pages = list (path, board_fens)).
+
+    Model OCR lần lượt từng trang, phân tách bằng marker _PAGE_BREAK để caller
+    tách lại đúng từng trang. Quy tắc bàn cờ / dịch dùng chung với chế độ 1 trang.
+    """
+    n = len(pages)
+    lines = []
+    for idx, (path, fens) in enumerate(pages, 1):
+        lines.append(f"- TRANG {idx}: {path}")
+        if chess and fens:
+            fen_str = "; ".join(f"{i}) {f}" for i, f in enumerate(fens, 1))
+            lines.append(
+                f"    FEN đã nhận diện sẵn cho TRANG {idx} "
+                f"(theo thứ tự xuất hiện): {fen_str}"
+            )
+    head = _PROMPT_MULTI_HEADER.format(
+        n=n, page_list="\n".join(lines), marker=_PAGE_BREAK
+    )
+    banner = _PROMPT_MERGE_BANNER if translate_to == "vi" else ""
+    if translate_to == "vi":
+        footer = _merge_footer(chess, chess_lang)
+    elif chess:
+        footer = _PROMPT_FOOTER_RU if chess_lang == "ru" else _PROMPT_FOOTER
+    else:
+        footer = _PROMPT_FOOTER_PLAIN
+    body = _PROMPT_MULTI_CHESS if chess else ""
+    reminder = (
+        f"\n\nNHẮC LẠI: in đúng dòng marker `{_PAGE_BREAK}` giữa các trang "
+        f"(tổng cộng {n - 1} marker cho {n} trang); KHÔNG in ở đầu hoặc cuối."
+    )
+    return banner + head + body + footer + reminder
 
 # --- Hậu kiểm block ```chessboard --------------------------------------------
 
@@ -294,19 +421,9 @@ def _page_board_fens(pil_page):
         return None
 
 
-def ocr_image_path(
-    img_path, model="opus", timeout=600, board_fens=None, chess=True,
-    chess_lang="en",
-):
-    """Gọi Claude Code headless để OCR một ảnh. Trả về Markdown trích được.
-
-    board_fens: danh sách FEN của các hình bàn cờ trên trang (đã nhận diện cục
-    bộ bằng model ONNX, theo thứ tự đọc) — Claude sẽ dùng nguyên văn thay vì tự
-    nhận diện.
-    chess=False (chế độ tài liệu thường): OCR bằng prompt thường, không có phần
-    nhận diện bàn cờ / block chessboard.
-    chess_lang="ru": dùng footer tiếng Nga (giữ ký hiệu Кр/Ф/Л/С/К).
-    """
+def _run_claude_ocr(prompt, img_dir, model, effort, timeout):
+    """Gọi `claude -p` với prompt OCR (đọc ảnh qua tool Read). Trả về văn bản
+    cuối (đã bóc khỏi JSON --output-format), trước bước hậu kiểm chessboard."""
     claude = find_claude()
     if not claude:
         raise ClaudeOCRError(
@@ -314,13 +431,6 @@ def ocr_image_path(
             "Hãy đảm bảo Claude Code đã được cài và đăng nhập."
         )
 
-    img_path = os.path.abspath(img_path)
-    img_dir = os.path.dirname(img_path)
-    prompt = _build_prompt(img_path, board_fens, chess=chess, chess_lang=chess_lang)
-
-    # OCR chỉ là chép chữ -> effort low; riêng khi Claude phải TỰ nhận diện
-    # bàn cờ thành FEN (không có FEN tính sẵn) thì cần suy luận -> medium.
-    effort = "medium" if (chess and not board_fens) else "low"
     cmd = [
         claude,
         "-p",
@@ -360,60 +470,189 @@ def ocr_image_path(
     if not out:
         raise ClaudeOCRError("Claude Code không trả về dữ liệu.")
 
-    # Chế độ thường không sinh block chessboard nên không cần hậu kiểm.
-    post = _normalize_chessboard_blocks if chess else (lambda s: s)
-
     # --output-format json: stdout là một object có trường 'result' chứa văn bản cuối.
     try:
         data = json.loads(out)
     except json.JSONDecodeError:
         # Phòng khi đầu ra không phải JSON thuần (lẫn log) -> dùng nguyên văn.
-        return post(out)
-
+        return out
     if isinstance(data, dict):
         result = data.get("result")
         if isinstance(result, str):
-            return post(result.strip())
-    return post(out)
+            return result.strip()
+    return out
 
 
-# Số trang OCR song song (mỗi trang là một tiến trình `claude` riêng).
+def _ensure_translated(text, chess, chess_lang, model):
+    """Chế độ gộp OCR+dịch: nếu đầu ra trông như CHƯA dịch (còn nguyên ngôn ngữ
+    gốc) thì dịch lại bằng pass dịch chuyên dụng để bảo đảm ra tiếng Việt.
+
+    Chỉ tốn thêm quota khi thực sự lỗi — trang dịch tốt ngay từ đầu sẽ bỏ qua.
+    Lỗi khi dịch lại -> giữ nguyên text (không làm hỏng tiến trình).
+    """
+    if not text or not text.strip():
+        return text
+    # Lazy-import tránh import vòng (claude_translate import từ claude_ocr).
+    from claude_translate import _looks_untranslated, translate_markdown_vn
+
+    if not _looks_untranslated(text, chess_lang):
+        return text
+    try:
+        return translate_markdown_vn(
+            text, model=model, chess=chess, chess_lang=chess_lang, effort="low",
+        )
+    except Exception as exc:
+        print(f"[merge] Lỗi dịch lại trang chưa dịch: {exc}", file=sys.stderr)
+        return text
+
+
+def ocr_image_path(
+    img_path, model="opus", timeout=600, board_fens=None, chess=True,
+    chess_lang="en", effort=None, translate_to=None,
+):
+    """Gọi Claude Code headless để OCR một ảnh. Trả về Markdown trích được.
+
+    board_fens: danh sách FEN của các hình bàn cờ trên trang (đã nhận diện cục
+    bộ bằng model ONNX, theo thứ tự đọc) — Claude sẽ dùng nguyên văn thay vì tự
+    nhận diện.
+    chess=False (chế độ tài liệu thường): OCR bằng prompt thường, không có phần
+    nhận diện bàn cờ / block chessboard.
+    chess_lang="ru": dùng footer tiếng Nga (giữ ký hiệu Кр/Ф/Л/С/К).
+    translate_to="vi": gộp OCR+dịch — xuất thẳng Markdown tiếng Việt.
+    """
+    img_path = os.path.abspath(img_path)
+    img_dir = os.path.dirname(img_path)
+    prompt = _build_prompt(
+        img_path, board_fens, chess=chess, chess_lang=chess_lang,
+        translate_to=translate_to,
+    )
+
+    # OCR chỉ là chép chữ -> effort low; riêng khi Claude phải TỰ nhận diện
+    # bàn cờ thành FEN (không có FEN tính sẵn) thì cần suy luận -> medium.
+    # effort=None nghĩa là "auto" (tự suy ra như trên); nếu người dùng chọn
+    # mức cụ thể thì tôn trọng giá trị đó.
+    # Chế độ gộp (dịch) cần suy luận hơn OCR thuần -> sàn auto là medium.
+    if effort is None:
+        effort = "medium" if (translate_to == "vi" or (chess and not board_fens)) else "low"
+    raw = _run_claude_ocr(prompt, img_dir, model, effort, timeout)
+    # Chế độ thường không sinh block chessboard nên không cần hậu kiểm.
+    post = _normalize_chessboard_blocks if chess else (lambda s: s)
+    out = post(raw)
+    if translate_to == "vi":
+        out = _ensure_translated(out, chess, chess_lang, model)
+    return out
+
+
+def ocr_image_group(
+    items, model="opus", timeout=600, chess=True, chess_lang="en",
+    effort=None, translate_to=None,
+):
+    """OCR một NHÓM trang trong 1 lần gọi `claude`. Trả về list Markdown theo
+    đúng thứ tự trang trong nhóm.
+
+    items: list (đường_dẫn_png, board_fens). Nhóm 1 trang -> ủy quyền cho
+    ocr_image_path (giữ hành vi cũ). Nhóm nhiều trang -> dựng prompt đa trang,
+    tách đầu ra theo marker _PAGE_BREAK; nếu model tách sai số phần thì phân bổ
+    best-effort kèm ghi chú, không bao giờ mất nội dung hay vỡ tiến trình.
+    """
+    n = len(items)
+    if n == 1:
+        png, fens = items[0]
+        return [ocr_image_path(
+            png, model=model, timeout=timeout, board_fens=fens, chess=chess,
+            chess_lang=chess_lang, effort=effort, translate_to=translate_to,
+        )]
+
+    pages = [(os.path.abspath(p), f) for p, f in items]
+    img_dir = os.path.dirname(pages[0][0])
+    prompt = _build_prompt_multi(
+        pages, chess=chess, chess_lang=chess_lang, translate_to=translate_to,
+    )
+    if effort is None:
+        need_detect = chess and any(not fens for _p, fens in pages)
+        effort = "medium" if (translate_to == "vi" or need_detect) else "low"
+    raw = _run_claude_ocr(prompt, img_dir, model, effort, timeout)
+
+    post = _normalize_chessboard_blocks if chess else (lambda s: s)
+    parts = [p.strip() for p in re.split(re.escape(_PAGE_BREAK), raw)]
+    # Bỏ phần rỗng nếu nhờ đó khớp đúng số trang; nếu không, giữ nguyên để xử lý.
+    nonempty = [p for p in parts if p]
+    if len(parts) == n:
+        chosen = parts
+    elif len(nonempty) == n:
+        chosen = nonempty
+    else:
+        chosen = nonempty if nonempty else parts
+    mismatched = len(chosen) != n
+    # Thừa phần -> dồn đuôi vào trang cuối (không mất nội dung); thiếu -> chèn rỗng.
+    if len(chosen) > n:
+        chosen = chosen[: n - 1] + ["\n\n".join(chosen[n - 1:])]
+    while len(chosen) < n:
+        chosen.append("")
+
+    out = []
+    for k in range(n):
+        seg = chosen[k]
+        if not seg:
+            out.append("")
+            continue
+        seg = post(seg)
+        if translate_to == "vi":
+            seg = _ensure_translated(seg, chess, chess_lang, model)
+        out.append(seg)
+    if mismatched and out:
+        note = (
+            f"\n\n*[Cảnh báo: model tách được số phần khác {n} trang trong nhóm — "
+            "cần kiểm tra ranh giới trang]*"
+        )
+        out[0] = (out[0] + note) if out[0] else note.strip()
+    return out
+
+
+# Số lần gọi `claude` chạy song song (mỗi lần là một tiến trình riêng; với
+# pages_per_call>1 thì mỗi tiến trình OCR nhiều trang một lúc).
 OCR_WORKERS = 8
 
 
-def _ocr_page(png, model, page_timeout, board_fens, chess, chess_lang="en"):
-    """OCR 1 trang với 1 lần thử lại. Trả về Markdown; vẫn lỗi thì raise."""
+def _ocr_page_group(items, model, page_timeout, chess, chess_lang="en",
+                    effort=None, translate_to=None):
+    """OCR 1 nhóm trang với 1 lần thử lại. Trả về list Markdown; vẫn lỗi thì raise."""
     try:
-        return ocr_image_path(
-            png, model=model, timeout=page_timeout,
-            board_fens=board_fens, chess=chess, chess_lang=chess_lang,
+        return ocr_image_group(
+            items, model=model, timeout=page_timeout, chess=chess,
+            chess_lang=chess_lang, effort=effort, translate_to=translate_to,
         )
     except ClaudeOCRError:
-        return ocr_image_path(
-            png, model=model, timeout=page_timeout,
-            board_fens=board_fens, chess=chess, chess_lang=chess_lang,
+        return ocr_image_group(
+            items, model=model, timeout=page_timeout, chess=chess,
+            chess_lang=chess_lang, effort=effort, translate_to=translate_to,
         )
 
 
 def ocr_pdf(
     pdf_path, model="opus", dpi=200, progress=None, page_timeout=600,
     board_dpi=BOARD_DPI, chess=True, workers=OCR_WORKERS, chess_lang="en",
+    effort=None, translate_to=None, pages_per_call=1,
 ):
     """OCR toàn bộ PDF scan. Trả về Markdown ghép các trang.
 
     Mỗi trang: nhận diện hình bàn cờ -> FEN cục bộ bằng model ONNX (không tốn
-    quota Claude), rồi OCR văn bản bằng Claude với FEN đã tính sẵn. Các trang
-    được OCR song song `workers` trang một lúc, kết quả ghép đúng thứ tự.
+    quota Claude), rồi OCR văn bản bằng Claude với FEN đã tính sẵn. Các lệnh gọi
+    được chạy song song `workers` lệnh một lúc, kết quả ghép đúng thứ tự.
     chess=False (chế độ tài liệu thường): bỏ hoàn toàn bước nhận diện bàn cờ,
     OCR bằng prompt thường — render trang nhanh hơn vì không cần ảnh DPI cao.
+    translate_to="vi": gộp OCR+dịch — xuất thẳng Markdown tiếng Việt (bỏ pass dịch).
+    pages_per_call>1: gộp nhiều trang vào 1 lệnh gọi để giảm chi phí cố định mỗi
+    lệnh (số lệnh gọi giảm ~pages_per_call lần). Mặc định 1 (an toàn nhất).
     progress(i, n): được gọi mỗi khi xong thêm một trang (i = số trang đã xong).
-    Trang nào lỗi (quá thời gian, claude trục trặc...) sẽ được thử lại 1 lần;
-    vẫn lỗi thì ghi chú vào kết quả và TIẾP TỤC các trang sau, không hủy cả file.
+    Nhóm nào lỗi (quá thời gian, claude trục trặc...) sẽ được thử lại 1 lần;
+    vẫn lỗi thì ghi chú vào kết quả và TIẾP TỤC các nhóm sau, không hủy cả file.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     import pypdfium2 as pdfium
 
+    pages_per_call = max(1, int(pages_per_call or 1))
     tmp_dir = tempfile.mkdtemp(prefix="mid_ocr_")
     try:
         pdf = pdfium.PdfDocument(pdf_path)
@@ -427,10 +666,20 @@ def ocr_pdf(
             if progress is not None:
                 progress(0, n_pages)
             with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-                # Gối render với OCR: trang nào render + nhận diện FEN xong
+                # Gối render với OCR: nhóm trang nào render + nhận diện FEN xong
                 # là đưa vào pool OCR ngay, không chờ render hết file.
                 # Render vẫn ở thread chính vì pypdfium2 không thread-safe.
-                futures = {}
+                futures = {}  # fut -> list số trang (1-based) trong nhóm
+                group = []  # list (page_no, png, board_fens)
+
+                def _submit(g):
+                    items = [(png, fens) for _no, png, fens in g]
+                    fut = pool.submit(
+                        _ocr_page_group, items, model, page_timeout, chess,
+                        chess_lang, effort, translate_to,
+                    )
+                    futures[fut] = [no for no, _png, _fens in g]
+
                 for i in range(1, n_pages + 1):
                     if chess:
                         png, hi_res = _render_page_pair(
@@ -441,28 +690,36 @@ def ocr_pdf(
                     else:
                         png = _render_page(pdf[i - 1], tmp_dir, i, dpi=dpi)
                         board_fens = None
-                    fut = pool.submit(
-                        _ocr_page, png, model, page_timeout, board_fens, chess,
-                        chess_lang,
-                    )
-                    futures[fut] = i
+                    group.append((i, png, board_fens))
+                    if len(group) >= pages_per_call:
+                        _submit(group)
+                        group = []
+                if group:
+                    _submit(group)
+
                 for fut in as_completed(futures):
-                    i = futures[fut]
+                    idxs = futures[fut]
                     try:
-                        text = fut.result()
+                        results = fut.result()
                     except ClaudeOCRError as exc:
-                        n_failed += 1
-                        # Không chèn heading '## Trang N' (rác/số trang); chỉ để lại
-                        # ghi chú inline kèm số trang để dễ dò trang lỗi.
-                        parts[i - 1] = f"*[Lỗi OCR trang {i}: {exc}]*"
-                    else:
-                        if text.strip():
-                            parts[i - 1] = text.strip()
+                        for pi in idxs:
+                            n_failed += 1
+                            # Không chèn heading '## Trang N' (rác/số trang); chỉ
+                            # để lại ghi chú inline kèm số trang để dễ dò trang lỗi.
+                            parts[pi - 1] = f"*[Lỗi OCR trang {pi}: {exc}]*"
+                            n_done += 1
+                            if progress is not None:
+                                progress(n_done, n_pages)
+                        continue
+                    for k, pi in enumerate(idxs):
+                        text = results[k] if k < len(results) else ""
+                        if text and text.strip():
+                            parts[pi - 1] = text.strip()
                         else:
-                            parts[i - 1] = f"*[Trang {i}: không trích được nội dung]*"
-                    n_done += 1
-                    if progress is not None:
-                        progress(n_done, n_pages)
+                            parts[pi - 1] = f"*[Trang {pi}: không trích được nội dung]*"
+                        n_done += 1
+                        if progress is not None:
+                            progress(n_done, n_pages)
         finally:
             pdf.close()
         if n_failed == n_pages:
@@ -475,11 +732,13 @@ def ocr_pdf(
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def ocr_image_file(img_path, model="opus", page_timeout=600, chess=True, chess_lang="en"):
+def ocr_image_file(img_path, model="opus", page_timeout=600, chess=True,
+                   chess_lang="en", effort=None, translate_to=None):
     """OCR một tệp ảnh đơn lẻ (jpg/png...).
 
     chess=False: bỏ bước nhận diện bàn cờ, OCR bằng prompt thường.
     chess_lang="ru": dùng footer tiếng Nga (giữ ký hiệu Кр/Ф/Л/С/К).
+    translate_to="vi": gộp OCR+dịch — xuất thẳng Markdown tiếng Việt.
     """
     board_fens = None
     if chess:
@@ -492,5 +751,6 @@ def ocr_image_file(img_path, model="opus", page_timeout=600, chess=True, chess_l
             board_fens = None
     return ocr_image_path(
         img_path, model=model, timeout=page_timeout, board_fens=board_fens,
-        chess=chess, chess_lang=chess_lang,
+        chess=chess, chess_lang=chess_lang, effort=effort,
+        translate_to=translate_to,
     )

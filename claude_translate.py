@@ -224,7 +224,7 @@ def _split_chunks(md, max_chars=6000):
     return chunks
 
 
-def _call_claude(chunk, model="opus", timeout=600, instruction=None):
+def _call_claude(chunk, model="opus", timeout=600, instruction=None, effort="low"):
     """Gọi `claude -p` dịch một chunk (đưa qua stdin). Trả về text đã dịch."""
     claude = find_claude()
     if not claude:
@@ -233,7 +233,8 @@ def _call_claude(chunk, model="opus", timeout=600, instruction=None):
             "Hãy đảm bảo Claude Code đã được cài và đăng nhập."
         )
 
-    # Dịch không cần extended thinking -> effort low (override settings).
+    # Dịch không cần extended thinking -> mặc định effort low (override settings);
+    # người dùng có thể nâng qua tham số effort.
     cmd = [
         claude,
         "-p",
@@ -242,7 +243,7 @@ def _call_claude(chunk, model="opus", timeout=600, instruction=None):
         "json",
         "--model",
         model,
-    ] + _claude_fast_flags("low")
+    ] + _claude_fast_flags(effort)
 
     try:
         proc = subprocess.run(
@@ -285,38 +286,89 @@ def _placeholders_in(text):
     return set(_PLACEHOLDER_RE.findall(text))
 
 
+# Tập ký tự dấu riêng của tiếng Việt (chữ thường). Văn bản tiếng Việt thực sự
+# luôn có mật độ các ký tự này cao; văn bản Anh/Nga chưa dịch thì gần như bằng 0.
+_VI_DIACRITICS = set(
+    "ăâđêôơư"
+    "àáảãạằắẳẵặầấẩẫậ"
+    "èéẻẽẹềếểễệ"
+    "ìíỉĩị"
+    "òóỏõọồốổỗộờớởỡợ"
+    "ùúủũụừứửữự"
+    "ỳýỷỹỵ"
+)
+
+
+def _looks_untranslated(text, chess_lang="en"):
+    """True nếu text có đủ nhiều chữ cái nhưng gần như không có dấu tiếng Việt
+    (hoặc còn sót nhiều chữ Cyrillic với sách Nga) -> nhiều khả năng CHƯA dịch.
+
+    Dùng làm hậu kiểm: bản dịch tiếng Việt thật luôn có mật độ dấu cao, nên một
+    đoạn dài mà gần như không có dấu (hay còn nhiều Cyrillic) là dấu hiệu model
+    đã bỏ qua bước dịch. Đoạn quá ngắn -> trả False (không kết luận, tránh báo
+    nhầm). Bỏ placeholder và mọi fenced block trước khi đo để FEN/ký hiệu nước
+    đi không làm lệch kết quả.
+    """
+    prose = _CODE_BLOCK_RE.sub(" ", text)
+    prose = _PLACEHOLDER_RE.sub(" ", prose).lower()
+    total = viet = cyr = 0
+    for ch in prose:
+        if ch.isalpha():
+            total += 1
+            if ch in _VI_DIACRITICS:
+                viet += 1
+            elif "Ѐ" <= ch <= "ӿ":
+                cyr += 1
+    if total < 80:
+        return False
+    if chess_lang == "ru" and cyr / total > 0.15:
+        return True
+    return viet / total < 0.02
+
+
 # Số chunk dịch song song (mỗi chunk là một tiến trình `claude` riêng).
 TRANSLATE_WORKERS = 8
 
 
-def _translate_chunk(chunk, model, timeout, instruction):
-    """Dịch 1 chunk với 1 lần thử lại + hậu kiểm placeholder.
+def _translate_chunk(chunk, model, timeout, instruction, effort="low",
+                     chess_lang="en"):
+    """Dịch 1 chunk với 1 lần thử lại + hậu kiểm placeholder + hậu kiểm ngôn ngữ.
 
     Chunk lỗi hoặc bị mất placeholder -> trả về nguyên văn chunk kèm ghi chú,
-    không raise (để không hủy cả bản dịch).
+    không raise (để không hủy cả bản dịch). Nếu bản dịch trông như CHƯA được
+    dịch (còn nguyên ngôn ngữ gốc) thì thử lại; vẫn vậy thì giữ kết quả cuối
+    kèm ghi chú cảnh báo.
     """
     translated = None
     err = None
-    for _attempt in range(2):  # thử lại 1 lần nếu lỗi
+    for _attempt in range(2):  # thử lại 1 lần nếu lỗi / nếu chưa dịch
         try:
-            translated = _call_claude(
-                chunk, model=model, timeout=timeout, instruction=instruction
+            cand = _call_claude(
+                chunk, model=model, timeout=timeout, instruction=instruction,
+                effort=effort,
             )
-            break
         except ClaudeOCRError as exc:
             err = exc
+            continue
+        translated = cand
+        # Trông như còn nguyên ngôn ngữ gốc -> coi như chưa đạt, thử lại lần nữa.
+        if not _looks_untranslated(cand, chess_lang):
+            break
     if translated is None:
         return f"{chunk}\n\n*[Lỗi dịch đoạn này: {err}]*"
     # An toàn: bản dịch phải giữ đủ placeholder của chunk gốc,
     # nếu thiếu thì dùng lại nguyên văn để không mất bàn cờ/code nào.
     if not _placeholders_in(chunk) <= _placeholders_in(translated):
         return f"{chunk}\n\n*[Đoạn này dịch bị mất khối bàn cờ/code nên giữ nguyên văn]*"
+    # Đã thử lại mà vẫn như chưa dịch -> giữ kết quả nhưng cảnh báo để dễ dò.
+    if _looks_untranslated(translated, chess_lang):
+        return f"{translated}\n\n*[Cảnh báo: đoạn này có thể chưa được dịch]*"
     return translated
 
 
 def translate_markdown_vn(
     md, model="opus", progress=None, timeout=600, chess=True,
-    workers=TRANSLATE_WORKERS, chess_lang="en",
+    workers=TRANSLATE_WORKERS, chess_lang="en", effort="low",
 ):
     """Dịch Markdown sang tiếng Việt.
 
@@ -350,7 +402,10 @@ def translate_markdown_vn(
         progress(0, len(chunks))
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         futures = {
-            pool.submit(_translate_chunk, chunk, model, timeout, instruction): idx
+            pool.submit(
+                _translate_chunk, chunk, model, timeout, instruction, effort,
+                chess_lang,
+            ): idx
             for idx, chunk in enumerate(chunks)
         }
         for fut in as_completed(futures):
