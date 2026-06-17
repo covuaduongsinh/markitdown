@@ -21,6 +21,7 @@ import tempfile
 import threading
 import time
 import traceback
+import zipfile
 from urllib.parse import quote
 
 import gradio as gr
@@ -55,6 +56,29 @@ def _write_md(markdown: str, base_name: str, used_paths=None) -> str:
     return out_path
 
 
+def _write_fen_file(md, base_name, used_paths=None):
+    """Trích FEN từ md, ghi tệp <base>_fen.txt (1 FEN mỗi dòng).
+
+    Trả về (đường dẫn, số FEN) hoặc (None, 0) nếu md không có thế cờ nào.
+    Dedup hậu tố _2, _3... như `_write_md` để không ghi đè kết quả tệp trước.
+    """
+    import claude_ocr
+
+    fens = claude_ocr.extract_fens(md)
+    if not fens:
+        return None, 0
+    out_path = os.path.join(_OUTPUT_DIR, _safe_filename(base_name) + "_fen.txt")
+    if used_paths:
+        root, ext = os.path.splitext(out_path)
+        n = 2
+        while out_path in used_paths:
+            out_path = f"{root}_{n}{ext}"
+            n += 1
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(fens) + "\n")
+    return out_path, len(fens)
+
+
 _DL_FILE_ICON = (
     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1FA98F" '
     'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
@@ -67,13 +91,54 @@ _DL_DOWN_ICON = (
     '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
     '<polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'
 )
+_DL_ZIP_ICON = (
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" '
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>'
+)
+
+
+def _zip_all(paths):
+    """Gộp các tệp .md kết quả vào 1 zip cố định trong _OUTPUT_DIR, trả về đường dẫn.
+
+    Dùng tên cố định để mỗi lần gọi ghi đè (không tích lũy zip cũ). Dedup tên
+    trùng bên trong archive (a.md, a_2.md...) để không mất tệp khi nhiều nguồn
+    cùng tên gốc.
+    """
+    zip_path = os.path.join(_OUTPUT_DIR, "markitdown_ketqua.zip")
+    used = set()
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for p in paths:
+            arc = os.path.basename(p)
+            root, ext = os.path.splitext(arc)
+            n = 2
+            while arc in used:
+                arc = f"{root}_{n}{ext}"
+                n += 1
+            used.add(arc)
+            zf.write(p, arcname=arc)
+    return zip_path
 
 
 def _download_panel(paths):
-    """HTML danh sách tệp kết quả, mỗi tệp một nút tải riêng."""
+    """HTML danh sách tệp kết quả, mỗi tệp một nút tải riêng.
+
+    Khi có ≥2 tệp, chèn thêm một dòng "Tải tất cả (.zip)" ở đầu danh sách.
+    """
     if not paths:
         return ""
     rows = []
+    if len(paths) >= 2:
+        zip_path = _zip_all(paths)
+        zip_name = os.path.basename(zip_path)
+        zip_href = "/gradio_api/file=" + quote(zip_path.replace("\\", "/"))
+        rows.append(
+            f'<div class="dl-row dl-all">'
+            f'<span class="dl-fileicon">{_DL_ZIP_ICON}</span>'
+            f'<span class="dl-name">Tải tất cả · {len(paths)} tệp</span>'
+            f'<a class="dl-btn" href="{zip_href}" download="{zip_name}">'
+            f'{_DL_DOWN_ICON}Tải .zip</a></div>'
+        )
     for p in paths:
         name = os.path.basename(p)
         href = "/gradio_api/file=" + quote(p.replace("\\", "/"))
@@ -83,7 +148,7 @@ def _download_panel(paths):
             f'<a class="dl-btn" href="{href}" download="{name}">{_DL_DOWN_ICON}Tải về</a></div>'
         )
     return (
-        '<div class="dl-list"><div class="dl-title">Tệp .md kết quả · '
+        '<div class="dl-list"><div class="dl-title">Tệp kết quả · '
         f'{len(paths)} tệp</div>'
         + "".join(rows)
         + "</div>"
@@ -168,6 +233,7 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff"}
 # Nhãn các chế độ xử lý trên giao diện.
 MODE_CHESS = "📚 Sách cờ vua tiếng Anh (mặc định)"
 MODE_CHESS_RU = "📚 Sách cờ vua tiếng Nga"
+MODE_CHESS_ES = "📚 Sách cờ vua tiếng Tây Ban Nha"
 MODE_GENERAL = "📄 Tài liệu thường (chế độ gốc)"
 
 # Nhãn lựa chọn nơi tự động lưu tệp .md kết quả.
@@ -181,8 +247,13 @@ def _is_chess_mode(label):
 
 
 def _chess_lang_from_mode(label):
-    """Nhãn chế độ -> ngôn ngữ ký hiệu nguồn: 'ru' cho sách Nga, 'en' còn lại."""
-    return "ru" if label == MODE_CHESS_RU else "en"
+    """Nhãn chế độ -> ngôn ngữ ký hiệu nguồn: 'ru' sách Nga, 'es' sách Tây Ban
+    Nha, 'en' còn lại."""
+    if label == MODE_CHESS_RU:
+        return "ru"
+    if label == MODE_CHESS_ES:
+        return "es"
+    return "en"
 
 
 def _model_from_label(label):
@@ -409,7 +480,9 @@ _SCRIPT = r"""
   }
   window.midToggleTheme = function(){
     var b = document.body, dark = b.getAttribute('data-mid-theme') === 'dark';
-    b.setAttribute('data-mid-theme', dark ? 'light' : 'dark');
+    var next = dark ? 'light' : 'dark';
+    b.setAttribute('data-mid-theme', next);
+    try { localStorage.setItem('mid-theme', next); } catch(e){}
     setThemeBtn();
   };
   window.midSelectMode = function(idx){
@@ -418,6 +491,15 @@ _SCRIPT = r"""
     // .click() đi qua trọn vẹn luồng sự kiện của Svelte (gr.Radio) -> cập nhật
     // state + bắn .change cho backend; bỏ qua nếu ô đã được chọn sẵn.
     if (rs[idx] && !rs[idx].checked){ rs[idx].click(); }
+  };
+  // Đồng bộ class .active của các thẻ chế độ (HTML) theo radio ẩn — cần khi
+  // giá trị radio được đặt bằng backend (vd khôi phục từ BrowserState) chứ
+  // không qua midSelectMode.
+  window.midSyncModeCards = function(){
+    var rs = document.querySelectorAll('#mid-mode-radio input[type=radio]'), idx = 0;
+    rs.forEach(function(r, i){ if (r.checked) idx = i; });
+    document.querySelectorAll('[data-mid-mode]').forEach(function(el){
+      el.classList.toggle('active', (+el.dataset.midMode) === idx); });
   };
 
   function boardHTML(fen, px){
@@ -470,13 +552,18 @@ _SCRIPT = r"""
   });
 
   function init(){
-    if (!document.body.getAttribute('data-mid-theme')) document.body.setAttribute('data-mid-theme', 'light');
+    if (!document.body.getAttribute('data-mid-theme')){
+      var saved = '';
+      try { saved = localStorage.getItem('mid-theme') || ''; } catch(e){}
+      document.body.setAttribute('data-mid-theme', saved === 'dark' ? 'dark' : 'light');
+    }
     setThemeBtn();
+    window.midSyncModeCards();
     window.midRenderBoards();
   }
   function start(){
     init();
-    new MutationObserver(function(){ setThemeBtn(); window.midRenderBoards(); }).observe(document.body, {childList:true, subtree:true});
+    new MutationObserver(function(){ setThemeBtn(); window.midSyncModeCards(); window.midRenderBoards(); }).observe(document.body, {childList:true, subtree:true});
   }
   if (document.body) start();
   else document.addEventListener('DOMContentLoaded', start);
@@ -622,6 +709,12 @@ footer { display:none !important; }
   background:var(--navy) !important; background-image:none !important; color:#fff !important;
   box-shadow:0 10px 26px rgba(43,57,144,.28); }
 #mid-convert button:hover, #mid-convert-url button:hover { background:var(--navy-deep) !important; }
+#mid-stop { margin-top:13px !important; }
+#mid-stop button { width:100%; border:none !important; border-radius:12px !important;
+  padding:14px !important; font-family:'Roboto'; font-weight:700 !important; font-size:15px !important;
+  background:#D64545 !important; background-image:none !important; color:#fff !important;
+  box-shadow:0 10px 26px rgba(214,69,69,.28); }
+#mid-stop button:hover { background:#B83434 !important; }
 
 /* advanced accordion */
 .mid-adv { margin-top:11px !important; background:transparent !important; border:1px solid var(--c-border) !important;
@@ -703,6 +796,11 @@ footer { display:none !important; }
 .dl-btn { flex:0 0 auto; display:flex; align-items:center; gap:5px; background:var(--navy); color:#fff !important;
   text-decoration:none !important; border-radius:999px; padding:6px 14px; font-size:11.5px; font-weight:700; }
 .dl-btn:hover { background:var(--navy-deep); }
+.dl-row.dl-all { background:var(--navy); border-color:var(--navy); }
+.dl-row.dl-all .dl-name { color:#fff; }
+.dl-row.dl-all .dl-btn { background:var(--sun); color:var(--navy-ink) !important; }
+.dl-row.dl-all .dl-btn:hover { background:var(--sun-deep); }
+.dl-row.dl-all .dl-btn svg { stroke:var(--navy-ink); }
 .mid-clear-btn button { background:var(--c-inset) !important; border:1px solid var(--c-border) !important;
   color:var(--c-subtext) !important; border-radius:11px !important; font-size:12.5px !important; }
 """
@@ -754,6 +852,14 @@ MODE_CARDS_HTML = f"""
     <span class="mid-check"></span>
   </div>
   <div class="mid-mode" data-mid-mode="2">
+    <img class="mid-mode-icon" src="{_PIECES['wb']}" alt="">
+    <div class="mid-mode-text">
+      <div class="mid-mode-title">Sách cờ vua — ký hiệu Tây Ban Nha</div>
+      <div class="mid-mode-desc">R/D/T/A/C → V/H/X/T/M · ký hiệu Tây Ban Nha</div>
+    </div>
+    <span class="mid-check"></span>
+  </div>
+  <div class="mid-mode" data-mid-mode="3">
     <span class="mid-mode-icon">{_DOC_ICON_SVG}</span>
     <div class="mid-mode-text">
       <div class="mid-mode-title">Tài liệu thường</div>
@@ -1000,6 +1106,19 @@ def on_convert_files(
                     saved, err = _autosave(vn_path, save_dir)
                     st += f" · 💾 đã lưu: `{saved}`" if saved else f"\n  {err}"
                 done_paths.append(vn_path)
+
+        # Sách cờ vua (mặc định): gom FEN các thế cờ -> tệp <tên gốc>_fen.txt,
+        # tải về + tự lưu cùng lúc với .md. FEN trong raw_md giữ nguyên văn nên
+        # giống hệt bản dịch — chỉ cần trích một lần từ raw_md.
+        if chess and path and (raw_md or "").strip():
+            fen_base = os.path.splitext(os.path.basename(fp))[0]
+            fen_path, n_fen = _write_fen_file(raw_md, fen_base, done_paths)
+            if fen_path:
+                st += f"\n  ♟️ Đã gom {n_fen} thế cờ → `{os.path.basename(fen_path)}`"
+                if autosave_on:
+                    saved, err = _autosave(fen_path, save_dir)
+                    st += f" · 💾 đã lưu: `{saved}`" if saved else f"\n  {err}"
+                done_paths.append(fen_path)
         lines.append(f"**{name}** — {st}")
         if preview:
             previews.append(f"## 📄 {name}\n\n{preview}")
@@ -1067,6 +1186,26 @@ def _convert_btn_label(n):
     return f"Chuyển đổi {n} tệp" if n else "Chuyển đổi"
 
 
+def _set_running(running):
+    """Đang chạy -> ẩn nút Chuyển đổi, hiện nút Dừng (và ngược lại khi xong)."""
+    return gr.update(visible=not running), gr.update(visible=running)
+
+
+def _load_prefs(p):
+    """BrowserState -> đặt lại preset/chế độ/thư mục lưu khi tải trang."""
+    p = p or {}
+    return (
+        gr.update(value=p.get("preset", PRESET_BALANCED)),
+        gr.update(value=p.get("mode", MODE_CHESS)),
+        gr.update(value=p.get("dir") or os.path.join(os.path.expanduser("~"), "Downloads")),
+    )
+
+
+def _save_prefs(preset_v, mode_v, dir_v):
+    """Gói lựa chọn hiện tại để lưu vào BrowserState (localStorage)."""
+    return {"preset": preset_v, "mode": mode_v, "dir": dir_v}
+
+
 def _on_files_change(files):
     """Kéo-thả tệp mới -> xoá lựa chọn từ hộp thoại + cập nhật nhãn nút."""
     n = len(files) if files else 0
@@ -1120,7 +1259,7 @@ def build_ui():
                     gr.HTML('<div class="mid-section-title">Chế độ xử lý</div>')
                     gr.HTML(MODE_CARDS_HTML)
                     mode = gr.Radio(
-                        choices=[MODE_CHESS, MODE_CHESS_RU, MODE_GENERAL],
+                        choices=[MODE_CHESS, MODE_CHESS_RU, MODE_CHESS_ES, MODE_GENERAL],
                         value=MODE_CHESS,
                         show_label=False,
                         elem_id="mid-mode-radio",
@@ -1143,6 +1282,9 @@ def build_ui():
                     )
                     btn_file = gr.Button(
                         "Chuyển đổi", variant="primary", elem_id="mid-convert"
+                    )
+                    btn_stop = gr.Button(
+                        "⏹ Dừng", variant="stop", visible=False, elem_id="mid-stop"
                     )
 
                     with gr.Accordion(
@@ -1251,6 +1393,15 @@ def build_ui():
                     "Xóa kết quả", variant="secondary", elem_classes="mid-clear-btn"
                 )
 
+        # Ghi nhớ lựa chọn giữa các lần mở (lưu vào localStorage trình duyệt).
+        prefs = gr.BrowserState(
+            {
+                "preset": PRESET_BALANCED,
+                "mode": MODE_CHESS,
+                "dir": os.path.join(os.path.expanduser("~"), "Downloads"),
+            }
+        )
+
         # ---------------- wiring sự kiện ----------------
         outputs = [preview, raw, downloads, status]
         preset_outputs = [
@@ -1262,6 +1413,18 @@ def build_ui():
         preset.change(_apply_preset, [preset, mode], preset_outputs)
         mode.change(_apply_preset, [preset, mode], preset_outputs)
 
+        # Khôi phục lựa chọn đã lưu khi tải trang -> đặt component -> tính lại
+        # tùy chọn nâng cao theo preset -> đồng bộ thẻ chế độ (HTML).
+        demo.load(_load_prefs, prefs, [preset, mode, autosave_dir]).then(
+            _apply_preset, [preset, mode], preset_outputs
+        ).then(
+            None, None, None,
+            js="() => window.midSyncModeCards && window.midSyncModeCards()",
+        )
+        # Lưu lại mỗi khi đổi preset / chế độ / thư mục lưu.
+        for _comp in (preset, mode, autosave_dir):
+            _comp.change(_save_prefs, [preset, mode, autosave_dir], prefs)
+
         # Mở hộp thoại Windows -> nạp đường dẫn thật vào State + hiển thị.
         btn_pick.click(on_pick_files, None, [picked_state, picked_view]).then(
             lambda p: gr.update(value=_convert_btn_label(len(p) if p else 0)),
@@ -1270,7 +1433,12 @@ def build_ui():
         # Kéo-thả tệp mới -> xoá lựa chọn từ hộp thoại + cập nhật nhãn nút.
         file_in.change(_on_files_change, file_in, [picked_state, picked_view, btn_file])
 
-        btn_file.click(
+        # Chuyển đổi tệp: bật chế độ "đang chạy" (hiện nút Dừng) -> chạy -> tắt.
+        # `proc` là event generator cần nhắm tới khi Dừng (cancels), không phải
+        # bước .then khôi phục nút ở cuối.
+        proc = btn_file.click(
+            lambda: _set_running(True), None, [btn_file, btn_stop]
+        ).then(
             on_convert_files,
             [
                 file_in, mode, enable_plugins, use_ocr,
@@ -1282,11 +1450,20 @@ def build_ui():
             outputs,
             show_progress="full",
         )
-        btn_url.click(
-            on_convert_url, [url_in, enable_plugins], outputs, show_progress="full"
-        )
-        url_in.submit(
-            on_convert_url, [url_in, enable_plugins], outputs, show_progress="full"
+        proc.then(lambda: _set_running(False), None, [btn_file, btn_stop])
+        # Chuyển đổi URL cũng hiện nút Dừng (URL như YouTube có thể chậm).
+        ev_url = btn_url.click(
+            lambda: _set_running(True), None, [btn_file, btn_stop]
+        ).then(on_convert_url, [url_in, enable_plugins], outputs, show_progress="full")
+        ev_url.then(lambda: _set_running(False), None, [btn_file, btn_stop])
+        ev_urls = url_in.submit(
+            lambda: _set_running(True), None, [btn_file, btn_stop]
+        ).then(on_convert_url, [url_in, enable_plugins], outputs, show_progress="full")
+        ev_urls.then(lambda: _set_running(False), None, [btn_file, btn_stop])
+        # Bấm Dừng -> hủy các tác vụ đang chạy + khôi phục nút Chuyển đổi.
+        btn_stop.click(
+            lambda: _set_running(False), None, [btn_file, btn_stop],
+            cancels=[proc, ev_url, ev_urls],
         )
         btn_clear.click(on_clear, None, outputs + [picked_state, picked_view])
 

@@ -89,6 +89,34 @@ _CHESS_II_RU = (
     "F. Giữ nguyên các ký hiệu đánh giá: !, ?, !!, ??, !?, ?!, ±, =, +-, -+, +...\n\n"
 )
 
+# Mục II cho sách tiếng Tây Ban Nha (ký hiệu Latin R, D, T, A, C). Lưu ý ĐỤNG ĐỘ
+# với bảng tiếng Việt: nguồn T (Torre/Xe) phải ra X (KHÔNG giữ T), còn nguồn A
+# (Alfil/Tượng) mới ra T; nguồn R (Rey/Vua) ra V.
+_CHESS_II_ES = (
+    "=====================\n"
+    "II. KÝ HIỆU NƯỚC ĐI (SÁCH TIẾNG TÂY BAN NHA)\n"
+    "=====================\n"
+    "A. Tên quân (tiếng Tây Ban Nha → tiếng Việt): Rey → Vua; Dama → Hậu; "
+    "Torre → Xe; Alfil → Tượng; Caballo → Mã; Peón → Tốt.\n"
+    "B. Notation — ký tự quân cờ tiếng Tây Ban Nha. CẢNH BÁO: bảng nguồn và bảng "
+    "đích DÙNG CHUNG vài chữ cái nên phải đổi theo đúng nghĩa, KHÔNG giữ nguyên:\n"
+    "   - R (Rey) → V (Vua). Ví dụ: Re1 → Ve1.\n"
+    "   - D (Dama) → H (Hậu).\n"
+    "   - T (Torre) → X (Xe). LƯU Ý: nguồn T là Xe, đổi thành X — TUYỆT ĐỐI "
+    "không giữ là T. Ví dụ: Txd5 → Xxd5.\n"
+    "   - A (Alfil) → T (Tượng). Ví dụ: Ac4 → Tc4.\n"
+    "   - C (Caballo) → M (Mã). Ví dụ: Cf3 → Mf3.\n"
+    "   - Tốt KHÔNG có ký hiệu; nước tốt giữ nguyên (e4, d5, exd5...).\n"
+    "   Ví dụ tổng hợp: Cf3 → Mf3; Dxd5 → Hxd5; Ac4 → Tc4; Txd5 → Xxd5; "
+    "Re1 → Ve1; O-O → 0-0; O-O-O → 0-0-0.\n"
+    "C. Icon quân cờ (figurine), giữ nguyên ý nghĩa bất kể ngôn ngữ: "
+    "♔/♚ → V; ♕/♛ → H; ♖/♜ → X; ♗/♝ → T; ♘/♞ → M; ♙/♟ → không ký hiệu.\n"
+    "D. Giữ nguyên tọa độ a-h, 1-8.\n"
+    "E. Thuật ngữ: jaque/check → chiếu; jaque mate (mate)/checkmate → chiếu hết; "
+    "captura/capture → ăn quân; enroque → nhập thành.\n"
+    "F. Giữ nguyên các ký hiệu đánh giá: !, ?, !!, ??, !?, ?!, ±, =, +-, -+, +...\n\n"
+)
+
 _CHESS_TAIL = (
     "=====================\n"
     "III. FORMAT NƯỚC ĐI (BẮT BUỘC)\n"
@@ -125,6 +153,7 @@ _CHESS_TAIL = (
 
 TRANSLATE_INSTRUCTION_CHESS = _CHESS_HEAD + _CHESS_II_EN + _CHESS_TAIL
 TRANSLATE_INSTRUCTION_CHESS_RU = _CHESS_HEAD + _CHESS_II_RU + _CHESS_TAIL
+TRANSLATE_INSTRUCTION_CHESS_ES = _CHESS_HEAD + _CHESS_II_ES + _CHESS_TAIL
 
 # Giữ tên cũ cho tương thích.
 TRANSLATE_INSTRUCTION = TRANSLATE_INSTRUCTION_CHESS
@@ -375,7 +404,8 @@ def translate_markdown_vn(
     chess=True (sách cờ vua): dịch theo quy tắc ký hiệu cờ vua (V/H/X/T/M...),
     giữ nguyên các block ```chessboard. chess_lang chọn bảng ký hiệu nguồn:
     "en" (mặc định) = ký hiệu tiếng Anh K/Q/R/B/N; "ru" = ký hiệu tiếng Nga
-    Кр/Ф/Л/С/К. Output tiếng Việt giống nhau, chỉ khác ký hiệu nguồn.
+    Кр/Ф/Л/С/К; "es" = ký hiệu tiếng Tây Ban Nha R/D/T/A/C. Output tiếng Việt
+    giống nhau, chỉ khác ký hiệu nguồn.
     chess=False (tài liệu thường): dịch thông thường, giữ nguyên mọi code block.
 
     Các chunk được dịch song song `workers` chunk một lúc, ghép đúng thứ tự.
@@ -389,6 +419,8 @@ def translate_markdown_vn(
         instruction = TRANSLATE_INSTRUCTION_GENERAL
     elif chess_lang == "ru":
         instruction = TRANSLATE_INSTRUCTION_CHESS_RU
+    elif chess_lang == "es":
+        instruction = TRANSLATE_INSTRUCTION_CHESS_ES
     else:
         instruction = TRANSLATE_INSTRUCTION_CHESS
     text, blocks = _extract_boards(md, chess=chess)

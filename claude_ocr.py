@@ -128,6 +128,29 @@ _PROMPT_FOOTER_RU = (
     "chữ. KHÔNG diễn giải hay bình luận thêm về nước đi.\n\n"
 ) + _PROMPT_FOOTER_PLAIN
 
+# Footer cho SÁCH TIẾNG TÂY BAN NHA: giữ nguyên chữ quân cờ Tây Ban Nha (R, D,
+# T, A, C); figurine -> chữ cái Tây Ban Nha (KHÔNG đổi sang SAN quốc tế) để cả
+# trang đồng nhất một bảng chữ. Bước dịch sau sẽ đổi R/D/T/A/C sang V/H/X/T/M
+# (lưu ý T = Torre/Xe -> X, A = Alfil/Tượng -> T, R = Rey/Vua -> V).
+_PROMPT_FOOTER_ES = (
+    "Về ký hiệu nước đi cờ vua trong văn bản (sách tiếng Tây Ban Nha): giữ NGUYÊN "
+    "VĂN như sách in — chữ cái quân cờ tiếng Tây Ban Nha (R=Rey, D=Dama, T=Torre, "
+    "A=Alfil, C=Caballo; tốt không có chữ), số thứ tự nước '12.' hoặc '12...', các "
+    "ký hiệu đánh giá !, ?, !!, ??, !?, ?!, ±, =, +-, -+... KHÔNG dịch và KHÔNG đổi "
+    "các chữ cái quân cờ này sang ký hiệu khác. Nếu sách in quân cờ bằng hình "
+    "(figurine) thì chuyển về chữ cái quân cờ TIẾNG TÂY BAN NHA tương ứng: ♔/♚→R, "
+    "♕/♛→D, ♖/♜→T, ♗/♝→A, ♘/♞→C, ♙/♟→không có chữ. KHÔNG diễn giải hay bình luận "
+    "thêm về nước đi.\n\n"
+) + _PROMPT_FOOTER_PLAIN
+
+
+def _chess_footer(chess_lang):
+    """Chọn footer giữ-nguyên-văn theo ngôn ngữ ký hiệu nguồn của sách cờ vua."""
+    return {"ru": _PROMPT_FOOTER_RU, "es": _PROMPT_FOOTER_ES}.get(
+        chess_lang, _PROMPT_FOOTER
+    )
+
+
 # Giữ tên cũ cho tương thích (prompt khi Claude phải tự nhận diện bàn cờ).
 PROMPT_VI = _PROMPT_HEADER + _PROMPT_CHESS_SELF + _PROMPT_FOOTER
 
@@ -174,9 +197,11 @@ def _merge_footer(chess, chess_lang):
     if not chess:
         return _PROMPT_MERGE_INTRO + _PROMPT_MERGE_GENERAL
     # Tái dùng quy tắc ký hiệu + format từ bước dịch để đồng nhất hoàn toàn.
-    from claude_translate import _CHESS_II_EN, _CHESS_II_RU, _CHESS_TAIL
+    from claude_translate import (
+        _CHESS_II_EN, _CHESS_II_ES, _CHESS_II_RU, _CHESS_TAIL,
+    )
 
-    notation = _CHESS_II_RU if chess_lang == "ru" else _CHESS_II_EN
+    notation = {"ru": _CHESS_II_RU, "es": _CHESS_II_ES}.get(chess_lang, _CHESS_II_EN)
     return _PROMPT_MERGE_INTRO + notation + _CHESS_TAIL
 
 
@@ -186,6 +211,7 @@ def _build_prompt(img_path, board_fens=None, chess=True, chess_lang="en",
 
     chess=False (chế độ tài liệu thường): bỏ toàn bộ phần bàn cờ vua.
     chess_lang="ru": footer giữ ký hiệu tiếng Nga và đổi figurine sang chữ Nga;
+    "es": footer giữ ký hiệu Tây Ban Nha R/D/T/A/C (figurine -> chữ Tây Ban Nha);
     "en" (mặc định): footer chuẩn (figurine -> SAN quốc tế K/Q/R/B/N).
     translate_to="vi": chế độ gộp — vừa OCR vừa dịch sang tiếng Việt trong cùng
     một lần gọi (footer dịch thay cho footer giữ nguyên văn).
@@ -195,7 +221,7 @@ def _build_prompt(img_path, board_fens=None, chess=True, chess_lang="en",
     if translate_to == "vi":
         footer = _merge_footer(chess, chess_lang)
     elif chess:
-        footer = _PROMPT_FOOTER_RU if chess_lang == "ru" else _PROMPT_FOOTER
+        footer = _chess_footer(chess_lang)
     else:
         footer = _PROMPT_FOOTER_PLAIN
     if not chess:
@@ -266,7 +292,7 @@ def _build_prompt_multi(pages, chess=True, chess_lang="en", translate_to=None):
     if translate_to == "vi":
         footer = _merge_footer(chess, chess_lang)
     elif chess:
-        footer = _PROMPT_FOOTER_RU if chess_lang == "ru" else _PROMPT_FOOTER
+        footer = _chess_footer(chess_lang)
     else:
         footer = _PROMPT_FOOTER_PLAIN
     body = _PROMPT_MULTI_CHESS if chess else ""
@@ -340,6 +366,25 @@ def _normalize_chessboard_blocks(md):
         return "```chessboard\nfen: " + fen + "\nstrict: false\n```"
 
     return _CHESSBOARD_BLOCK_RE.sub(fix, md)
+
+
+def extract_fens(md):
+    """Trả về list FEN (chuỗi) từ mọi block ```chessboard trong md, đúng thứ tự.
+
+    Khối đã qua _normalize_chessboard_blocks luôn có dòng `fen: <FEN>`; vẫn dự
+    phòng cho khối không có tiền tố `fen:` (lấy dòng đầu trông giống FEN).
+    """
+    fens = []
+    for m in _CHESSBOARD_BLOCK_RE.finditer(md):
+        body = m.group(1)
+        fm = _FEN_FIELD_RE.search(body)
+        if fm:
+            fen = fm.group(1).strip().strip("\"'").strip()
+        else:
+            fen = next((ln.strip() for ln in body.splitlines() if "/" in ln), "")
+        if fen:
+            fens.append(fen)
+    return fens
 
 
 class ClaudeOCRError(RuntimeError):
