@@ -27,6 +27,20 @@ from urllib.parse import quote
 import gradio as gr
 from markitdown import MarkItDown
 
+from ai_engine import (
+    ENGINE_ANTIGRAVITY,
+    ENGINE_CLAUDE,
+    ENGINE_LABELS,
+    ANTIGRAVITY_OCR_MODELS,
+    ANTIGRAVITY_TRANSLATE_MODELS,
+    CLAUDE_OCR_MODELS,
+    CLAUDE_TRANSLATE_MODELS,
+    find_agy,
+    find_claude,
+    is_engine_available,
+    get_default_engine,
+)
+
 # Thư mục tạm để chứa các tệp .md xuất ra (cho nút tải về)
 _OUTPUT_DIR = os.path.join(tempfile.gettempdir(), "markitdown_gui_output")
 os.makedirs(_OUTPUT_DIR, exist_ok=True)
@@ -257,8 +271,11 @@ def _chess_lang_from_mode(label):
 
 
 def _model_from_label(label):
-    """'opus (chính xác nhất)' -> 'opus'."""
-    return (label or "opus").strip().split()[0].lower()
+    """'gemini-3.7-flash (cân bằng)' -> 'gemini-3.7-flash', 'opus (chính xác)' -> 'opus'."""
+    if not label:
+        return "gemini-3.7-flash"
+    tok = str(label).strip().split()
+    return tok[0].lower() if tok else "gemini-3.7-flash"
 
 
 _EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
@@ -267,8 +284,8 @@ _EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 def _effort_from_label(label, default="low"):
     """'low (tiết kiệm nhất)' -> 'low'; 'auto …'/nhãn lạ -> default.
 
-    Với OCR truyền default=None ('auto' -> giữ logic low/medium tự động trong
-    claude_ocr); với Dịch default='low'.
+    Với OCR truyền default=None ('auto' -> giữ logic low/medium tự động);
+    với Dịch default='low'.
     """
     tok = (label or "").strip().split()
     val = tok[0].lower() if tok else ""
@@ -295,9 +312,9 @@ def _pages_from_label(label):
 def _ocr_to_outputs(
     file_path, base_name, model, board_dpi=400, used_paths=None, chess=True,
     progress=None, chess_lang="en", effort=None, merge_translate=False,
-    pages_per_call=1,
+    pages_per_call=1, engine="antigravity",
 ):
-    """Chạy OCR (PDF hoặc ảnh) qua Claude Code và trả về 4-tuple kết quả.
+    """Chạy OCR (PDF hoặc ảnh) qua AI Engine (Antigravity hoặc Claude Code) và trả về 4-tuple kết quả.
 
     merge_translate=True: gộp OCR + dịch sang tiếng Việt trong cùng lệnh gọi
     (bỏ pass dịch riêng) — ghi tệp `<tên>_vn.md`.
@@ -312,11 +329,12 @@ def _ocr_to_outputs(
             file_path, model=model, board_dpi=board_dpi, chess=chess,
             progress=progress, chess_lang=chess_lang, effort=effort,
             translate_to=translate_to, pages_per_call=pages_per_call,
+            engine=engine,
         )
     else:
         text = claude_ocr.ocr_image_file(
             file_path, model=model, chess=chess, chess_lang=chess_lang,
-            effort=effort, translate_to=translate_to,
+            effort=effort, translate_to=translate_to, engine=engine,
         )
 
     if not text.strip():
@@ -325,8 +343,9 @@ def _ocr_to_outputs(
     out_name = f"{base_name}_vn" if merge_translate else base_name
     download_path = _write_md(text, out_name, used_paths)
     label = "OCR+dịch (gộp 1 bước)" if merge_translate else "OCR"
+    engine_name = "Google Antigravity" if engine == "antigravity" else "Claude Code"
     status = (
-        f"✅ Đã {label} bằng Claude Code (model: {model}, "
+        f"✅ Đã {label} bằng {engine_name} (model: {model}, "
         f"effort: {effort or 'auto'}) — {len(text):,} ký tự"
     )
     return text, text, download_path, status
@@ -336,10 +355,12 @@ def convert_file(
     file_path, enable_plugins, use_ocr, model_label, force_ocr=False,
     board_dpi_label=None, used_paths=None, chess=True, progress=None,
     chess_lang="en", ocr_effort_label=None, merge_translate=False,
-    ocr_pages_label=None,
+    ocr_pages_label=None, engine="antigravity",
 ):
     if not file_path:
         return "", "", None, "ℹ️ Hãy chọn hoặc kéo-thả một tệp trước."
+
+    from ai_engine import is_engine_available
 
     base_name = os.path.splitext(os.path.basename(file_path))[0]
     ext = os.path.splitext(file_path)[1].lower()
@@ -349,40 +370,39 @@ def convert_file(
     pages_per_call = _pages_from_label(ocr_pages_label)
     is_image = ext in IMAGE_EXTS
     is_pdf = ext == ".pdf"
+    engine_name = "Google Antigravity" if engine == "antigravity" else "Claude Code"
 
     # Ảnh: built-in chỉ ra metadata/mô tả, nên OCR trực tiếp nếu được bật.
     if use_ocr and is_image:
-        from claude_ocr import find_claude
-
-        if not find_claude():
-            # Không có Claude Code -> vẫn thử chuyển đổi thường (ra metadata).
+        if not is_engine_available(engine):
+            # Không có CLI tương ứng -> thử chuyển đổi thường.
             return _convert(file_path, enable_plugins, base_name, used_paths)
         try:
             return _ocr_to_outputs(
                 file_path, base_name, model, board_dpi, used_paths, chess=chess,
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
+                engine=engine,
             )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
 
-    # PDF + "Buộc OCR": bỏ qua lớp text có sẵn (thường là text rác từ OCR cũ
-    # nhúng trong PDF scan), OCR lại toàn bộ bằng Claude Code.
+    # PDF + "Buộc OCR": bỏ qua lớp text có sẵn, OCR lại toàn bộ bằng AI Engine.
     if use_ocr and is_pdf and force_ocr:
-        from claude_ocr import find_claude
-
-        if not find_claude():
+        if not is_engine_available(engine):
+            cmd_name = "lệnh 'agy'" if engine == "antigravity" else "lệnh 'claude'"
             return (
                 "",
                 "",
                 None,
-                "⚠️ Cần Claude Code (lệnh 'claude') trong PATH để buộc OCR.",
+                f"⚠️ Cần {engine_name} ({cmd_name}) trong PATH để buộc OCR.",
             )
         try:
             return _ocr_to_outputs(
                 file_path, base_name, model, board_dpi, used_paths, chess=chess,
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
+                engine=engine,
             )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
@@ -394,25 +414,26 @@ def convert_file(
 
     # PDF scan (không có lớp text) -> OCR fallback nếu được bật.
     if use_ocr and is_pdf and not (raw_md or "").strip():
-        from claude_ocr import find_claude
-
-        if not find_claude():
+        if not is_engine_available(engine):
+            cmd_name = "lệnh 'agy'" if engine == "antigravity" else "lệnh 'claude'"
             return (
                 preview,
                 raw_md,
                 download,
-                "⚠️ PDF scan không có text. Cần Claude Code (lệnh 'claude') trong PATH để OCR.",
+                f"⚠️ PDF scan không có text. Cần {engine_name} ({cmd_name}) trong PATH để OCR.",
             )
         try:
             return _ocr_to_outputs(
                 file_path, base_name, model, board_dpi, used_paths, chess=chess,
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
+                engine=engine,
             )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
 
     return preview, raw_md, download, status
+
 
 
 def convert_url(url, enable_plugins):
@@ -891,28 +912,30 @@ def _with_download_update(result):
 
 def _translate_to_vn(
     raw_md, orig_path, model, done_paths, chess=True, progress=None,
-    chess_lang="en", effort="low",
+    chess_lang="en", effort="low", engine=ENGINE_ANTIGRAVITY,
 ):
     """Dịch raw_md sang tiếng Việt, ghi tệp `<tên gốc>_vn.md`.
 
     chess: True -> dịch theo quy tắc cờ vua; False -> dịch tài liệu thường.
     chess_lang: 'en' (ký hiệu Anh) hoặc 'ru' (ký hiệu Nga) khi chess=True.
+    engine: 'antigravity' (mặc định) hoặc 'claude'.
     Trả về (đường dẫn tệp _vn hoặc None, dòng status).
     """
     import claude_translate
-    from claude_ocr import find_claude
 
-    if not find_claude():
-        return None, "⚠️ Bỏ qua dịch: cần Claude Code (lệnh 'claude') trong PATH."
+    engine_name = "Google Antigravity" if engine == ENGINE_ANTIGRAVITY else "Claude Code"
+    if not is_engine_available(engine):
+        cmd_name = "lệnh 'agy'" if engine == ENGINE_ANTIGRAVITY else "lệnh 'claude'"
+        return None, f"⚠️ Bỏ qua dịch: cần {engine_name} ({cmd_name}) trong PATH."
     try:
         vn_text = claude_translate.translate_markdown_vn(
             raw_md, model=model, chess=chess, progress=progress,
-            chess_lang=chess_lang, effort=effort,
+            chess_lang=chess_lang, effort=effort, engine=engine,
         )
         vn_name = os.path.splitext(os.path.basename(orig_path))[0] + "_vn"
         vn_path = _write_md(vn_text, vn_name, done_paths)
         return vn_path, (
-            f"🇻🇳 Đã dịch sang tiếng Việt (effort: {effort}) "
+            f"🇻🇳 Đã dịch bằng {engine_name} (model: {model}, effort: {effort}) "
             f"— {len(vn_text):,} ký tự"
         )
     except Exception as exc:
@@ -996,7 +1019,7 @@ def on_convert_files(
     file_paths, mode_label, enable_plugins, use_ocr,
     model_label, ocr_effort_label, translate_model_label, translate_effort_label,
     force_ocr, board_dpi_label, translate_vn, merge_ocr_translate, ocr_pages_label,
-    autosave_on, autosave_dir, picked_paths, autosave_target,
+    autosave_on, autosave_dir, picked_paths, autosave_target, engine,
 ):
     # Ưu tiên tệp chọn bằng hộp thoại (có đường dẫn thật) — mới lưu được cạnh
     # file gốc; nếu không có thì dùng tệp kéo-thả (đường dẫn tạm).
@@ -1035,6 +1058,7 @@ def on_convert_files(
                 chess=chess, chess_lang=chess_lang,
                 ocr_effort_label=ocr_effort_label,
                 merge_translate=merge, ocr_pages_label=ocr_pages_label,
+                engine=engine,
             ),
             label=f"⏳ Đang xử lý {i}/{total}: **{name}**",
             unit="trang",
@@ -1062,9 +1086,6 @@ def on_convert_files(
             done_paths.append(path)
 
         # Dịch sang tiếng Việt -> tạo thêm tệp _vn.md (nếu được bật).
-        # Bỏ qua nếu nhánh OCR đã gộp dịch (chỉ khi đó status có "gộp 1 bước").
-        # Dựa vào status thay vì cờ `merge` để tệp KHÔNG qua OCR (docx, PDF có
-        # lớp text...) vẫn được dịch bình thường dù người dùng có tích merge.
         already_translated = bool(merge) and "gộp 1 bước" in (st or "")
         if translate_vn and not already_translated and path and (raw_md or "").strip():
             yield (
@@ -1085,7 +1106,7 @@ def on_convert_files(
                 dict(
                     raw_md=raw_md, orig_path=path, model=model,
                     done_paths=done_paths, chess=chess, chess_lang=chess_lang,
-                    effort=translate_effort,
+                    effort=translate_effort, engine=engine,
                 ),
                 label=f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**",
                 unit="đoạn",
@@ -1107,9 +1128,7 @@ def on_convert_files(
                     st += f" · 💾 đã lưu: `{saved}`" if saved else f"\n  {err}"
                 done_paths.append(vn_path)
 
-        # Sách cờ vua (mặc định): gom FEN các thế cờ -> tệp <tên gốc>_fen.txt,
-        # tải về + tự lưu cùng lúc với .md. FEN trong raw_md giữ nguyên văn nên
-        # giống hệt bản dịch — chỉ cần trích một lần từ raw_md.
+        # Sách cờ vua (mặc định): gom FEN các thế cờ -> tệp <tên gốc>_fen.txt
         if chess and path and (raw_md or "").strip():
             fen_base = os.path.splitext(os.path.basename(fp))[0]
             fen_path, n_fen = _write_fen_file(raw_md, fen_base, done_paths)
@@ -1146,10 +1165,17 @@ def on_clear():
     return "", "", "", _STATUS_HINT, [], ""
 
 
-# Preset -> tham số (ánh xạ thẳng các giá trị mà backend label-parser hiểu).
-# Trùng với presetOpts() trong bản thiết kế. forceOcr bật cho sách cờ, tắt cho
-# tài liệu thường; translateVn & autosave luôn bật.
-_PRESET_OPTS = {
+# Presets ánh xạ theo từng Engine
+_PRESET_OPTS_AGY = {
+    PRESET_SAVER: dict(merge=True, ocr_model="gemini-3.6-flash", ocr_effort="low",
+                       tr_model="gemini-3.6-flash", tr_effort="low", dpi="250", pages="2"),
+    PRESET_BALANCED: dict(merge=True, ocr_model="gemini-3.7-flash", ocr_effort="auto",
+                          tr_model="gemini-3.7-flash", tr_effort="low", dpi="250", pages="1"),
+    PRESET_ACCURATE: dict(merge=False, ocr_model="gemini-3.1-pro", ocr_effort="high",
+                          tr_model="gemini-3.1-pro", tr_effort="medium", dpi="400", pages="1"),
+}
+
+_PRESET_OPTS_CLAUDE = {
     PRESET_SAVER: dict(merge=True, ocr_model="haiku", ocr_effort="low",
                        tr_model="haiku", tr_effort="low", dpi="250", pages="2"),
     PRESET_BALANCED: dict(merge=True, ocr_model="sonnet", ocr_effort="auto",
@@ -1159,26 +1185,30 @@ _PRESET_OPTS = {
 }
 
 
-def _apply_preset(preset, mode_label):
-    """Chọn preset/đổi chế độ -> tính lại toàn bộ tùy chọn nâng cao.
-
-    Trả về update cho 4 công tắc + 6 dropdown + dòng gợi ý (đúng thứ tự khai
-    báo `preset_outputs` trong build_ui).
-    """
-    opt = _PRESET_OPTS.get(preset, _PRESET_OPTS[PRESET_BALANCED])
+def _apply_preset(preset, mode_label, engine=ENGINE_ANTIGRAVITY):
+    """Chọn preset/đổi chế độ/đổi engine -> tính lại toàn bộ tùy chọn nâng cao."""
+    table = _PRESET_OPTS_AGY if engine == ENGINE_ANTIGRAVITY else _PRESET_OPTS_CLAUDE
+    opt = table.get(preset, table[PRESET_BALANCED])
     chess = _is_chess_mode(mode_label)
+    ocr_choices = ANTIGRAVITY_OCR_MODELS if engine == ENGINE_ANTIGRAVITY else CLAUDE_OCR_MODELS
+    tr_choices = ANTIGRAVITY_TRANSLATE_MODELS if engine == ENGINE_ANTIGRAVITY else CLAUDE_TRANSLATE_MODELS
+
+    hint = (
+        f"{opt['ocr_model']} · effort {opt['ocr_effort']} · {'gộp OCR+dịch' if opt['merge'] else 'dịch riêng'}"
+    )
+
     return (
         gr.update(value=chess),            # force_ocr
         gr.update(value=True),             # translate_vn
         gr.update(value=opt["merge"]),     # merge_ocr_translate
         gr.update(value=True),             # autosave_on
-        gr.update(value=opt["ocr_model"]),
+        gr.update(choices=ocr_choices, value=opt["ocr_model"]),
         gr.update(value=opt["ocr_effort"]),
-        gr.update(value=opt["tr_model"]),
+        gr.update(choices=tr_choices, value=opt["tr_model"]),
         gr.update(value=opt["tr_effort"]),
         gr.update(value=opt["dpi"]),
         gr.update(value=opt["pages"]),
-        gr.update(value=_PRESET_HINTS.get(preset, "")),  # preset_hint
+        gr.update(value=hint),             # preset_hint
     )
 
 
@@ -1192,18 +1222,20 @@ def _set_running(running):
 
 
 def _load_prefs(p):
-    """BrowserState -> đặt lại preset/chế độ/thư mục lưu khi tải trang."""
+    """BrowserState -> đặt lại preset/chế độ/thư mục lưu/engine khi tải trang."""
     p = p or {}
+    default_eng = get_default_engine()
     return (
         gr.update(value=p.get("preset", PRESET_BALANCED)),
         gr.update(value=p.get("mode", MODE_CHESS)),
         gr.update(value=p.get("dir") or os.path.join(os.path.expanduser("~"), "Downloads")),
+        gr.update(value=p.get("engine", default_eng)),
     )
 
 
-def _save_prefs(preset_v, mode_v, dir_v):
+def _save_prefs(preset_v, mode_v, dir_v, engine_v):
     """Gói lựa chọn hiện tại để lưu vào BrowserState (localStorage)."""
-    return {"preset": preset_v, "mode": mode_v, "dir": dir_v}
+    return {"preset": preset_v, "mode": mode_v, "dir": dir_v, "engine": engine_v}
 
 
 def _on_files_change(files):
@@ -1213,6 +1245,8 @@ def _on_files_change(files):
 
 
 def build_ui():
+    default_eng = get_default_engine()
+
     with gr.Blocks(title="MarkItDown") as demo:
         # ---- thanh tiêu đề navy (sticky) ----
         gr.HTML(TOPBAR_HTML)
@@ -1290,9 +1324,17 @@ def build_ui():
                     with gr.Accordion(
                         "Tùy chọn nâng cao", open=False, elem_classes="mid-adv"
                     ):
+                        engine_select = gr.Radio(
+                            choices=ENGINE_LABELS,
+                            value=default_eng,
+                            label="Công cụ AI (Engine)",
+                            elem_classes="mid-engine-select",
+                            info="Antigravity (mặc định) tối ưu cho Gemini Flash/Pro, bàn cờ & dịch thuật. Claude Code (phương án 2) dùng claude CLI.",
+                        )
+
                         force_ocr = gr.Checkbox(
                             label="Buộc OCR toàn bộ", value=True,
-                            info="Bỏ lớp text rác trong PDF scan, OCR lại bằng Claude Code.",
+                            info="Bỏ lớp text rác trong PDF scan, OCR lại bằng AI Engine.",
                             elem_classes="mid-toggle", container=False,
                         )
                         translate_vn = gr.Checkbox(
@@ -1302,7 +1344,7 @@ def build_ui():
                         )
                         merge_ocr_translate = gr.Checkbox(
                             label="OCR + dịch gộp 1 bước", value=True,
-                            info="Mỗi trang vừa OCR vừa dịch — tiết kiệm ~30–40% hạn mức.",
+                            info="Mỗi trang vừa OCR vừa dịch — tiết kiệm ~30–40% thời gian/quota.",
                             elem_classes="mid-toggle", container=False,
                         )
                         autosave_on = gr.Checkbox(
@@ -1313,12 +1355,15 @@ def build_ui():
 
                         gr.HTML('<div style="height:1px;background:var(--c-border);"></div>')
 
+                        init_ocr_choices = ANTIGRAVITY_OCR_MODELS if default_eng == ENGINE_ANTIGRAVITY else CLAUDE_OCR_MODELS
+                        init_tr_choices = ANTIGRAVITY_TRANSLATE_MODELS if default_eng == ENGINE_ANTIGRAVITY else CLAUDE_TRANSLATE_MODELS
+                        init_ocr_val = "gemini-3.7-flash" if default_eng == ENGINE_ANTIGRAVITY else "sonnet"
+                        init_tr_val = "gemini-3.7-flash" if default_eng == ENGINE_ANTIGRAVITY else "haiku"
+
                         with gr.Row(elem_classes="mid-selects"):
                             ocr_model = gr.Dropdown(
-                                choices=[("Haiku — nhanh", "haiku"),
-                                         ("Sonnet — cân bằng", "sonnet"),
-                                         ("Opus — chính xác", "opus")],
-                                value="sonnet", label="Model OCR",
+                                choices=init_ocr_choices,
+                                value=init_ocr_val, label="Model OCR",
                                 filterable=False, elem_classes="mid-select",
                             )
                             ocr_effort = gr.Dropdown(
@@ -1329,9 +1374,8 @@ def build_ui():
                             )
                         with gr.Row(elem_classes="mid-selects"):
                             translate_model = gr.Dropdown(
-                                choices=[("Haiku — tiết kiệm", "haiku"),
-                                         ("Sonnet", "sonnet"), ("Opus", "opus")],
-                                value="haiku", label="Model dịch",
+                                choices=init_tr_choices,
+                                value=init_tr_val, label="Model dịch",
                                 filterable=False, elem_classes="mid-select",
                             )
                             translate_effort = gr.Dropdown(
@@ -1372,7 +1416,6 @@ def build_ui():
                             value=os.path.join(os.path.expanduser("~"), "Downloads"),
                             elem_classes="mid-autosave-dir",
                         )
-                        # Plumbing ẩn — backend vẫn cần các giá trị này.
                         enable_plugins = gr.Checkbox(value=False, visible=False)
                         use_ocr = gr.Checkbox(value=True, visible=False)
 
@@ -1399,6 +1442,7 @@ def build_ui():
                 "preset": PRESET_BALANCED,
                 "mode": MODE_CHESS,
                 "dir": os.path.join(os.path.expanduser("~"), "Downloads"),
+                "engine": default_eng,
             }
         )
 
@@ -1409,33 +1453,31 @@ def build_ui():
             ocr_model, ocr_effort, translate_model, translate_effort,
             board_dpi, ocr_pages_per_call, preset_hint,
         ]
-        # Chọn preset / đổi chế độ -> tính lại tham số nâng cao.
-        preset.change(_apply_preset, [preset, mode], preset_outputs)
-        mode.change(_apply_preset, [preset, mode], preset_outputs)
+
+        # Chọn preset / đổi chế độ / đổi engine -> tính lại tham số nâng cao.
+        preset.change(_apply_preset, [preset, mode, engine_select], preset_outputs)
+        mode.change(_apply_preset, [preset, mode, engine_select], preset_outputs)
+        engine_select.change(_apply_preset, [preset, mode, engine_select], preset_outputs)
 
         # Khôi phục lựa chọn đã lưu khi tải trang -> đặt component -> tính lại
-        # tùy chọn nâng cao theo preset -> đồng bộ thẻ chế độ (HTML).
-        demo.load(_load_prefs, prefs, [preset, mode, autosave_dir]).then(
-            _apply_preset, [preset, mode], preset_outputs
+        demo.load(_load_prefs, prefs, [preset, mode, autosave_dir, engine_select]).then(
+            _apply_preset, [preset, mode, engine_select], preset_outputs
         ).then(
             None, None, None,
             js="() => window.midSyncModeCards && window.midSyncModeCards()",
         )
-        # Lưu lại mỗi khi đổi preset / chế độ / thư mục lưu.
-        for _comp in (preset, mode, autosave_dir):
-            _comp.change(_save_prefs, [preset, mode, autosave_dir], prefs)
+
+        # Lưu lại mỗi khi đổi preset / chế độ / thư mục lưu / engine.
+        for _comp in (preset, mode, autosave_dir, engine_select):
+            _comp.change(_save_prefs, [preset, mode, autosave_dir, engine_select], prefs)
 
         # Mở hộp thoại Windows -> nạp đường dẫn thật vào State + hiển thị.
         btn_pick.click(on_pick_files, None, [picked_state, picked_view]).then(
             lambda p: gr.update(value=_convert_btn_label(len(p) if p else 0)),
             picked_state, btn_file,
         )
-        # Kéo-thả tệp mới -> xoá lựa chọn từ hộp thoại + cập nhật nhãn nút.
         file_in.change(_on_files_change, file_in, [picked_state, picked_view, btn_file])
 
-        # Chuyển đổi tệp: bật chế độ "đang chạy" (hiện nút Dừng) -> chạy -> tắt.
-        # `proc` là event generator cần nhắm tới khi Dừng (cancels), không phải
-        # bước .then khôi phục nút ở cuối.
         proc = btn_file.click(
             lambda: _set_running(True), None, [btn_file, btn_stop]
         ).then(
@@ -1445,13 +1487,13 @@ def build_ui():
                 ocr_model, ocr_effort, translate_model, translate_effort,
                 force_ocr, board_dpi, translate_vn, merge_ocr_translate,
                 ocr_pages_per_call, autosave_on, autosave_dir,
-                picked_state, autosave_target,
+                picked_state, autosave_target, engine_select,
             ],
             outputs,
             show_progress="full",
         )
         proc.then(lambda: _set_running(False), None, [btn_file, btn_stop])
-        # Chuyển đổi URL cũng hiện nút Dừng (URL như YouTube có thể chậm).
+
         ev_url = btn_url.click(
             lambda: _set_running(True), None, [btn_file, btn_stop]
         ).then(on_convert_url, [url_in, enable_plugins], outputs, show_progress="full")
@@ -1460,7 +1502,7 @@ def build_ui():
             lambda: _set_running(True), None, [btn_file, btn_stop]
         ).then(on_convert_url, [url_in, enable_plugins], outputs, show_progress="full")
         ev_urls.then(lambda: _set_running(False), None, [btn_file, btn_stop])
-        # Bấm Dừng -> hủy các tác vụ đang chạy + khôi phục nút Chuyển đổi.
+
         btn_stop.click(
             lambda: _set_running(False), None, [btn_file, btn_stop],
             cancels=[proc, ev_url, ev_urls],
@@ -1475,3 +1517,4 @@ if __name__ == "__main__":
         inbrowser=True, theme=THEME, css=CSS, head=HEAD,
         allowed_paths=[_OUTPUT_DIR, _ASSETS_DIR],
     )
+

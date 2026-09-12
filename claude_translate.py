@@ -310,6 +310,32 @@ def _call_claude(chunk, model="opus", timeout=600, instruction=None, effort="low
     return out
 
 
+def _call_agy(chunk, model="gemini-3.7-flash", timeout=600, instruction=None, effort="low"):
+    """Gọi Antigravity CLI (`agy -p`) dịch một chunk. Trả về text đã dịch."""
+    from ai_engine import run_agy_prompt, AIEngineError
+
+    prompt = (
+        f"{instruction or TRANSLATE_INSTRUCTION_CHESS}\n\n"
+        f"Nội dung Markdown cần dịch:\n\n{chunk}"
+    )
+    try:
+        return run_agy_prompt(
+            prompt=prompt,
+            model=model,
+            effort=effort,
+            timeout=timeout,
+        )
+    except AIEngineError as exc:
+        raise ClaudeOCRError(str(exc)) from exc
+
+
+def _call_engine_translate(chunk, model, timeout=600, instruction=None, effort="low", engine="antigravity"):
+    """Điều phối dịch thuật qua Antigravity (mặc định) hoặc Claude Code."""
+    if engine == "antigravity":
+        return _call_agy(chunk, model=model, timeout=timeout, instruction=instruction, effort=effort)
+    return _call_claude(chunk, model=model, timeout=timeout, instruction=instruction, effort=effort)
+
+
 def _placeholders_in(text):
     """Tập số thứ tự placeholder xuất hiện trong text."""
     return set(_PLACEHOLDER_RE.findall(text))
@@ -331,12 +357,6 @@ _VI_DIACRITICS = set(
 def _looks_untranslated(text, chess_lang="en"):
     """True nếu text có đủ nhiều chữ cái nhưng gần như không có dấu tiếng Việt
     (hoặc còn sót nhiều chữ Cyrillic với sách Nga) -> nhiều khả năng CHƯA dịch.
-
-    Dùng làm hậu kiểm: bản dịch tiếng Việt thật luôn có mật độ dấu cao, nên một
-    đoạn dài mà gần như không có dấu (hay còn nhiều Cyrillic) là dấu hiệu model
-    đã bỏ qua bước dịch. Đoạn quá ngắn -> trả False (không kết luận, tránh báo
-    nhầm). Bỏ placeholder và mọi fenced block trước khi đo để FEN/ký hiệu nước
-    đi không làm lệch kết quả.
     """
     prose = _CODE_BLOCK_RE.sub(" ", text)
     prose = _PLACEHOLDER_RE.sub(" ", prose).lower()
@@ -355,12 +375,12 @@ def _looks_untranslated(text, chess_lang="en"):
     return viet / total < 0.02
 
 
-# Số chunk dịch song song (mỗi chunk là một tiến trình `claude` riêng).
+# Số chunk dịch song song (mỗi chunk là một tiến trình riêng).
 TRANSLATE_WORKERS = 8
 
 
 def _translate_chunk(chunk, model, timeout, instruction, effort="low",
-                     chess_lang="en"):
+                     chess_lang="en", engine="antigravity"):
     """Dịch 1 chunk với 1 lần thử lại + hậu kiểm placeholder + hậu kiểm ngôn ngữ.
 
     Chunk lỗi hoặc bị mất placeholder -> trả về nguyên văn chunk kèm ghi chú,
@@ -372,9 +392,9 @@ def _translate_chunk(chunk, model, timeout, instruction, effort="low",
     err = None
     for _attempt in range(2):  # thử lại 1 lần nếu lỗi / nếu chưa dịch
         try:
-            cand = _call_claude(
+            cand = _call_engine_translate(
                 chunk, model=model, timeout=timeout, instruction=instruction,
-                effort=effort,
+                effort=effort, engine=engine,
             )
         except ClaudeOCRError as exc:
             err = exc
@@ -396,10 +416,10 @@ def _translate_chunk(chunk, model, timeout, instruction, effort="low",
 
 
 def translate_markdown_vn(
-    md, model="opus", progress=None, timeout=600, chess=True,
-    workers=TRANSLATE_WORKERS, chess_lang="en", effort="low",
+    md, model="gemini-3.7-flash", progress=None, timeout=600, chess=True,
+    workers=TRANSLATE_WORKERS, chess_lang="en", effort="low", engine="antigravity",
 ):
-    """Dịch Markdown sang tiếng Việt.
+    """Dịch Markdown sang tiếng Việt qua Antigravity hoặc Claude Code.
 
     chess=True (sách cờ vua): dịch theo quy tắc ký hiệu cờ vua (V/H/X/T/M...),
     giữ nguyên các block ```chessboard. chess_lang chọn bảng ký hiệu nguồn:
@@ -407,11 +427,7 @@ def translate_markdown_vn(
     Кр/Ф/Л/С/К; "es" = ký hiệu tiếng Tây Ban Nha R/D/T/A/C. Output tiếng Việt
     giống nhau, chỉ khác ký hiệu nguồn.
     chess=False (tài liệu thường): dịch thông thường, giữ nguyên mọi code block.
-
-    Các chunk được dịch song song `workers` chunk một lúc, ghép đúng thứ tự.
-    progress: callable(i, n) — gọi mỗi khi xong thêm một chunk (i = số đã xong).
-    Chunk lỗi (sau 1 lần thử lại) hoặc bị mất placeholder -> giữ nguyên văn
-    chunk gốc kèm ghi chú, không hủy cả bản dịch.
+    engine: 'antigravity' (mặc định) hoặc 'claude'.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -436,7 +452,7 @@ def translate_markdown_vn(
         futures = {
             pool.submit(
                 _translate_chunk, chunk, model, timeout, instruction, effort,
-                chess_lang,
+                chess_lang, engine=engine,
             ): idx
             for idx, chunk in enumerate(chunks)
         }
@@ -447,3 +463,4 @@ def translate_markdown_vn(
                 progress(n_done, len(chunks))
 
     return _restore_boards("\n\n".join(out_parts).strip(), blocks)
+
