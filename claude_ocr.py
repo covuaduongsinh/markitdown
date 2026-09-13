@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-OCR cho PDF / ảnh scan bằng Claude Code ở chế độ headless (KHÔNG cần API key).
+OCR cho PDF / ảnh scan qua AI Engine ở chế độ headless (KHÔNG cần API key).
 
-Ý tưởng: render từng trang PDF thành ảnh PNG, rồi gọi `claude -p` (Claude Code)
-để đọc ảnh (qua tool Read) và trích toàn bộ văn bản ra Markdown. Xác thực bằng
-phiên đăng nhập Claude Code hiện có của người dùng.
+Ý tưởng: render từng trang PDF thành ảnh PNG, rồi gọi AI Engine đã chọn — Google
+Antigravity (`agy -p`, mặc định) hoặc Claude Code (`claude -p`, phương án 2) —
+để đọc ảnh và trích toàn bộ văn bản ra Markdown. Việc chọn engine + danh sách
+model của từng engine nằm ở `ai_engine.py`. Xác thực bằng phiên đăng nhập CLI
+hiện có của người dùng (không cần API key).
 
 Phụ thuộc: pypdfium2 + Pillow (đã có sẵn trong venv qua markitdown[all]),
-và CLI `claude` (Claude Code) trong PATH.
+và CLI `agy` (Google Antigravity) hoặc `claude` (Claude Code) trong PATH.
 """
 
 import json
@@ -22,9 +24,6 @@ try:
     import chessboard_fen  # nhận diện bàn cờ -> FEN cục bộ bằng model ONNX
 except Exception:
     chessboard_fen = None
-
-# Ánh xạ nhãn model trên giao diện -> alias dùng cho `--model`
-MODEL_ALIASES = {"opus", "sonnet", "haiku"}
 
 # Quy tắc dọn các thành phần phụ trợ của trang in (header/footer/số trang).
 # Dùng chung cho mọi chế độ -> nối vào cuối _PROMPT_HEADER.
@@ -775,11 +774,19 @@ def ocr_pdf(
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def _ocr_image_with_retry(img_path, **kwargs):
+    """OCR 1 ảnh với 1 lần thử lại, cùng pattern với _ocr_page_group (PDF)."""
+    try:
+        return ocr_image_path(img_path, **kwargs)
+    except ClaudeOCRError:
+        return ocr_image_path(img_path, **kwargs)
+
+
 def ocr_image_file(
     img_path, model="gemini-3.7-flash", page_timeout=600, chess=True,
     chess_lang="en", effort=None, translate_to=None, engine="antigravity",
 ):
-    """OCR một tệp ảnh đơn lẻ (jpg/png...)."""
+    """OCR một tệp ảnh đơn lẻ (jpg/png...), tự thử lại 1 lần nếu lỗi."""
     board_fens = None
     if chess:
         try:
@@ -789,7 +796,7 @@ def ocr_image_file(
                 board_fens = _page_board_fens(im.convert("RGB"))
         except Exception:
             board_fens = None
-    return ocr_image_path(
+    return _ocr_image_with_retry(
         img_path, model=model, timeout=page_timeout, board_fens=board_fens,
         chess=chess, chess_lang=chess_lang, effort=effort,
         translate_to=translate_to, engine=engine,
