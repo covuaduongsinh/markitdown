@@ -253,7 +253,7 @@ def _split_chunks(md, max_chars=6000):
     return chunks
 
 
-def _call_claude(chunk, model="opus", timeout=600, instruction=None, effort="low"):
+def _call_claude(chunk, model="opus", timeout=600, instruction=None, effort="low", claude_token=None):
     """Gọi `claude -p` dịch một chunk (đưa qua stdin). Trả về text đã dịch."""
     claude = find_claude()
     if not claude:
@@ -283,7 +283,7 @@ def _call_claude(chunk, model="opus", timeout=600, instruction=None, effort="low
             encoding="utf-8",
             errors="replace",
             timeout=timeout,
-            env=_claude_env(),
+            env=_claude_env(claude_token),
         )
     except subprocess.TimeoutExpired as exc:
         raise ClaudeOCRError(
@@ -330,11 +330,11 @@ def _call_agy(chunk, model="gemini-3.7-flash", timeout=600, instruction=None, ef
         raise ClaudeOCRError(str(exc)) from exc
 
 
-def _call_engine_translate(chunk, model, timeout=600, instruction=None, effort="low", engine="antigravity", api_key=None):
+def _call_engine_translate(chunk, model, timeout=600, instruction=None, effort="low", engine="antigravity", api_key=None, claude_token=None):
     """Điều phối dịch thuật qua Antigravity / Gemini API (mặc định) hoặc Claude Code."""
     if engine == "antigravity":
         return _call_agy(chunk, model=model, timeout=timeout, instruction=instruction, effort=effort, api_key=api_key)
-    return _call_claude(chunk, model=model, timeout=timeout, instruction=instruction, effort=effort)
+    return _call_claude(chunk, model=model, timeout=timeout, instruction=instruction, effort=effort, claude_token=claude_token)
 
 
 def _placeholders_in(text):
@@ -381,7 +381,8 @@ TRANSLATE_WORKERS = 8
 
 
 def _translate_chunk(chunk, model, timeout, instruction, effort="low",
-                     chess_lang="en", engine="antigravity", api_key=None):
+                     chess_lang="en", engine="antigravity", api_key=None,
+                     claude_token=None):
     """Dịch 1 chunk với 1 lần thử lại + hậu kiểm placeholder + hậu kiểm ngôn ngữ.
 
     Chunk lỗi hoặc bị mất placeholder -> trả về nguyên văn chunk kèm ghi chú,
@@ -396,6 +397,7 @@ def _translate_chunk(chunk, model, timeout, instruction, effort="low",
             cand = _call_engine_translate(
                 chunk, model=model, timeout=timeout, instruction=instruction,
                 effort=effort, engine=engine, api_key=api_key,
+                claude_token=claude_token,
             )
         except ClaudeOCRError as exc:
             err = exc
@@ -419,7 +421,7 @@ def _translate_chunk(chunk, model, timeout, instruction, effort="low",
 def translate_markdown_vn(
     md, model="gemini-3.7-flash", progress=None, timeout=600, chess=True,
     workers=TRANSLATE_WORKERS, chess_lang="en", effort="low", engine="antigravity",
-    api_key=None,
+    api_key=None, claude_token=None,
 ):
     """Dịch Markdown sang tiếng Việt qua Antigravity hoặc Claude Code.
 
@@ -455,6 +457,7 @@ def translate_markdown_vn(
             pool.submit(
                 _translate_chunk, chunk, model, timeout, instruction, effort,
                 chess_lang, engine=engine, api_key=api_key,
+                claude_token=claude_token,
             ): idx
             for idx, chunk in enumerate(chunks)
         }

@@ -2,16 +2,18 @@
 """
 Module Quản lý & Kiểm tra Hạ tầng (Infrastructure Manager) cho MarkItDown.
 
-Cung cấp các tính năng:
-1. Kiểm tra tính hợp lệ & đo độ trễ kết nối tới Google Gemini REST API.
-2. Quét và tổng hợp trạng thái các thành phần hạ tầng (AI Engine, ONNX Chess Model,
-   PDF/Office engines, CLI tools, runtime environment).
-3. Tạo báo cáo trạng thái dạng HTML / Markdown trực quan cho giao diện người dùng.
+Hỗ trợ các phương thức kết nối:
+1. 💎 Gói Thuê bao Tháng (Subscription Mode - KHÔNG tốn tiền API):
+   - Google Antigravity CLI (`agy` CLI - Dùng phiên đăng nhập Google Gemini Advanced/Pro).
+   - Claude Code CLI (`claude` CLI - Dùng phiên đăng nhập Claude Pro/Team/Max).
+2. 🔑 Khóa API (Pay-as-you-go API Key):
+   - Google Gemini REST API Direct (Dành cho Web/Docker).
 """
 
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 import urllib.error
@@ -27,7 +29,6 @@ def test_gemini_connection(api_key):
     if not key:
         return False, "❌ Chưa nhập Gemini API Key.", 0.0
 
-    # Dùng endpoint v1beta models để kiểm tra nhanh tính hợp lệ và đo độ trễ
     url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
     start = time.perf_counter()
     try:
@@ -59,31 +60,161 @@ def test_gemini_connection(api_key):
         return False, f"❌ Lỗi kết nối mạng: {exc}", elapsed
 
 
-def get_infrastructure_status(api_key=""):
-    """Quét toàn bộ trạng thái hạ tầng và các module của MarkItDown.
+def test_claude_cli_connection(claude_token=""):
+    """Kiểm tra kết nối Claude Code CLI bằng phiên đăng nhập gói thuê bao tháng (Claude Pro/Team/Max).
 
-    Trả về dict chứa thông tin chi tiết từng module.
+    Trả về: (bool: is_ok, str: message, float: latency_ms)
     """
-    key = (api_key or "").strip() or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    
-    # 1. AI Engine Status
-    has_gemini_key = bool(key)
-    has_agy_cli = bool(shutil.which("agy"))
-    has_claude_cli = bool(shutil.which("claude"))
-    
-    ai_status = "unconfigured"
-    ai_desc = "Chưa cấu hình API Key hoặc CLI"
-    if has_gemini_key:
-        ai_status = "ready_api"
-        ai_desc = "Google Gemini REST API (Sẵn sàng)"
-    elif has_agy_cli:
-        ai_status = "ready_cli"
-        ai_desc = "Google Antigravity CLI (Sẵn sàng trên máy cục bộ)"
-    elif has_claude_cli:
-        ai_status = "ready_cli"
-        ai_desc = "Claude Code CLI (Sẵn sàng trên máy cục bộ)"
+    from ai_engine import find_claude
 
-    # 2. ONNX Chessboard Recognizer
+    claude_bin = find_claude()
+    if not claude_bin:
+        return (
+            False,
+            "⚠️ Chưa tìm thấy lệnh 'claude' CLI trên hệ thống.\n\n"
+            "👉 **Trên máy tính**: Cài đặt bằng `npm install -g @anthropic-ai/claude-code` và chạy `claude` để đăng nhập.\n"
+            "👉 **Trên Web VPS**: Lệnh `claude` đã được tích hợp trong container.",
+            0.0,
+        )
+
+    token = (claude_token or "").strip()
+    env = os.environ.copy()
+    env["DISABLE_AUTOUPDATER"] = "1"
+    env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+    if token:
+        env["CLAUDE_CODE_SESSION_ACCESS_TOKEN"] = token
+        env["ANTHROPIC_SESSION_KEY"] = token
+        env["ANTHROPIC_API_KEY"] = token
+
+    start = time.perf_counter()
+    try:
+        cmd = [
+            claude_bin,
+            "-p",
+            "Say 'OK' in one word",
+            "--dangerously-skip-permissions",
+            "--disable-slash-commands",
+            "--no-session-persistence",
+        ]
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+            stdin=subprocess.DEVNULL,
+            env=env,
+            creationflags=flags,
+        )
+        elapsed = (time.perf_counter() - start) * 1000.0
+        if proc.returncode == 0:
+            return (
+                True,
+                f"✅ Kết nối thành công tới Claude Code CLI ({elapsed:.0f}ms)!\n"
+                f"💎 Đang sử dụng phiên đăng nhập Thuê bao tháng (Claude Pro/Max/Team - 0đ phí API).",
+                elapsed,
+            )
+        err = (proc.stderr or proc.stdout or "").strip()
+        if "login" in err.lower() or "auth" in err.lower() or "session" in err.lower():
+            return (
+                False,
+                f"⚠️ Phiên đăng nhập Claude Code chưa được kích hoạt hoặc đã hết hạn.\n\n"
+                f"👉 Hãy chạy lệnh `claude` trên máy tính để đăng nhập tài khoản thuê bao tháng, hoặc dán Token phiên đăng nhập vào ô bên dưới.",
+                elapsed,
+            )
+        return False, f"⚠️ Claude Code phản hồi lỗi (exit {proc.returncode}): {err[:300]}", elapsed
+    except subprocess.TimeoutExpired:
+        elapsed = (time.perf_counter() - start) * 1000.0
+        return False, f"⚠️ Quá thời gian kết nối tới Claude Code ({elapsed:.0f}ms).", elapsed
+    except Exception as exc:
+        elapsed = (time.perf_counter() - start) * 1000.0
+        return False, f"❌ Lỗi thực thi Claude Code: {exc}", elapsed
+
+
+def test_antigravity_cli_connection():
+    """Kiểm tra kết nối Google Antigravity CLI bằng phiên đăng nhập gói thuê bao (Google Gemini Advanced).
+
+    Trả về: (bool: is_ok, str: message, float: latency_ms)
+    """
+    from ai_engine import find_agy
+
+    agy_bin = find_agy()
+    if not agy_bin:
+        return (
+            False,
+            "⚠️ Chưa tìm thấy Google Antigravity CLI ('agy') trong PATH.\n\n"
+            "👉 Antigravity CLI được cài đặt khi chạy MarkItDown trên máy tính cá nhân (Desktop).",
+            0.0,
+        )
+
+    start = time.perf_counter()
+    try:
+        cmd = [
+            agy_bin,
+            "-p",
+            "Say 'OK' in one word",
+            "--disable-slash-commands",
+            "--dangerously-skip-permissions",
+            "--output-format",
+            "json",
+        ]
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+            stdin=subprocess.DEVNULL,
+            creationflags=flags,
+        )
+        elapsed = (time.perf_counter() - start) * 1000.0
+        if proc.returncode == 0:
+            return (
+                True,
+                f"✅ Kết nối thành công tới Google Antigravity CLI ({elapsed:.0f}ms)!\n"
+                f"💎 Đang sử dụng phiên đăng nhập Thuê bao Google Antigravity (0đ phí API).",
+                elapsed,
+            )
+        err = (proc.stderr or proc.stdout or "").strip()
+        return False, f"⚠️ Antigravity phản hồi lỗi: {err[:300]}", elapsed
+    except subprocess.TimeoutExpired:
+        elapsed = (time.perf_counter() - start) * 1000.0
+        return False, f"⚠️ Quá thời gian kết nối tới Antigravity ({elapsed:.0f}ms).", elapsed
+    except Exception as exc:
+        elapsed = (time.perf_counter() - start) * 1000.0
+        return False, f"❌ Lỗi thực thi Antigravity: {exc}", elapsed
+
+
+def get_infrastructure_status(api_key="", claude_token=""):
+    """Quét toàn bộ trạng thái hạ tầng và các module của MarkItDown."""
+    from ai_engine import find_agy, find_claude
+
+    key = (api_key or "").strip() or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    c_token = (claude_token or "").strip() or os.environ.get("CLAUDE_CODE_SESSION_ACCESS_TOKEN") or os.environ.get("ANTHROPIC_SESSION_KEY")
+
+    has_gemini_key = bool(key)
+    has_claude_token = bool(c_token)
+    has_agy_cli = bool(find_agy())
+    has_claude_cli = bool(find_claude())
+
+    # Trạng thái gói thuê bao tháng
+    sub_status = "unconfigured"
+    sub_desc = "Chưa kết nối phiên thuê bao CLI"
+    if has_agy_cli:
+        sub_status = "ready_agy"
+        sub_desc = "⚡ Google Antigravity CLI (Thuê bao tháng - Sẵn sàng)"
+    elif has_claude_cli and has_claude_token:
+        sub_status = "ready_claude_token"
+        sub_desc = "🟣 Claude Code CLI (Token thuê bao Pro/Max - Sẵn sàng)"
+    elif has_claude_cli:
+        sub_status = "ready_claude"
+        sub_desc = "🟣 Claude Code CLI (Sẵn sàng phiên máy chủ)"
+
+    # Trạng thái ONNX
     has_onnx = False
     onnx_desc = "Chưa nạp module nhận diện cờ vua"
     try:
@@ -93,74 +224,58 @@ def get_infrastructure_status(api_key=""):
     except Exception as exc:
         onnx_desc = f"Không nạp được: {exc}"
 
-    # 3. Document Processing Modules
-    doc_modules = {}
-    for mod_name, label in [
-        ("pypdfium2", "PDFium (Render PDF chất lượng cao)"),
-        ("pdfminer", "PDFMiner (Trích xuất text PDF)"),
-        ("docx", "Python-docx (Xử lý Word)"),
-        ("pptx", "Python-pptx (Xử lý PowerPoint)"),
-        ("openpyxl", "OpenPyXL (Xử lý Excel)"),
-        ("PIL", "Pillow (Xử lý Ảnh)"),
-    ]:
-        try:
-            __import__(mod_name)
-            doc_modules[mod_name] = (True, label)
-        except ImportError:
-            doc_modules[mod_name] = (False, label)
-
-    # 4. External CLI Tools
-    has_ffmpeg = bool(shutil.which("ffmpeg") or os.environ.get("FFMPEG_PATH"))
-    has_exiftool = bool(shutil.which("exiftool") or os.environ.get("EXIFTOOL_PATH"))
-
-    # 5. Environment
+    # Runtime Environment
     is_docker = bool(os.environ.get("DOCKER") or os.path.exists("/.dockerenv"))
     env_name = "Docker Container (Linux VPS)" if is_docker else f"Desktop / Native ({sys.platform})"
 
     return {
-        "ai": {
-            "status": ai_status,
-            "description": ai_desc,
-            "has_key": has_gemini_key,
+        "subscription": {
+            "status": sub_status,
+            "description": sub_desc,
             "has_agy": has_agy_cli,
             "has_claude": has_claude_cli,
+            "has_claude_token": has_claude_token,
+        },
+        "api": {
+            "has_gemini_key": has_gemini_key,
+            "description": "Google Gemini REST API (Sẵn sàng)" if has_gemini_key else "Chưa nhập API Key",
         },
         "chessboard_onnx": {
             "available": has_onnx,
             "description": onnx_desc,
         },
-        "doc_modules": doc_modules,
-        "tools": {
-            "ffmpeg": has_ffmpeg,
-            "exiftool": has_exiftool,
-        },
         "environment": env_name,
     }
 
 
-def render_infrastructure_html(api_key=""):
+def render_infrastructure_html(api_key="", claude_token=""):
     """Sinh HTML hiển thị bảng trạng thái hạ tầng hệ thống cho giao diện Web."""
-    status = get_infrastructure_status(api_key=api_key)
+    status = get_infrastructure_status(api_key=api_key, claude_token=claude_token)
 
     def _badge(ok, true_text, false_text):
         if ok:
-            return f'<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:rgba(31,169,143,0.15);color:#1FA98F;border:1px solid rgba(31,169,143,0.3)">● {true_text}</span>'
-        return f'<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:rgba(245,158,11,0.15);color:#d97706;border:1px solid rgba(245,158,11,0.3)">○ {false_text}</span>'
+            return f'<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;background:rgba(31,169,143,0.15);color:#1FA98F;border:1px solid rgba(31,169,143,0.3)">● {true_text}</span>'
+        return f'<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;background:rgba(245,158,11,0.15);color:#d97706;border:1px solid rgba(245,158,11,0.3)">○ {false_text}</span>'
 
-    ai_ok = status["ai"]["has_key"] or status["ai"]["has_agy"] or status["ai"]["has_claude"]
-    ai_badge = _badge(ai_ok, status["ai"]["description"], "Chưa có API Key (Chỉ dùng MarkItDown thường)")
+    sub_ok = status["subscription"]["has_agy"] or status["subscription"]["has_claude_token"] or (status["subscription"]["has_claude"] and not status["environment"].startswith("Desktop"))
+    sub_badge = _badge(sub_ok, status["subscription"]["description"], "Chưa kết nối CLI / Token thuê bao")
+    api_badge = _badge(status["api"]["has_gemini_key"], status["api"]["description"], "Chưa cấu hình API Key")
     onnx_badge = _badge(status["chessboard_onnx"]["available"], "Sẵn sàng (ONNX FEN)", "Tắt")
     env_text = status["environment"]
 
     return f"""
 <div class="infra-panel" style="background:var(--c-inset);border:1px solid var(--c-border);border-radius:12px;padding:16px;margin:10px 0;">
   <div style="font-size:13px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--c-subtext);margin-bottom:12px;display:flex;align-items:center;gap:6px;">
-    <span>⚡ Trạng thái Hạ tầng &amp; Động cơ Chuyển đổi</span>
+    <span>⚡ Trạng thái Hạ tầng &amp; Phiên Đăng nhập AI</span>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:10px;">
     <div style="background:var(--c-panel);border:1px solid var(--c-border);border-radius:10px;padding:10px 14px;">
-      <div style="font-size:12px;color:var(--c-subtext);margin-bottom:4px;">🤖 AI Engine (OCR &amp; Dịch thuật)</div>
-      <div>{ai_badge}</div>
+      <div style="font-size:12px;color:var(--c-subtext);margin-bottom:4px;">💎 Gói Thuê bao Tháng (CLI Session)</div>
+      <div>{sub_badge}</div>
+    </div>
+    <div style="background:var(--c-panel);border:1px solid var(--c-border);border-radius:10px;padding:10px 14px;">
+      <div style="font-size:12px;color:var(--c-subtext);margin-bottom:4px;">🔑 Khóa API Dự phòng (Pay-as-you-go)</div>
+      <div>{api_badge}</div>
     </div>
     <div style="background:var(--c-panel);border:1px solid var(--c-border);border-radius:10px;padding:10px 14px;">
       <div style="font-size:12px;color:var(--c-subtext);margin-bottom:4px;">♟️ Nhận diện Bàn cờ Cờ vua</div>

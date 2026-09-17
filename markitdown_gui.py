@@ -313,7 +313,7 @@ def _pages_from_label(label):
 def _ocr_to_outputs(
     file_path, base_name, model, board_dpi=400, used_paths=None, chess=True,
     progress=None, chess_lang="en", effort=None, merge_translate=False,
-    pages_per_call=1, engine="antigravity", api_key=None,
+    pages_per_call=1, engine="antigravity", api_key=None, claude_token=None,
 ):
     """Chạy OCR (PDF hoặc ảnh) qua AI Engine (Antigravity hoặc Claude Code) và trả về 4-tuple kết quả.
 
@@ -330,13 +330,13 @@ def _ocr_to_outputs(
             file_path, model=model, board_dpi=board_dpi, chess=chess,
             progress=progress, chess_lang=chess_lang, effort=effort,
             translate_to=translate_to, pages_per_call=pages_per_call,
-            engine=engine, api_key=api_key,
+            engine=engine, api_key=api_key, claude_token=claude_token,
         )
     else:
         text = claude_ocr.ocr_image_file(
             file_path, model=model, chess=chess, chess_lang=chess_lang,
             effort=effort, translate_to=translate_to, engine=engine,
-            api_key=api_key,
+            api_key=api_key, claude_token=claude_token,
         )
 
     if not text.strip():
@@ -358,6 +358,7 @@ def convert_file(
     board_dpi_label=None, used_paths=None, chess=True, progress=None,
     chess_lang="en", ocr_effort_label=None, merge_translate=False,
     ocr_pages_label=None, engine="antigravity", api_key=None,
+    claude_token=None,
 ):
     if not file_path:
         return "", "", None, "ℹ️ Hãy chọn hoặc kéo-thả một tệp trước."
@@ -376,13 +377,13 @@ def convert_file(
 
     # Ảnh: built-in chỉ ra metadata/mô tả, nên OCR trực tiếp nếu được bật.
     if use_ocr and is_image:
-        if not is_engine_available(engine, api_key=api_key):
+        if not is_engine_available(engine, api_key=api_key, claude_token=claude_token):
             # Không có CLI hoặc API Key -> thử chuyển đổi thường.
             preview, raw_md, download, st = _convert(file_path, enable_plugins, base_name, used_paths)
             if not (raw_md or "").strip():
                 st = (
-                    "⚠️ **Tệp ảnh**: Cần API Key để nhận diện văn bản & hình cờ.\n\n"
-                    "👉 Vui lòng mở tab **⚙️ Cài đặt Hạ tầng & API** để nhập Gemini API Key miễn phí!"
+                    "⚠️ **Tệp ảnh**: Cần phiên thuê bao tháng hoặc API Key để nhận diện văn bản & hình cờ.\n\n"
+                    "👉 Vui lòng mở tab **⚙️ Cài đặt Hạ tầng & API** để kết nối gói thuê bao hoặc nhập API Key!"
                 )
             return preview, raw_md, download, st
         try:
@@ -390,25 +391,25 @@ def convert_file(
                 file_path, base_name, model, board_dpi, used_paths, chess=chess,
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
-                engine=engine, api_key=api_key,
+                engine=engine, api_key=api_key, claude_token=claude_token,
             )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
 
     # PDF + "Buộc OCR": bỏ qua lớp text có sẵn, OCR lại toàn bộ bằng AI Engine.
     if use_ocr and is_pdf and force_ocr:
-        if not is_engine_available(engine, api_key=api_key):
+        if not is_engine_available(engine, api_key=api_key, claude_token=claude_token):
             # Fallback sang chuyển đổi chuẩn của MarkItDown kèm ghi chú
             preview, raw_md, download, st = _convert(
                 file_path, enable_plugins, base_name, used_paths
             )
             if (raw_md or "").strip():
-                warning = "ℹ️ Đã chuyển đổi văn bản chuẩn MarkItDown. (Để nhận diện thế cờ & dịch tiếng Việt, hãy nhập Gemini API Key tại tab **⚙️ Cài đặt Hạ tầng & API**)."
+                warning = "ℹ️ Đã chuyển đổi văn bản chuẩn MarkItDown. (Để nhận diện thế cờ & dịch tiếng Việt, hãy kết nối gói thuê bao hoặc nhập API Key tại tab **⚙️ Cài đặt Hạ tầng & API**)."
                 st = f"{warning}\n\n{st}" if st else warning
             else:
                 st = (
                     "⚠️ **PDF Scan (Dạng ảnh)**: Không tìm thấy lớp văn bản thô để trích xuất trực tiếp.\n\n"
-                    "👉 **Cách xử lý**: Vui lòng chuyển sang tab **⚙️ Cài đặt Hạ tầng & API** ở bên trái để nhập **Gemini API Key** (miễn phí), sau đó bấm Chuyển đổi lại để nhận diện toàn bộ nội dung & thế cờ!"
+                    "👉 **Cách xử lý**: Vui lòng chuyển sang tab **⚙️ Cài đặt Hạ tầng & API** để kết nối **Gói Thuê bao tháng (0đ phí API)** hoặc nhập **Gemini API Key**!"
                 )
             return preview, raw_md, download, st
         try:
@@ -416,7 +417,7 @@ def convert_file(
                 file_path, base_name, model, board_dpi, used_paths, chess=chess,
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
-                engine=engine, api_key=api_key,
+                engine=engine, api_key=api_key, claude_token=claude_token,
             )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
@@ -428,20 +429,20 @@ def convert_file(
 
     # PDF scan (không có lớp text) -> OCR fallback nếu được bật.
     if use_ocr and is_pdf and not (raw_md or "").strip():
-        if not is_engine_available(engine, api_key=api_key):
+        if not is_engine_available(engine, api_key=api_key, claude_token=claude_token):
             return (
                 preview,
                 raw_md,
                 download,
                 "⚠️ **PDF Scan (Dạng ảnh)**: Không có lớp văn bản.\n\n"
-                "👉 Vui lòng mở tab **⚙️ Cài đặt Hạ tầng & API** để nhập Gemini API Key miễn phí, sau đó bấm Chuyển đổi lại để OCR AI.",
+                "👉 Vui lòng mở tab **⚙️ Cài đặt Hạ tầng & API** để kết nối gói thuê bao tháng hoặc nhập API Key miễn phí.",
             )
         try:
             return _ocr_to_outputs(
                 file_path, base_name, model, board_dpi, used_paths, chess=chess,
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
-                engine=engine, api_key=api_key,
+                engine=engine, api_key=api_key, claude_token=claude_token,
             )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
@@ -927,6 +928,7 @@ def _with_download_update(result):
 def _translate_to_vn(
     raw_md, orig_path, model, done_paths, chess=True, progress=None,
     chess_lang="en", effort="low", engine=ENGINE_ANTIGRAVITY, api_key=None,
+    claude_token=None,
 ):
     """Dịch raw_md sang tiếng Việt, ghi tệp `<tên gốc>_vn.md`.
 
@@ -938,13 +940,14 @@ def _translate_to_vn(
     import claude_translate
 
     engine_name = "Google Antigravity / Gemini" if engine == ENGINE_ANTIGRAVITY else "Claude Code"
-    if not is_engine_available(engine, api_key=api_key):
-        cmd_name = "lệnh 'agy' hoặc Gemini API Key" if engine == ENGINE_ANTIGRAVITY else "lệnh 'claude'"
+    if not is_engine_available(engine, api_key=api_key, claude_token=claude_token):
+        cmd_name = "lệnh 'agy' hoặc Gemini API Key" if engine == ENGINE_ANTIGRAVITY else "lệnh 'claude' hoặc Token thuê bao"
         return None, f"⚠️ Bỏ qua dịch: cần {engine_name} ({cmd_name})."
     try:
         vn_text = claude_translate.translate_markdown_vn(
             raw_md, model=model, chess=chess, progress=progress,
             chess_lang=chess_lang, effort=effort, engine=engine, api_key=api_key,
+            claude_token=claude_token,
         )
         vn_name = os.path.splitext(os.path.basename(orig_path))[0] + "_vn"
         vn_path = _write_md(vn_text, vn_name, done_paths)
@@ -1036,7 +1039,7 @@ def on_convert_files(
     model_label, ocr_effort_label, translate_model_label, translate_effort_label,
     force_ocr, board_dpi_label, translate_vn, merge_ocr_translate, ocr_pages_label,
     autosave_on, autosave_dir, picked_paths, autosave_target, engine,
-    api_key="",
+    api_key="", claude_token="",
 ):
     try:
         raw_sources = picked_paths if picked_paths else file_paths
@@ -1106,6 +1109,7 @@ def on_convert_files(
                         ocr_effort_label=ocr_effort_label,
                         merge_translate=merge, ocr_pages_label=ocr_pages_label,
                         engine=engine, api_key=api_key or None,
+                        claude_token=claude_token or None,
                     ),
                     label=f"⏳ Đang xử lý {i}/{total}: **{name}**",
                     unit="trang",
@@ -1153,7 +1157,8 @@ def on_convert_files(
                         dict(
                             raw_md=raw_md, orig_path=path, model=model,
                             done_paths=done_paths, chess=chess, chess_lang=chess_lang,
-                            effort=translate_effort, engine=engine, api_key=api_key or None,
+                            effort=translate_effort, engine=engine,
+                            api_key=api_key or None, claude_token=claude_token or None,
                         ),
                         label=f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**",
                         unit="đoạn",
@@ -1276,7 +1281,7 @@ def _set_running(running):
 
 
 def _load_prefs(p):
-    """BrowserState -> đặt lại preset/chế độ/thư mục lưu/engine/api_key khi tải trang."""
+    """BrowserState -> đặt lại preset/chế độ/thư mục lưu/engine/api_key/claude_token khi tải trang."""
     p = p or {}
     default_eng = get_default_engine()
     return (
@@ -1285,10 +1290,11 @@ def _load_prefs(p):
         gr.update(value=p.get("dir") or os.path.join(os.path.expanduser("~"), "Downloads")),
         gr.update(value=p.get("engine", default_eng)),
         gr.update(value=p.get("api_key", "")),
+        gr.update(value=p.get("claude_token", "")),
     )
 
 
-def _save_prefs(preset_v, mode_v, dir_v, engine_v, api_key_v=""):
+def _save_prefs(preset_v, mode_v, dir_v, engine_v, api_key_v="", claude_token_v=""):
     """Gói lựa chọn hiện tại để lưu vào BrowserState (localStorage)."""
     return {
         "preset": preset_v,
@@ -1296,6 +1302,7 @@ def _save_prefs(preset_v, mode_v, dir_v, engine_v, api_key_v=""):
         "dir": dir_v,
         "engine": engine_v,
         "api_key": api_key_v,
+        "claude_token": claude_token_v,
     }
 
 
@@ -1354,6 +1361,46 @@ def build_ui():
                                 elem_id="mid-infra-status",
                             )
                             with gr.Group():
+                                gr.HTML(
+                                    '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
+                                    '💎 Gói Thuê bao Tháng (Claude Pro/Max & Antigravity CLI - 0đ phí API)'
+                                    '</div>'
+                                )
+                                claude_token_in = gr.Textbox(
+                                    label="Claude Code Session Token / OAuth Key",
+                                    placeholder="sk-ant-sid01-... hoặc dán Token phiên đăng nhập",
+                                    type="password",
+                                    value="",
+                                    elem_classes="mid-claude-token",
+                                    info="Dùng gói thuê bao tháng Claude Pro/Team/Max để OCR và dịch thuật miễn phí 100% (không tính phí token API).",
+                                )
+                                with gr.Row():
+                                    btn_test_sub = gr.Button(
+                                        "🔍 Kiểm tra phiên đăng nhập Thuê bao",
+                                        variant="secondary",
+                                        size="sm",
+                                    )
+                                sub_test_status = gr.Markdown(
+                                    "",
+                                    elem_id="mid-sub-test-status",
+                                )
+                                gr.HTML(
+                                    '<div style="margin-top:6px;padding:8px 12px;border-radius:8px;'
+                                    'background:rgba(43,57,144,0.06);border:1px solid rgba(43,57,144,0.18);'
+                                    'font-size:12.5px;color:var(--c-text);">'
+                                    '💎 <b>Hướng dẫn kết nối Thuê bao tháng:</b><br>'
+                                    '• <b>Trên Máy tính (Desktop)</b>: Đăng nhập sẵn `claude` hoặc `agy`, ứng dụng tự động dùng phiên của bạn.<br>'
+                                    '• <b>Trên Web / VPS</b>: Lấy session token từ file <code>~/.claude.json</code> hoặc cookie đăng nhập rồi dán vào ô trên.</div>'
+                                )
+
+                            gr.HTML('<div style="height:1px;background:var(--c-border);margin:12px 0;"></div>')
+
+                            with gr.Group():
+                                gr.HTML(
+                                    '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
+                                    '🔑 Khóa API Dự phòng (Google Gemini / Anthropic API)'
+                                    '</div>'
+                                )
                                 api_key_in = gr.Textbox(
                                     label="Google Gemini API Key (Dùng trực tiếp trên Web)",
                                     placeholder="AIzaSy... (lưu an toàn trên trình duyệt của bạn)",
@@ -1364,7 +1411,7 @@ def build_ui():
                                 )
                                 with gr.Row():
                                     btn_test_api = gr.Button(
-                                        "🔍 Kiểm tra kết nối API",
+                                        "🔍 Kiểm tra kết nối API Key",
                                         variant="secondary",
                                         size="sm",
                                     )
@@ -1538,6 +1585,7 @@ def build_ui():
                 "dir": os.path.join(os.path.expanduser("~"), "Downloads"),
                 "engine": default_eng,
                 "api_key": "",
+                "claude_token": "",
             }
         )
 
@@ -1555,25 +1603,34 @@ def build_ui():
         engine_select.change(_apply_preset, [preset, mode, engine_select], preset_outputs)
 
         # Khôi phục lựa chọn đã lưu khi tải trang -> đặt component -> tính lại
-        demo.load(_load_prefs, prefs, [preset, mode, autosave_dir, engine_select, api_key_in]).then(
+        demo.load(_load_prefs, prefs, [preset, mode, autosave_dir, engine_select, api_key_in, claude_token_in]).then(
             _apply_preset, [preset, mode, engine_select], preset_outputs
         ).then(
             None, None, None,
             js="() => window.midSyncModeCards && window.midSyncModeCards()",
         )
 
-        # Lưu lại mỗi khi đổi preset / chế độ / thư mục lưu / engine / api_key.
-        for _comp in (preset, mode, autosave_dir, engine_select, api_key_in):
-            _comp.change(_save_prefs, [preset, mode, autosave_dir, engine_select, api_key_in], prefs)
+        # Lưu lại mỗi khi đổi preset / chế độ / thư mục lưu / engine / api_key / claude_token.
+        for _comp in (preset, mode, autosave_dir, engine_select, api_key_in, claude_token_in):
+            _comp.change(_save_prefs, [preset, mode, autosave_dir, engine_select, api_key_in, claude_token_in], prefs)
 
-        # Kiểm tra kết nối API Key thời gian thực & cập nhật bảng trạng thái
-        def _on_test_api(k):
-            _ok, _msg, _lat = infrastructure.test_gemini_connection(k)
-            _html = infrastructure.render_infrastructure_html(k)
+        # Kiểm tra kết nối gói thuê bao & cập nhật bảng trạng thái
+        def _on_test_sub(c_tok, k_api):
+            _ok, _msg, _lat = infrastructure.test_claude_cli_connection(c_tok)
+            _html = infrastructure.render_infrastructure_html(api_key=k_api, claude_token=c_tok)
             return _msg, _html
 
-        btn_test_api.click(_on_test_api, api_key_in, [api_test_status, infra_status_html])
-        api_key_in.change(lambda k: infrastructure.render_infrastructure_html(k), api_key_in, infra_status_html)
+        btn_test_sub.click(_on_test_sub, [claude_token_in, api_key_in], [sub_test_status, infra_status_html])
+        claude_token_in.change(lambda c, k: infrastructure.render_infrastructure_html(api_key=k, claude_token=c), [claude_token_in, api_key_in], infra_status_html)
+
+        # Kiểm tra kết nối API Key thời gian thực & cập nhật bảng trạng thái
+        def _on_test_api(k, c_tok):
+            _ok, _msg, _lat = infrastructure.test_gemini_connection(k)
+            _html = infrastructure.render_infrastructure_html(api_key=k, claude_token=c_tok)
+            return _msg, _html
+
+        btn_test_api.click(_on_test_api, [api_key_in, claude_token_in], [api_test_status, infra_status_html])
+        api_key_in.change(lambda k, c: infrastructure.render_infrastructure_html(api_key=k, claude_token=c), [api_key_in, claude_token_in], infra_status_html)
 
         # Mở hộp thoại Windows -> nạp đường dẫn thật vào State + hiển thị.
         btn_pick.click(on_pick_files, None, [picked_state, picked_view]).then(
@@ -1592,7 +1649,7 @@ def build_ui():
                 force_ocr, board_dpi, translate_vn, merge_ocr_translate,
                 ocr_pages_per_call, autosave_on, autosave_dir,
                 picked_state, autosave_target, engine_select,
-                api_key_in,
+                api_key_in, claude_token_in,
             ],
             outputs,
             show_progress="full",

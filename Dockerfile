@@ -9,13 +9,18 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GRADIO_SERVER_PORT=7860 \
     DOCKER=1
 
-# Install runtime & build dependencies
+# Install runtime & build dependencies + Node.js for Claude Code CLI
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libimage-exiftool-perl \
     poppler-utils \
     git \
     curl \
+    ca-certificates \
+    gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g @anthropic-ai/claude-code \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
