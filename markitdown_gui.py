@@ -1513,8 +1513,17 @@ def build_ui():
 
 
 if __name__ == "__main__":
+    server_name = os.environ.get("GRADIO_SERVER_NAME", "127.0.0.1" if sys.platform == "win32" and not os.environ.get("DOCKER") else "0.0.0.0")
+    server_port = int(os.environ.get("PORT", os.environ.get("GRADIO_SERVER_PORT", "7860")))
+    inbrowser = os.environ.get("GRADIO_INBROWSER", "true" if sys.platform == "win32" and not os.environ.get("DOCKER") else "false").lower() in ("1", "true", "yes")
     build_ui().launch(
-        inbrowser=True, theme=THEME, css=CSS, head=HEAD,
+        server_name=server_name,
+        server_port=server_port,
+        inbrowser=inbrowser,
+        theme=THEME,
+        css=CSS,
+        head=HEAD,
         allowed_paths=[_OUTPUT_DIR, _ASSETS_DIR],
     )
+
 

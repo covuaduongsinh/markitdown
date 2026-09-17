@@ -1,34 +1,41 @@
-FROM python:3.13-slim-trixie
+FROM python:3.12-slim
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV EXIFTOOL_PATH=/usr/bin/exiftool
-ENV FFMPEG_PATH=/usr/bin/ffmpeg
-ENV ORT_DISABLE_TELEMETRY=1
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    EXIFTOOL_PATH=/usr/bin/exiftool \
+    FFMPEG_PATH=/usr/bin/ffmpeg \
+    ORT_DISABLE_TELEMETRY=1 \
+    GRADIO_SERVER_NAME="0.0.0.0" \
+    GRADIO_SERVER_PORT=7860 \
+    DOCKER=1
 
-# Runtime dependency
+# Install runtime & build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    libimage-exiftool-perl
-
-ARG INSTALL_GIT=false
-RUN if [ "$INSTALL_GIT" = "true" ]; then \
-    apt-get install -y --no-install-recommends \
-    git; \
-    fi
-
-# Cleanup
-RUN rm -rf /var/lib/apt/lists/*
+    libimage-exiftool-perl \
+    poppler-utils \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Copy application files
 COPY . /app
-RUN pip --no-cache-dir install \
+
+# Install python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
     /app/packages/markitdown[all] \
-    /app/packages/markitdown-sample-plugin
+    /app/packages/markitdown-ocr \
+    gradio \
+    pypdfium2 \
+    pillow \
+    numpy \
+    chess \
+    onnxruntime \
+    opencv-python-headless
 
-# Default USERID and GROUPID
-ARG USERID=nobody
-ARG GROUPID=nogroup
+EXPOSE 7860
 
-USER $USERID:$GROUPID
-
-ENTRYPOINT [ "markitdown" ]
+CMD ["python", "markitdown_gui.py"]
