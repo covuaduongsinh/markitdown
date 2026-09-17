@@ -312,7 +312,7 @@ def _pages_from_label(label):
 def _ocr_to_outputs(
     file_path, base_name, model, board_dpi=400, used_paths=None, chess=True,
     progress=None, chess_lang="en", effort=None, merge_translate=False,
-    pages_per_call=1, engine="antigravity",
+    pages_per_call=1, engine="antigravity", api_key=None,
 ):
     """Chạy OCR (PDF hoặc ảnh) qua AI Engine (Antigravity hoặc Claude Code) và trả về 4-tuple kết quả.
 
@@ -329,12 +329,13 @@ def _ocr_to_outputs(
             file_path, model=model, board_dpi=board_dpi, chess=chess,
             progress=progress, chess_lang=chess_lang, effort=effort,
             translate_to=translate_to, pages_per_call=pages_per_call,
-            engine=engine,
+            engine=engine, api_key=api_key,
         )
     else:
         text = claude_ocr.ocr_image_file(
             file_path, model=model, chess=chess, chess_lang=chess_lang,
             effort=effort, translate_to=translate_to, engine=engine,
+            api_key=api_key,
         )
 
     if not text.strip():
@@ -343,7 +344,7 @@ def _ocr_to_outputs(
     out_name = f"{base_name}_vn" if merge_translate else base_name
     download_path = _write_md(text, out_name, used_paths)
     label = "OCR+dịch (gộp 1 bước)" if merge_translate else "OCR"
-    engine_name = "Google Antigravity" if engine == "antigravity" else "Claude Code"
+    engine_name = "Google Antigravity / Gemini" if engine == "antigravity" else "Claude Code"
     status = (
         f"✅ Đã {label} bằng {engine_name} (model: {model}, "
         f"effort: {effort or 'auto'}) — {len(text):,} ký tự"
@@ -355,7 +356,7 @@ def convert_file(
     file_path, enable_plugins, use_ocr, model_label, force_ocr=False,
     board_dpi_label=None, used_paths=None, chess=True, progress=None,
     chess_lang="en", ocr_effort_label=None, merge_translate=False,
-    ocr_pages_label=None, engine="antigravity",
+    ocr_pages_label=None, engine="antigravity", api_key=None,
 ):
     if not file_path:
         return "", "", None, "ℹ️ Hãy chọn hoặc kéo-thả một tệp trước."
@@ -370,39 +371,40 @@ def convert_file(
     pages_per_call = _pages_from_label(ocr_pages_label)
     is_image = ext in IMAGE_EXTS
     is_pdf = ext == ".pdf"
-    engine_name = "Google Antigravity" if engine == "antigravity" else "Claude Code"
+    engine_name = "Google Antigravity / Gemini" if engine == "antigravity" else "Claude Code"
 
     # Ảnh: built-in chỉ ra metadata/mô tả, nên OCR trực tiếp nếu được bật.
     if use_ocr and is_image:
-        if not is_engine_available(engine):
-            # Không có CLI tương ứng -> thử chuyển đổi thường.
+        if not is_engine_available(engine, api_key=api_key):
+            # Không có CLI hoặc API Key -> thử chuyển đổi thường.
             return _convert(file_path, enable_plugins, base_name, used_paths)
         try:
             return _ocr_to_outputs(
                 file_path, base_name, model, board_dpi, used_paths, chess=chess,
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
-                engine=engine,
+                engine=engine, api_key=api_key,
             )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
 
     # PDF + "Buộc OCR": bỏ qua lớp text có sẵn, OCR lại toàn bộ bằng AI Engine.
     if use_ocr and is_pdf and force_ocr:
-        if not is_engine_available(engine):
-            cmd_name = "lệnh 'agy'" if engine == "antigravity" else "lệnh 'claude'"
-            return (
-                "",
-                "",
-                None,
-                f"⚠️ Cần {engine_name} ({cmd_name}) trong PATH để buộc OCR.",
+        if not is_engine_available(engine, api_key=api_key):
+            # Fallback sang chuyển đổi chuẩn của MarkItDown kèm ghi chú
+            preview, raw_md, download, st = _convert(
+                file_path, enable_plugins, base_name, used_paths
             )
+            cmd_name = "lệnh 'agy' hoặc Gemini API Key" if engine == "antigravity" else "lệnh 'claude'"
+            warning = f"⚠️ Máy chủ chưa cấu hình {cmd_name} — Đã chuyển đổi bằng MarkItDown tiêu chuẩn."
+            st = f"{warning}\n{st}" if st else warning
+            return preview, raw_md, download, st
         try:
             return _ocr_to_outputs(
                 file_path, base_name, model, board_dpi, used_paths, chess=chess,
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
-                engine=engine,
+                engine=engine, api_key=api_key,
             )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
@@ -414,20 +416,20 @@ def convert_file(
 
     # PDF scan (không có lớp text) -> OCR fallback nếu được bật.
     if use_ocr and is_pdf and not (raw_md or "").strip():
-        if not is_engine_available(engine):
-            cmd_name = "lệnh 'agy'" if engine == "antigravity" else "lệnh 'claude'"
+        if not is_engine_available(engine, api_key=api_key):
+            cmd_name = "lệnh 'agy' hoặc Gemini API Key" if engine == "antigravity" else "lệnh 'claude'"
             return (
                 preview,
                 raw_md,
                 download,
-                f"⚠️ PDF scan không có text. Cần {engine_name} ({cmd_name}) trong PATH để OCR.",
+                f"⚠️ PDF scan không có text. Cần {cmd_name} để OCR.",
             )
         try:
             return _ocr_to_outputs(
                 file_path, base_name, model, board_dpi, used_paths, chess=chess,
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
-                engine=engine,
+                engine=engine, api_key=api_key,
             )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
@@ -912,7 +914,7 @@ def _with_download_update(result):
 
 def _translate_to_vn(
     raw_md, orig_path, model, done_paths, chess=True, progress=None,
-    chess_lang="en", effort="low", engine=ENGINE_ANTIGRAVITY,
+    chess_lang="en", effort="low", engine=ENGINE_ANTIGRAVITY, api_key=None,
 ):
     """Dịch raw_md sang tiếng Việt, ghi tệp `<tên gốc>_vn.md`.
 
@@ -923,14 +925,14 @@ def _translate_to_vn(
     """
     import claude_translate
 
-    engine_name = "Google Antigravity" if engine == ENGINE_ANTIGRAVITY else "Claude Code"
-    if not is_engine_available(engine):
-        cmd_name = "lệnh 'agy'" if engine == ENGINE_ANTIGRAVITY else "lệnh 'claude'"
-        return None, f"⚠️ Bỏ qua dịch: cần {engine_name} ({cmd_name}) trong PATH."
+    engine_name = "Google Antigravity / Gemini" if engine == ENGINE_ANTIGRAVITY else "Claude Code"
+    if not is_engine_available(engine, api_key=api_key):
+        cmd_name = "lệnh 'agy' hoặc Gemini API Key" if engine == ENGINE_ANTIGRAVITY else "lệnh 'claude'"
+        return None, f"⚠️ Bỏ qua dịch: cần {engine_name} ({cmd_name})."
     try:
         vn_text = claude_translate.translate_markdown_vn(
             raw_md, model=model, chess=chess, progress=progress,
-            chess_lang=chess_lang, effort=effort, engine=engine,
+            chess_lang=chess_lang, effort=effort, engine=engine, api_key=api_key,
         )
         vn_name = os.path.splitext(os.path.basename(orig_path))[0] + "_vn"
         vn_path = _write_md(vn_text, vn_name, done_paths)
@@ -1000,6 +1002,8 @@ def on_pick_files():
 
     Trả về (danh sách đường dẫn THẬT, Markdown hiển thị) để cập nhật State + view.
     """
+    if sys.platform != "win32" or os.environ.get("DOCKER"):
+        return [], "ℹ️ Hộp thoại chọn tệp hệ thống chỉ dùng khi chạy ứng dụng trên máy tính cá nhân (Windows). Trên Web, vui lòng kéo-thả hoặc bấm vào ô tải tệp."
     helper = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pick_files.py")
     # Ẩn cửa sổ console của tiến trình con (hộp thoại tkinter vẫn hiện bình thường).
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -1020,140 +1024,165 @@ def on_convert_files(
     model_label, ocr_effort_label, translate_model_label, translate_effort_label,
     force_ocr, board_dpi_label, translate_vn, merge_ocr_translate, ocr_pages_label,
     autosave_on, autosave_dir, picked_paths, autosave_target, engine,
+    api_key="",
 ):
-    # Ưu tiên tệp chọn bằng hộp thoại (có đường dẫn thật) — mới lưu được cạnh
-    # file gốc; nếu không có thì dùng tệp kéo-thả (đường dẫn tạm).
-    sources = picked_paths if picked_paths else file_paths
-    sources_are_real = bool(picked_paths)
-    if not sources:
-        yield "", "", "", "ℹ️ Hãy chọn hoặc kéo-thả ít nhất một tệp trước."
-        return
+    try:
+        raw_sources = picked_paths if picked_paths else file_paths
+        sources_are_real = bool(picked_paths)
+        sources = []
+        if raw_sources:
+            if isinstance(raw_sources, (str, bytes)):
+                sources = [str(raw_sources)]
+            elif isinstance(raw_sources, list):
+                for item in raw_sources:
+                    if not item:
+                        continue
+                    if isinstance(item, str):
+                        sources.append(item)
+                    elif isinstance(item, dict) and "path" in item:
+                        sources.append(item["path"])
+                    elif hasattr(item, "path"):
+                        sources.append(getattr(item, "path"))
+                    else:
+                        sources.append(str(item))
 
-    chess = _is_chess_mode(mode_label)
-    chess_lang = _chess_lang_from_mode(mode_label)
-    # Gộp OCR+dịch chỉ có nghĩa khi người dùng cũng bật dịch tiếng Việt.
-    merge = bool(merge_ocr_translate and translate_vn)
-    total = len(sources)
-    n_ok = 0  # số tệp nguồn chuyển đổi thành công (không tính tệp _vn)
-    done_paths, previews, raws, lines = [], [], [], []
+        if not sources:
+            yield "", "", "", "ℹ️ Hãy chọn hoặc kéo-thả ít nhất một tệp trước."
+            return
 
-    for i, fp in enumerate(sources, 1):
-        name = os.path.basename(fp)
-        # Báo tiến độ trước khi xử lý, giữ nguyên kết quả các tệp đã xong.
-        progress = "\n\n".join(lines + [f"⏳ Đang xử lý {i}/{total}: **{name}**…"])
-        yield (
-            "\n\n---\n\n".join(previews),
-            "\n\n".join(raws),
-            _download_panel(done_paths),
-            progress,
-        )
+        chess = _is_chess_mode(mode_label)
+        chess_lang = _chess_lang_from_mode(mode_label)
+        # Gộp OCR+dịch chỉ có nghĩa khi người dùng cũng bật dịch tiếng Việt.
+        merge = bool(merge_ocr_translate and translate_vn)
+        total = len(sources)
+        n_ok = 0  # số tệp nguồn chuyển đổi thành công (không tính tệp _vn)
+        done_paths, previews, raws, lines = [], [], [], []
 
-        # Chạy trong thread nền, yield tiến độ từng trang để giữ kết nối.
-        job = _stream_job(
-            convert_file,
-            dict(
-                file_path=fp, enable_plugins=enable_plugins, use_ocr=use_ocr,
-                model_label=model_label, force_ocr=force_ocr,
-                board_dpi_label=board_dpi_label, used_paths=done_paths,
-                chess=chess, chess_lang=chess_lang,
-                ocr_effort_label=ocr_effort_label,
-                merge_translate=merge, ocr_pages_label=ocr_pages_label,
-                engine=engine,
-            ),
-            label=f"⏳ Đang xử lý {i}/{total}: **{name}**",
-            unit="trang",
-        )
-        while True:
-            try:
-                st_line = next(job)
-            except StopIteration as stop:
-                preview, raw_md, path, st = stop.value
-                break
-            # Yield tiến độ chỉ cập nhật status (gr.skip các ô còn lại
-            # để giảm payload gửi về trình duyệt).
-            yield gr.skip(), gr.skip(), gr.skip(), "\n\n".join(lines + [st_line])
-
-        # Thư mục đích tính một lần cho mỗi tệp nguồn, dùng chung cho tệp gốc
-        # lẫn tệp _vn.md.
-        save_dir, save_note = _resolve_save_dir(
-            fp, autosave_target, autosave_dir, sources_are_real
-        )
-        if path and autosave_on:
-            saved, err = _autosave(path, save_dir)
-            st += f"\n  💾 đã lưu: `{saved}`{save_note}" if saved else f"\n  {err}"
-        if path:
-            n_ok += 1
-            done_paths.append(path)
-
-        # Dịch sang tiếng Việt -> tạo thêm tệp _vn.md (nếu được bật).
-        already_translated = bool(merge) and "gộp 1 bước" in (st or "")
-        if translate_vn and not already_translated and path and (raw_md or "").strip():
+        for i, fp in enumerate(sources, 1):
+            name = os.path.basename(fp)
+            # Báo tiến độ trước khi xử lý, giữ nguyên kết quả các tệp đã xong.
+            progress = "\n\n".join(lines + [f"⏳ Đang xử lý {i}/{total}: **{name}**…"])
             yield (
                 "\n\n---\n\n".join(previews),
                 "\n\n".join(raws),
                 _download_panel(done_paths),
-                "\n\n".join(
-                    lines + [f"**{name}** — {st}",
-                             f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**…"]
-                ),
+                progress,
             )
-            model = _model_from_label(translate_model_label)
-            translate_effort = _effort_from_label(
-                translate_effort_label, default="low"
-            )
-            job = _stream_job(
-                _translate_to_vn,
-                dict(
-                    raw_md=raw_md, orig_path=path, model=model,
-                    done_paths=done_paths, chess=chess, chess_lang=chess_lang,
-                    effort=translate_effort, engine=engine,
-                ),
-                label=f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**",
-                unit="đoạn",
-            )
-            while True:
-                try:
-                    st_line = next(job)
-                except StopIteration as stop:
-                    vn_path, vn_st = stop.value
-                    break
-                yield (
-                    gr.skip(), gr.skip(), gr.skip(),
-                    "\n\n".join(lines + [f"**{name}** — {st}", st_line]),
+
+            try:
+                # Chạy trong thread nền, yield tiến độ từng trang để giữ kết nối.
+                job = _stream_job(
+                    convert_file,
+                    dict(
+                        file_path=fp, enable_plugins=enable_plugins, use_ocr=use_ocr,
+                        model_label=model_label, force_ocr=force_ocr,
+                        board_dpi_label=board_dpi_label, used_paths=done_paths,
+                        chess=chess, chess_lang=chess_lang,
+                        ocr_effort_label=ocr_effort_label,
+                        merge_translate=merge, ocr_pages_label=ocr_pages_label,
+                        engine=engine, api_key=api_key or None,
+                    ),
+                    label=f"⏳ Đang xử lý {i}/{total}: **{name}**",
+                    unit="trang",
                 )
-            st += f"\n  {vn_st}"
-            if vn_path:
-                if autosave_on:
-                    saved, err = _autosave(vn_path, save_dir)
-                    st += f" · 💾 đã lưu: `{saved}`" if saved else f"\n  {err}"
-                done_paths.append(vn_path)
+                while True:
+                    try:
+                        st_line = next(job)
+                    except StopIteration as stop:
+                        preview, raw_md, path, st = stop.value
+                        break
+                    # Yield tiến độ chỉ cập nhật status (gr.skip các ô còn lại
+                    # để giảm payload gửi về trình duyệt).
+                    yield gr.skip(), gr.skip(), gr.skip(), "\n\n".join(lines + [st_line])
 
-        # Sách cờ vua (mặc định): gom FEN các thế cờ -> tệp <tên gốc>_fen.txt
-        if chess and path and (raw_md or "").strip():
-            fen_base = os.path.splitext(os.path.basename(fp))[0]
-            fen_path, n_fen = _write_fen_file(raw_md, fen_base, done_paths)
-            if fen_path:
-                st += f"\n  ♟️ Đã gom {n_fen} thế cờ → `{os.path.basename(fen_path)}`"
-                if autosave_on:
-                    saved, err = _autosave(fen_path, save_dir)
-                    st += f" · 💾 đã lưu: `{saved}`" if saved else f"\n  {err}"
-                done_paths.append(fen_path)
-        lines.append(f"**{name}** — {st}")
-        if preview:
-            previews.append(f"## 📄 {name}\n\n{preview}")
-        if raw_md:
-            raws.append(raw_md)
+                # Thư mục đích tính một lần cho mỗi tệp nguồn, dùng chung cho tệp gốc
+                # lẫn tệp _vn.md.
+                save_dir, save_note = _resolve_save_dir(
+                    fp, autosave_target, autosave_dir, sources_are_real
+                )
+                if path and autosave_on:
+                    saved, err = _autosave(path, save_dir)
+                    st += f"\n  💾 đã lưu: `{saved}`{save_note}" if saved else f"\n  {err}"
+                if path:
+                    n_ok += 1
+                    done_paths.append(path)
 
-        # Tệp xong tới đâu hiện kết quả và cho tải về ngay tới đó.
-        summary = "\n\n".join(lines)
-        if i == total:
-            summary = f"🏁 Xong {n_ok}/{total} tệp.\n\n" + summary
-        yield (
-            "\n\n---\n\n".join(previews),
-            "\n\n".join(raws),
-            _download_panel(done_paths),
-            summary,
-        )
+                # Dịch sang tiếng Việt -> tạo thêm tệp _vn.md (nếu được bật).
+                already_translated = bool(merge) and "gộp 1 bước" in (st or "")
+                if translate_vn and not already_translated and path and (raw_md or "").strip():
+                    yield (
+                        "\n\n---\n\n".join(previews),
+                        "\n\n".join(raws),
+                        _download_panel(done_paths),
+                        "\n\n".join(
+                            lines + [f"**{name}** — {st}",
+                                     f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**…"]
+                        ),
+                    )
+                    model = _model_from_label(translate_model_label)
+                    translate_effort = _effort_from_label(
+                        translate_effort_label, default="low"
+                    )
+                    job = _stream_job(
+                        _translate_to_vn,
+                        dict(
+                            raw_md=raw_md, orig_path=path, model=model,
+                            done_paths=done_paths, chess=chess, chess_lang=chess_lang,
+                            effort=translate_effort, engine=engine, api_key=api_key or None,
+                        ),
+                        label=f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**",
+                        unit="đoạn",
+                    )
+                    while True:
+                        try:
+                            st_line = next(job)
+                        except StopIteration as stop:
+                            vn_path, vn_st = stop.value
+                            break
+                        yield (
+                            gr.skip(), gr.skip(), gr.skip(),
+                            "\n\n".join(lines + [f"**{name}** — {st}", st_line]),
+                        )
+                    st += f"\n  {vn_st}"
+                    if vn_path:
+                        if autosave_on:
+                            saved, err = _autosave(vn_path, save_dir)
+                            st += f" · 💾 đã lưu: `{saved}`" if saved else f"\n  {err}"
+                        done_paths.append(vn_path)
+
+                # Sách cờ vua (mặc định): gom FEN các thế cờ -> tệp <tên gốc>_fen.txt
+                if chess and path and (raw_md or "").strip():
+                    fen_base = os.path.splitext(os.path.basename(fp))[0]
+                    fen_path, n_fen = _write_fen_file(raw_md, fen_base, done_paths)
+                    if fen_path:
+                        st += f"\n  ♟️ Đã gom {n_fen} thế cờ → `{os.path.basename(fen_path)}`"
+                        if autosave_on:
+                            saved, err = _autosave(fen_path, save_dir)
+                            st += f" · 💾 đã lưu: `{saved}`" if saved else f"\n  {err}"
+                        done_paths.append(fen_path)
+                lines.append(f"**{name}** — {st}")
+                if preview:
+                    previews.append(f"## 📄 {name}\n\n{preview}")
+                if raw_md:
+                    raws.append(raw_md)
+
+            except Exception as exc:
+                err_msg = f"❌ Lỗi xử lý {name}: {type(exc).__name__}: {exc}"
+                lines.append(f"**{name}** — {err_msg}")
+                traceback.print_exc()
+
+            # Tệp xong tới đâu hiện kết quả và cho tải về ngay tới đó.
+            summary = "\n\n".join(lines)
+            if i == total:
+                summary = f"🏁 Xong {n_ok}/{total} tệp.\n\n" + summary
+            yield (
+                "\n\n---\n\n".join(previews),
+                "\n\n".join(raws),
+                _download_panel(done_paths),
+                summary,
+            )
+    except Exception as top_exc:
+        yield "", "", "", f"❌ Đã xảy ra lỗi không mong muốn: {top_exc}"
 
 
 def on_convert_url(url, enable_plugins):
@@ -1222,7 +1251,7 @@ def _set_running(running):
 
 
 def _load_prefs(p):
-    """BrowserState -> đặt lại preset/chế độ/thư mục lưu/engine khi tải trang."""
+    """BrowserState -> đặt lại preset/chế độ/thư mục lưu/engine/api_key khi tải trang."""
     p = p or {}
     default_eng = get_default_engine()
     return (
@@ -1230,12 +1259,19 @@ def _load_prefs(p):
         gr.update(value=p.get("mode", MODE_CHESS)),
         gr.update(value=p.get("dir") or os.path.join(os.path.expanduser("~"), "Downloads")),
         gr.update(value=p.get("engine", default_eng)),
+        gr.update(value=p.get("api_key", "")),
     )
 
 
-def _save_prefs(preset_v, mode_v, dir_v, engine_v):
+def _save_prefs(preset_v, mode_v, dir_v, engine_v, api_key_v=""):
     """Gói lựa chọn hiện tại để lưu vào BrowserState (localStorage)."""
-    return {"preset": preset_v, "mode": mode_v, "dir": dir_v, "engine": engine_v}
+    return {
+        "preset": preset_v,
+        "mode": mode_v,
+        "dir": dir_v,
+        "engine": engine_v,
+        "api_key": api_key_v,
+    }
 
 
 def _on_files_change(files):
@@ -1330,6 +1366,15 @@ def build_ui():
                             label="Công cụ AI (Engine)",
                             elem_classes="mid-engine-select",
                             info="Antigravity (mặc định) tối ưu cho Gemini Flash/Pro, bàn cờ & dịch thuật. Claude Code (phương án 2) dùng claude CLI.",
+                        )
+
+                        api_key_in = gr.Textbox(
+                            label="Gemini API Key (Tùy chọn cho Web)",
+                            placeholder="AIzaSy... (dùng trực tiếp REST API trên web mà không cần CLI)",
+                            type="password",
+                            value="",
+                            elem_classes="mid-api-key",
+                            info="Tùy chọn: Nhập Google Gemini API Key để dùng OCR & Dịch trực tiếp khi chạy trên máy chủ web không cài CLI.",
                         )
 
                         force_ocr = gr.Checkbox(
@@ -1443,6 +1488,7 @@ def build_ui():
                 "mode": MODE_CHESS,
                 "dir": os.path.join(os.path.expanduser("~"), "Downloads"),
                 "engine": default_eng,
+                "api_key": "",
             }
         )
 
@@ -1460,16 +1506,16 @@ def build_ui():
         engine_select.change(_apply_preset, [preset, mode, engine_select], preset_outputs)
 
         # Khôi phục lựa chọn đã lưu khi tải trang -> đặt component -> tính lại
-        demo.load(_load_prefs, prefs, [preset, mode, autosave_dir, engine_select]).then(
+        demo.load(_load_prefs, prefs, [preset, mode, autosave_dir, engine_select, api_key_in]).then(
             _apply_preset, [preset, mode, engine_select], preset_outputs
         ).then(
             None, None, None,
             js="() => window.midSyncModeCards && window.midSyncModeCards()",
         )
 
-        # Lưu lại mỗi khi đổi preset / chế độ / thư mục lưu / engine.
-        for _comp in (preset, mode, autosave_dir, engine_select):
-            _comp.change(_save_prefs, [preset, mode, autosave_dir, engine_select], prefs)
+        # Lưu lại mỗi khi đổi preset / chế độ / thư mục lưu / engine / api_key.
+        for _comp in (preset, mode, autosave_dir, engine_select, api_key_in):
+            _comp.change(_save_prefs, [preset, mode, autosave_dir, engine_select, api_key_in], prefs)
 
         # Mở hộp thoại Windows -> nạp đường dẫn thật vào State + hiển thị.
         btn_pick.click(on_pick_files, None, [picked_state, picked_view]).then(
@@ -1488,6 +1534,7 @@ def build_ui():
                 force_ocr, board_dpi, translate_vn, merge_ocr_translate,
                 ocr_pages_per_call, autosave_on, autosave_dir,
                 picked_state, autosave_target, engine_select,
+                api_key_in,
             ],
             outputs,
             show_progress="full",

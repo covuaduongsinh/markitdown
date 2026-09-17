@@ -527,8 +527,8 @@ def _run_claude_ocr(prompt, img_dir, model, effort, timeout):
     return out
 
 
-def _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine="antigravity"):
-    """Điều phối chạy OCR qua Antigravity (mặc định) hoặc Claude Code."""
+def _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine="antigravity", api_key=None):
+    """Điều phối chạy OCR qua Antigravity / Gemini API (mặc định) hoặc Claude Code."""
     from ai_engine import ENGINE_ANTIGRAVITY, ENGINE_CLAUDE, run_agy_prompt, AIEngineError
 
     if engine == ENGINE_ANTIGRAVITY:
@@ -539,11 +539,13 @@ def _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine="antigravity
                 effort=effort,
                 img_dir=img_dir,
                 timeout=timeout,
+                api_key=api_key,
             )
         except AIEngineError as exc:
             raise ClaudeOCRError(str(exc)) from exc
     else:
         return _run_claude_ocr(prompt, img_dir, model, effort, timeout)
+
 
 
 def _ensure_translated(text, chess, chess_lang, model, engine="antigravity"):
@@ -572,6 +574,7 @@ def _ensure_translated(text, chess, chess_lang, model, engine="antigravity"):
 def ocr_image_path(
     img_path, model="gemini-3.7-flash", timeout=600, board_fens=None, chess=True,
     chess_lang="en", effort=None, translate_to=None, engine="antigravity",
+    api_key=None,
 ):
     """Gọi AI Engine (Antigravity hoặc Claude Code) để OCR một ảnh. Trả về Markdown trích được.
 
@@ -593,7 +596,7 @@ def ocr_image_path(
 
     if effort is None:
         effort = "medium" if (translate_to == "vi" or (chess and not board_fens)) else "low"
-    raw = _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine=engine)
+    raw = _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine=engine, api_key=api_key)
     # Chế độ thường không sinh block chessboard nên không cần hậu kiểm.
     post = _normalize_chessboard_blocks if chess else (lambda s: s)
     out = post(raw)
@@ -604,7 +607,7 @@ def ocr_image_path(
 
 def ocr_image_group(
     items, model="gemini-3.7-flash", timeout=600, chess=True, chess_lang="en",
-    effort=None, translate_to=None, engine="antigravity",
+    effort=None, translate_to=None, engine="antigravity", api_key=None,
 ):
     """OCR một NHÓM trang trong 1 lần gọi AI Engine. Trả về list Markdown theo
     đúng thứ tự trang trong nhóm.
@@ -615,7 +618,7 @@ def ocr_image_group(
         return [ocr_image_path(
             png, model=model, timeout=timeout, board_fens=fens, chess=chess,
             chess_lang=chess_lang, effort=effort, translate_to=translate_to,
-            engine=engine,
+            engine=engine, api_key=api_key,
         )]
 
     pages = [(os.path.abspath(p), f) for p, f in items]
@@ -626,7 +629,7 @@ def ocr_image_group(
     if effort is None:
         need_detect = chess and any(not fens for _p, fens in pages)
         effort = "medium" if (translate_to == "vi" or need_detect) else "low"
-    raw = _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine=engine)
+    raw = _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine=engine, api_key=api_key)
 
     post = _normalize_chessboard_blocks if chess else (lambda s: s)
     parts = [p.strip() for p in re.split(re.escape(_PAGE_BREAK), raw)]
@@ -667,26 +670,28 @@ OCR_WORKERS = 8
 
 
 def _ocr_page_group(items, model, page_timeout, chess, chess_lang="en",
-                    effort=None, translate_to=None, engine="antigravity"):
+                    effort=None, translate_to=None, engine="antigravity", api_key=None):
     """OCR 1 nhóm trang với 1 lần thử lại. Trả về list Markdown; vẫn lỗi thì raise."""
     try:
         return ocr_image_group(
             items, model=model, timeout=page_timeout, chess=chess,
             chess_lang=chess_lang, effort=effort, translate_to=translate_to,
-            engine=engine,
+            engine=engine, api_key=api_key,
         )
     except ClaudeOCRError:
         return ocr_image_group(
             items, model=model, timeout=page_timeout, chess=chess,
             chess_lang=chess_lang, effort=effort, translate_to=translate_to,
-            engine=engine,
+            engine=engine, api_key=api_key,
         )
+
 
 
 def ocr_pdf(
     pdf_path, model="gemini-3.7-flash", dpi=200, progress=None, page_timeout=600,
     board_dpi=BOARD_DPI, chess=True, workers=OCR_WORKERS, chess_lang="en",
     effort=None, translate_to=None, pages_per_call=1, engine="antigravity",
+    api_key=None,
 ):
     """OCR toàn bộ PDF scan qua Antigravity hoặc Claude Code. Trả về Markdown ghép các trang.
 
@@ -720,6 +725,7 @@ def ocr_pdf(
                     fut = pool.submit(
                         _ocr_page_group, items, model, page_timeout, chess,
                         chess_lang, effort, translate_to, engine=engine,
+                        api_key=api_key,
                     )
                     futures[fut] = [no for no, _png, _fens in g]
 
@@ -764,12 +770,12 @@ def ocr_pdf(
         finally:
             pdf.close()
         if n_failed == n_pages:
-            engine_name = "Antigravity" if engine == "antigravity" else "Claude Code"
+            engine_name = "Antigravity/Gemini" if engine == "antigravity" else "Claude Code"
             raise ClaudeOCRError(
                 f"OCR thất bại ở toàn bộ {n_failed} trang. "
-                f"Hãy kiểm tra {engine_name} còn phiên đăng nhập/hạn mức không."
+                f"Hãy kiểm tra {engine_name} còn phiên đăng nhập/hạn mức/API Key không."
             )
-        return "\n\n".join(parts).strip()
+        return "\n\n".join(p for p in parts if p).strip()
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -785,6 +791,7 @@ def _ocr_image_with_retry(img_path, **kwargs):
 def ocr_image_file(
     img_path, model="gemini-3.7-flash", page_timeout=600, chess=True,
     chess_lang="en", effort=None, translate_to=None, engine="antigravity",
+    api_key=None,
 ):
     """OCR một tệp ảnh đơn lẻ (jpg/png...), tự thử lại 1 lần nếu lỗi."""
     board_fens = None
@@ -799,6 +806,5 @@ def ocr_image_file(
     return _ocr_image_with_retry(
         img_path, model=model, timeout=page_timeout, board_fens=board_fens,
         chess=chess, chess_lang=chess_lang, effort=effort,
-        translate_to=translate_to, engine=engine,
+        translate_to=translate_to, engine=engine, api_key=api_key,
     )
-
