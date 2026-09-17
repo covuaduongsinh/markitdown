@@ -532,7 +532,7 @@ def _run_claude_ocr(prompt, img_dir, model, effort, timeout, claude_token=None):
     return out
 
 
-def _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine="antigravity", api_key=None, claude_token=None):
+def _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine="antigravity", api_key=None, claude_token=None, agy_token=None):
     """Điều phối chạy OCR qua Antigravity / Gemini API (mặc định) hoặc Claude Code."""
     from ai_engine import ENGINE_ANTIGRAVITY, ENGINE_CLAUDE, run_agy_prompt, AIEngineError
 
@@ -545,6 +545,7 @@ def _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine="antigravity
                 img_dir=img_dir,
                 timeout=timeout,
                 api_key=api_key,
+                agy_token=agy_token,
             )
         except AIEngineError as exc:
             raise ClaudeOCRError(str(exc)) from exc
@@ -579,7 +580,7 @@ def _ensure_translated(text, chess, chess_lang, model, engine="antigravity"):
 def ocr_image_path(
     img_path, model="gemini-3.7-flash", timeout=600, board_fens=None, chess=True,
     chess_lang="en", effort=None, translate_to=None, engine="antigravity",
-    api_key=None, claude_token=None,
+    api_key=None, claude_token=None, agy_token=None,
 ):
     """Gọi AI Engine (Antigravity hoặc Claude Code) để OCR một ảnh. Trả về Markdown trích được."""
     img_path = os.path.abspath(img_path)
@@ -591,7 +592,7 @@ def ocr_image_path(
 
     if effort is None:
         effort = "medium" if (translate_to == "vi" or (chess and not board_fens)) else "low"
-    raw = _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine=engine, api_key=api_key, claude_token=claude_token)
+    raw = _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine=engine, api_key=api_key, claude_token=claude_token, agy_token=agy_token)
     # Chế độ thường không sinh block chessboard nên không cần hậu kiểm.
     post = _normalize_chessboard_blocks if chess else (lambda s: s)
     out = post(raw)
@@ -603,6 +604,7 @@ def ocr_image_path(
 def ocr_image_group(
     items, model="gemini-3.7-flash", timeout=600, chess=True, chess_lang="en",
     effort=None, translate_to=None, engine="antigravity", api_key=None, claude_token=None,
+    agy_token=None,
 ):
     """OCR một NHÓM trang trong 1 lần gọi AI Engine. Trả về list Markdown theo
     đúng thứ tự trang trong nhóm.
@@ -614,6 +616,7 @@ def ocr_image_group(
             png, model=model, timeout=timeout, board_fens=fens, chess=chess,
             chess_lang=chess_lang, effort=effort, translate_to=translate_to,
             engine=engine, api_key=api_key, claude_token=claude_token,
+            agy_token=agy_token,
         )]
 
     pages = [(os.path.abspath(p), f) for p, f in items]
@@ -624,7 +627,7 @@ def ocr_image_group(
     if effort is None:
         need_detect = chess and any(not fens for _p, fens in pages)
         effort = "medium" if (translate_to == "vi" or need_detect) else "low"
-    raw = _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine=engine, api_key=api_key, claude_token=claude_token)
+    raw = _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine=engine, api_key=api_key, claude_token=claude_token, agy_token=agy_token)
 
     post = _normalize_chessboard_blocks if chess else (lambda s: s)
     parts = [p.strip() for p in re.split(re.escape(_PAGE_BREAK), raw)]
@@ -665,19 +668,21 @@ OCR_WORKERS = 8
 
 
 def _ocr_page_group(items, model, page_timeout, chess, chess_lang="en",
-                    effort=None, translate_to=None, engine="antigravity", api_key=None, claude_token=None):
+                    effort=None, translate_to=None, engine="antigravity", api_key=None, claude_token=None, agy_token=None):
     """OCR 1 nhóm trang với 1 lần thử lại. Trả về list Markdown; vẫn lỗi thì raise."""
     try:
         return ocr_image_group(
             items, model=model, timeout=page_timeout, chess=chess,
             chess_lang=chess_lang, effort=effort, translate_to=translate_to,
             engine=engine, api_key=api_key, claude_token=claude_token,
+            agy_token=agy_token,
         )
     except ClaudeOCRError:
         return ocr_image_group(
             items, model=model, timeout=page_timeout, chess=chess,
             chess_lang=chess_lang, effort=effort, translate_to=translate_to,
             engine=engine, api_key=api_key, claude_token=claude_token,
+            agy_token=agy_token,
         )
 
 
@@ -685,7 +690,7 @@ def ocr_pdf(
     pdf_path, model="gemini-3.7-flash", dpi=200, progress=None, page_timeout=600,
     board_dpi=BOARD_DPI, chess=True, workers=OCR_WORKERS, chess_lang="en",
     effort=None, translate_to=None, pages_per_call=1, engine="antigravity",
-    api_key=None, claude_token=None,
+    api_key=None, claude_token=None, agy_token=None,
 ):
     """OCR toàn bộ PDF scan qua Antigravity hoặc Claude Code. Trả về Markdown ghép các trang."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -715,6 +720,7 @@ def ocr_pdf(
                         _ocr_page_group, items, model, page_timeout, chess,
                         chess_lang, effort, translate_to, engine=engine,
                         api_key=api_key, claude_token=claude_token,
+                        agy_token=agy_token,
                     )
                     futures[fut] = [no for no, _png, _fens in g]
 
@@ -780,7 +786,7 @@ def _ocr_image_with_retry(img_path, **kwargs):
 def ocr_image_file(
     img_path, model="gemini-3.7-flash", page_timeout=600, chess=True,
     chess_lang="en", effort=None, translate_to=None, engine="antigravity",
-    api_key=None, claude_token=None,
+    api_key=None, claude_token=None, agy_token=None,
 ):
     """OCR một tệp ảnh đơn lẻ (jpg/png...), tự thử lại 1 lần nếu lỗi."""
     board_fens = None
@@ -796,5 +802,5 @@ def ocr_image_file(
         img_path, model=model, timeout=page_timeout, board_fens=board_fens,
         chess=chess, chess_lang=chess_lang, effort=effort,
         translate_to=translate_to, engine=engine, api_key=api_key,
-        claude_token=claude_token,
+        claude_token=claude_token, agy_token=agy_token,
     )

@@ -310,7 +310,7 @@ def _call_claude(chunk, model="opus", timeout=600, instruction=None, effort="low
     return out
 
 
-def _call_agy(chunk, model="gemini-3.7-flash", timeout=600, instruction=None, effort="low", api_key=None):
+def _call_agy(chunk, model="gemini-3.7-flash", timeout=600, instruction=None, effort="low", api_key=None, agy_token=None):
     """Gọi Antigravity CLI (`agy -p`) hoặc Gemini API dịch một chunk. Trả về text đã dịch."""
     from ai_engine import run_agy_prompt, AIEngineError
 
@@ -325,15 +325,16 @@ def _call_agy(chunk, model="gemini-3.7-flash", timeout=600, instruction=None, ef
             effort=effort,
             timeout=timeout,
             api_key=api_key,
+            agy_token=agy_token,
         )
     except AIEngineError as exc:
         raise ClaudeOCRError(str(exc)) from exc
 
 
-def _call_engine_translate(chunk, model, timeout=600, instruction=None, effort="low", engine="antigravity", api_key=None, claude_token=None):
+def _call_engine_translate(chunk, model, timeout=600, instruction=None, effort="low", engine="antigravity", api_key=None, claude_token=None, agy_token=None):
     """Điều phối dịch thuật qua Antigravity / Gemini API (mặc định) hoặc Claude Code."""
     if engine == "antigravity":
-        return _call_agy(chunk, model=model, timeout=timeout, instruction=instruction, effort=effort, api_key=api_key)
+        return _call_agy(chunk, model=model, timeout=timeout, instruction=instruction, effort=effort, api_key=api_key, agy_token=agy_token)
     return _call_claude(chunk, model=model, timeout=timeout, instruction=instruction, effort=effort, claude_token=claude_token)
 
 
@@ -382,7 +383,7 @@ TRANSLATE_WORKERS = 8
 
 def _translate_chunk(chunk, model, timeout, instruction, effort="low",
                      chess_lang="en", engine="antigravity", api_key=None,
-                     claude_token=None):
+                     claude_token=None, agy_token=None):
     """Dịch 1 chunk với 1 lần thử lại + hậu kiểm placeholder + hậu kiểm ngôn ngữ.
 
     Chunk lỗi hoặc bị mất placeholder -> trả về nguyên văn chunk kèm ghi chú,
@@ -397,7 +398,7 @@ def _translate_chunk(chunk, model, timeout, instruction, effort="low",
             cand = _call_engine_translate(
                 chunk, model=model, timeout=timeout, instruction=instruction,
                 effort=effort, engine=engine, api_key=api_key,
-                claude_token=claude_token,
+                claude_token=claude_token, agy_token=agy_token,
             )
         except ClaudeOCRError as exc:
             err = exc
@@ -421,7 +422,7 @@ def _translate_chunk(chunk, model, timeout, instruction, effort="low",
 def translate_markdown_vn(
     md, model="gemini-3.7-flash", progress=None, timeout=600, chess=True,
     workers=TRANSLATE_WORKERS, chess_lang="en", effort="low", engine="antigravity",
-    api_key=None, claude_token=None,
+    api_key=None, claude_token=None, agy_token=None,
 ):
     """Dịch Markdown sang tiếng Việt qua Antigravity hoặc Claude Code.
 
@@ -448,25 +449,26 @@ def translate_markdown_vn(
     if not chunks:
         return md
 
-    out_parts = [None] * len(chunks)
+    n_chunks = len(chunks)
+    out_chunks = [None] * n_chunks
     n_done = 0
     if progress is not None:
-        progress(0, len(chunks))
+        progress(0, n_chunks)
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         futures = {
             pool.submit(
-                _translate_chunk, chunk, model, timeout, instruction, effort,
-                chess_lang, engine=engine, api_key=api_key,
-                claude_token=claude_token,
+                _translate_chunk, c, model, timeout, instruction,
+                effort=effort, chess_lang=chess_lang, engine=engine,
+                api_key=api_key, claude_token=claude_token,
+                agy_token=agy_token,
             ): idx
-            for idx, chunk in enumerate(chunks)
+            for idx, c in enumerate(chunks)
         }
         for fut in as_completed(futures):
-            out_parts[futures[fut]] = fut.result()
+            idx = futures[fut]
+            out_chunks[idx] = fut.result()
             n_done += 1
             if progress is not None:
-                progress(n_done, len(chunks))
-
-    return _restore_boards("\n\n".join(out_parts).strip(), blocks)
-
-
+                progress(n_done, n_chunks)
+    merged = "\n\n".join(c for c in out_chunks if c)
+    return _restore_boards(merged, blocks)

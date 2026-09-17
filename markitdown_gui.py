@@ -314,6 +314,7 @@ def _ocr_to_outputs(
     file_path, base_name, model, board_dpi=400, used_paths=None, chess=True,
     progress=None, chess_lang="en", effort=None, merge_translate=False,
     pages_per_call=1, engine="antigravity", api_key=None, claude_token=None,
+    agy_token=None,
 ):
     """Chạy OCR (PDF hoặc ảnh) qua AI Engine (Antigravity hoặc Claude Code) và trả về 4-tuple kết quả.
 
@@ -331,12 +332,14 @@ def _ocr_to_outputs(
             progress=progress, chess_lang=chess_lang, effort=effort,
             translate_to=translate_to, pages_per_call=pages_per_call,
             engine=engine, api_key=api_key, claude_token=claude_token,
+            agy_token=agy_token,
         )
     else:
         text = claude_ocr.ocr_image_file(
             file_path, model=model, chess=chess, chess_lang=chess_lang,
             effort=effort, translate_to=translate_to, engine=engine,
             api_key=api_key, claude_token=claude_token,
+            agy_token=agy_token,
         )
 
     if not text.strip():
@@ -358,7 +361,7 @@ def convert_file(
     board_dpi_label=None, used_paths=None, chess=True, progress=None,
     chess_lang="en", ocr_effort_label=None, merge_translate=False,
     ocr_pages_label=None, engine="antigravity", api_key=None,
-    claude_token=None,
+    claude_token=None, agy_token=None,
 ):
     if not file_path:
         return "", "", None, "ℹ️ Hãy chọn hoặc kéo-thả một tệp trước."
@@ -392,6 +395,7 @@ def convert_file(
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
                 engine=engine, api_key=api_key, claude_token=claude_token,
+                agy_token=agy_token,
             )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
@@ -418,6 +422,7 @@ def convert_file(
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
                 engine=engine, api_key=api_key, claude_token=claude_token,
+                agy_token=agy_token,
             )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
@@ -443,6 +448,7 @@ def convert_file(
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
                 engine=engine, api_key=api_key, claude_token=claude_token,
+                agy_token=agy_token,
             )
         except Exception as exc:
             return "", "", None, f"❌ Lỗi OCR: {exc}"
@@ -928,7 +934,7 @@ def _with_download_update(result):
 def _translate_to_vn(
     raw_md, orig_path, model, done_paths, chess=True, progress=None,
     chess_lang="en", effort="low", engine=ENGINE_ANTIGRAVITY, api_key=None,
-    claude_token=None,
+    claude_token=None, agy_token=None,
 ):
     """Dịch raw_md sang tiếng Việt, ghi tệp `<tên gốc>_vn.md`.
 
@@ -947,7 +953,7 @@ def _translate_to_vn(
         vn_text = claude_translate.translate_markdown_vn(
             raw_md, model=model, chess=chess, progress=progress,
             chess_lang=chess_lang, effort=effort, engine=engine, api_key=api_key,
-            claude_token=claude_token,
+            claude_token=claude_token, agy_token=agy_token,
         )
         vn_name = os.path.splitext(os.path.basename(orig_path))[0] + "_vn"
         vn_path = _write_md(vn_text, vn_name, done_paths)
@@ -1039,7 +1045,7 @@ def on_convert_files(
     model_label, ocr_effort_label, translate_model_label, translate_effort_label,
     force_ocr, board_dpi_label, translate_vn, merge_ocr_translate, ocr_pages_label,
     autosave_on, autosave_dir, picked_paths, autosave_target, engine,
-    api_key="", claude_token="",
+    api_key="", claude_token="", agy_token="",
 ):
     try:
         raw_sources = picked_paths if picked_paths else file_paths
@@ -1110,6 +1116,7 @@ def on_convert_files(
                         merge_translate=merge, ocr_pages_label=ocr_pages_label,
                         engine=engine, api_key=api_key or None,
                         claude_token=claude_token or None,
+                        agy_token=agy_token or None,
                     ),
                     label=f"⏳ Đang xử lý {i}/{total}: **{name}**",
                     unit="trang",
@@ -1159,6 +1166,7 @@ def on_convert_files(
                             done_paths=done_paths, chess=chess, chess_lang=chess_lang,
                             effort=translate_effort, engine=engine,
                             api_key=api_key or None, claude_token=claude_token or None,
+                            agy_token=agy_token or None,
                         ),
                         label=f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**",
                         unit="đoạn",
@@ -1281,7 +1289,7 @@ def _set_running(running):
 
 
 def _load_prefs(p):
-    """BrowserState -> đặt lại preset/chế độ/thư mục lưu/engine/api_key/claude_token khi tải trang."""
+    """BrowserState -> đặt lại preset/chế độ/thư mục lưu/engine/api_key/claude_token/agy_token khi tải trang."""
     p = p or {}
     default_eng = get_default_engine()
     return (
@@ -1291,10 +1299,11 @@ def _load_prefs(p):
         gr.update(value=p.get("engine", default_eng)),
         gr.update(value=p.get("api_key", "")),
         gr.update(value=p.get("claude_token", "")),
+        gr.update(value=p.get("agy_token", "")),
     )
 
 
-def _save_prefs(preset_v, mode_v, dir_v, engine_v, api_key_v="", claude_token_v=""):
+def _save_prefs(preset_v, mode_v, dir_v, engine_v, api_key_v="", claude_token_v="", agy_token_v=""):
     """Gói lựa chọn hiện tại để lưu vào BrowserState (localStorage)."""
     return {
         "preset": preset_v,
@@ -1303,6 +1312,7 @@ def _save_prefs(preset_v, mode_v, dir_v, engine_v, api_key_v="", claude_token_v=
         "engine": engine_v,
         "api_key": api_key_v,
         "claude_token": claude_token_v,
+        "agy_token": agy_token_v,
     }
 
 
@@ -1363,7 +1373,43 @@ def build_ui():
                             with gr.Group():
                                 gr.HTML(
                                     '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
-                                    '💎 Gói Thuê bao Tháng (Claude Pro/Max & Antigravity CLI - 0đ phí API)'
+                                    '⚡ 1. Google Antigravity CLI (Gói Thuê bao Google Gemini Advanced - 0đ phí API)'
+                                    '</div>'
+                                )
+                                agy_token_in = gr.Textbox(
+                                    label="Google Antigravity OAuth Token / JSON Credentials",
+                                    placeholder='Dán chuỗi token hoặc toàn bộ nội dung file antigravity-oauth-token / oauth_creds.json',
+                                    type="password",
+                                    value="",
+                                    elem_classes="mid-agy-token",
+                                    info="Dùng gói thuê bao Google Antigravity / Gemini Advanced trên VPS (0đ token API).",
+                                )
+                                with gr.Row():
+                                    btn_test_agy = gr.Button(
+                                        "🔍 Kiểm tra kết nối Antigravity CLI",
+                                        variant="secondary",
+                                        size="sm",
+                                    )
+                                agy_test_status = gr.Markdown(
+                                    "",
+                                    elem_id="mid-agy-test-status",
+                                )
+                                gr.HTML(
+                                    '<div style="margin-top:8px;padding:10px 14px;border-radius:8px;'
+                                    'background:rgba(31,169,143,0.06);border:1px solid rgba(31,169,143,0.18);'
+                                    'font-size:12.5px;color:var(--c-text);line-height:1.6;">'
+                                    '⚡ <b>Cách lấy Token Antigravity từ máy tính để dùng trên VPS:</b><br>'
+                                    '• Mở tệp: <code>C:\\Users\\&lt;tên_bạn&gt;\\.gemini\\antigravity-cli\\antigravity-oauth-token</code> (hoặc <code>oauth_creds.json</code>).<br>'
+                                    '• Copy toàn bộ nội dung trong tệp và dán vào ô trên → bấm <b>Kiểm tra kết nối Antigravity CLI</b>.<br>'
+                                    '• Hệ thống sẽ tự động lưu và kết nối phiên Google Antigravity của bạn vĩnh viễn trên VPS!</div>'
+                                )
+
+                            gr.HTML('<div style="height:1px;background:var(--c-border);margin:12px 0;"></div>')
+
+                            with gr.Group():
+                                gr.HTML(
+                                    '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
+                                    '🟣 2. Claude Code CLI (Gói Thuê bao Claude Pro / Team / Max - 0đ phí API)'
                                     '</div>'
                                 )
                                 claude_token_in = gr.Textbox(
@@ -1376,7 +1422,7 @@ def build_ui():
                                 )
                                 with gr.Row():
                                     btn_test_sub = gr.Button(
-                                        "🔍 Kiểm tra phiên đăng nhập Thuê bao",
+                                        "🔍 Kiểm tra kết nối Claude Code CLI",
                                         variant="secondary",
                                         size="sm",
                                     )
@@ -1388,13 +1434,9 @@ def build_ui():
                                     '<div style="margin-top:8px;padding:10px 14px;border-radius:8px;'
                                     'background:rgba(43,57,144,0.06);border:1px solid rgba(43,57,144,0.18);'
                                     'font-size:12.5px;color:var(--c-text);line-height:1.6;">'
-                                    '💎 <b>Hướng dẫn kết nối Gói Thuê bao Tháng (0đ phí API):</b><br>'
-                                    '<b>1. Claude Code CLI (Claude Pro/Max/Team):</b><br>'
-                                    '• <i>Cách lấy Session Token</i>: Mở trình duyệt vào <a href="https://claude.ai" target="_blank" style="color:#2B3990;font-weight:700;">claude.ai</a> → nhấn <b>F12</b> → tab <b>Application</b> → <b>Cookies</b> → copy giá trị cookie <code>sessionKey</code> (bắt đầu bằng <code>sk-ant-sid01-...</code>) hoặc mở tệp <code>C:\\Users\\&lt;tên_bạn&gt;\\.claude.json</code> trên máy tính.<br>'
-                                    '• Dán token vào ô trên và bấm <b>Kiểm tra phiên đăng nhập</b>.<br>'
-                                    '<b>2. Google Antigravity CLI (Gemini Advanced):</b><br>'
-                                    '• Khi chạy ứng dụng trên máy tính cá nhân (Desktop qua <code>run_gui.bat</code>), MarkItDown tự động kết nối tài khoản Google của bạn thông qua <code>agy</code> CLI.<br>'
-                                    '• Trên môi trường Web VPS, bạn có thể nhập Gemini API Key miễn phí ở bên dưới để kích hoạt đầy đủ tính năng.</div>'
+                                    '🟣 <b>Cách lấy Claude Code Session Token:</b><br>'
+                                    '• Mở trình duyệt vào <a href="https://claude.ai" target="_blank" style="color:#2B3990;font-weight:700;">claude.ai</a> → nhấn <b>F12</b> → tab <b>Application</b> → <b>Cookies</b> → copy giá trị cookie <code>sessionKey</code> (bắt đầu bằng <code>sk-ant-sid01-...</code>) hoặc mở tệp <code>C:\\Users\\&lt;tên_bạn&gt;\\.claude.json</code> trên máy tính.<br>'
+                                    '• Dán token vào ô trên và bấm <b>Kiểm tra kết nối Claude Code CLI</b>.</div>'
                                 )
 
                             gr.HTML('<div style="height:1px;background:var(--c-border);margin:12px 0;"></div>')
@@ -1402,7 +1444,7 @@ def build_ui():
                             with gr.Group():
                                 gr.HTML(
                                     '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
-                                    '🔑 Khóa API Dự phòng (Google Gemini / Anthropic API)'
+                                    '🔑 3. Khóa API Google Gemini (Dự phòng cho REST API)'
                                     '</div>'
                                 )
                                 api_key_in = gr.Textbox(
@@ -1590,6 +1632,7 @@ def build_ui():
                 "engine": default_eng,
                 "api_key": "",
                 "claude_token": "",
+                "agy_token": "",
             }
         )
 
@@ -1607,34 +1650,43 @@ def build_ui():
         engine_select.change(_apply_preset, [preset, mode, engine_select], preset_outputs)
 
         # Khôi phục lựa chọn đã lưu khi tải trang -> đặt component -> tính lại
-        demo.load(_load_prefs, prefs, [preset, mode, autosave_dir, engine_select, api_key_in, claude_token_in]).then(
+        demo.load(_load_prefs, prefs, [preset, mode, autosave_dir, engine_select, api_key_in, claude_token_in, agy_token_in]).then(
             _apply_preset, [preset, mode, engine_select], preset_outputs
         ).then(
             None, None, None,
             js="() => window.midSyncModeCards && window.midSyncModeCards()",
         )
 
-        # Lưu lại mỗi khi đổi preset / chế độ / thư mục lưu / engine / api_key / claude_token.
-        for _comp in (preset, mode, autosave_dir, engine_select, api_key_in, claude_token_in):
-            _comp.change(_save_prefs, [preset, mode, autosave_dir, engine_select, api_key_in, claude_token_in], prefs)
+        # Lưu lại mỗi khi đổi preset / chế độ / thư mục lưu / engine / api_key / claude_token / agy_token.
+        for _comp in (preset, mode, autosave_dir, engine_select, api_key_in, claude_token_in, agy_token_in):
+            _comp.change(_save_prefs, [preset, mode, autosave_dir, engine_select, api_key_in, claude_token_in, agy_token_in], prefs)
 
-        # Kiểm tra kết nối gói thuê bao & cập nhật bảng trạng thái
-        def _on_test_sub(c_tok, k_api):
-            _ok, _msg, _lat = infrastructure.test_claude_cli_connection(c_tok)
-            _html = infrastructure.render_infrastructure_html(api_key=k_api, claude_token=c_tok)
+        # Kiểm tra kết nối Antigravity CLI
+        def _on_test_agy(a_tok, c_tok, k_api):
+            _ok, _msg, _lat = infrastructure.test_antigravity_cli_connection(a_tok)
+            _html = infrastructure.render_infrastructure_html(api_key=k_api, claude_token=c_tok, agy_token=a_tok)
             return _msg, _html
 
-        btn_test_sub.click(_on_test_sub, [claude_token_in, api_key_in], [sub_test_status, infra_status_html])
-        claude_token_in.change(lambda c, k: infrastructure.render_infrastructure_html(api_key=k, claude_token=c), [claude_token_in, api_key_in], infra_status_html)
+        btn_test_agy.click(_on_test_agy, [agy_token_in, claude_token_in, api_key_in], [agy_test_status, infra_status_html])
+        agy_token_in.change(lambda a, c, k: infrastructure.render_infrastructure_html(api_key=k, claude_token=c, agy_token=a), [agy_token_in, claude_token_in, api_key_in], infra_status_html)
+
+        # Kiểm tra kết nối Claude Code CLI
+        def _on_test_claude(c_tok, a_tok, k_api):
+            _ok, _msg, _lat = infrastructure.test_claude_cli_connection(c_tok)
+            _html = infrastructure.render_infrastructure_html(api_key=k_api, claude_token=c_tok, agy_token=a_tok)
+            return _msg, _html
+
+        btn_test_sub.click(_on_test_claude, [claude_token_in, agy_token_in, api_key_in], [sub_test_status, infra_status_html])
+        claude_token_in.change(lambda c, a, k: infrastructure.render_infrastructure_html(api_key=k, claude_token=c, agy_token=a), [claude_token_in, agy_token_in, api_key_in], infra_status_html)
 
         # Kiểm tra kết nối API Key thời gian thực & cập nhật bảng trạng thái
-        def _on_test_api(k, c_tok):
+        def _on_test_api(k, c_tok, a_tok):
             _ok, _msg, _lat = infrastructure.test_gemini_connection(k)
-            _html = infrastructure.render_infrastructure_html(api_key=k, claude_token=c_tok)
+            _html = infrastructure.render_infrastructure_html(api_key=k, claude_token=c_tok, agy_token=a_tok)
             return _msg, _html
 
-        btn_test_api.click(_on_test_api, [api_key_in, claude_token_in], [api_test_status, infra_status_html])
-        api_key_in.change(lambda k, c: infrastructure.render_infrastructure_html(api_key=k, claude_token=c), [api_key_in, claude_token_in], infra_status_html)
+        btn_test_api.click(_on_test_api, [api_key_in, claude_token_in, agy_token_in], [api_test_status, infra_status_html])
+        api_key_in.change(lambda k, c, a: infrastructure.render_infrastructure_html(api_key=k, claude_token=c, agy_token=a), [api_key_in, claude_token_in, agy_token_in], infra_status_html)
 
         # Mở hộp thoại Windows -> nạp đường dẫn thật vào State + hiển thị.
         btn_pick.click(on_pick_files, None, [picked_state, picked_view]).then(
@@ -1653,7 +1705,7 @@ def build_ui():
                 force_ocr, board_dpi, translate_vn, merge_ocr_translate,
                 ocr_pages_per_call, autosave_on, autosave_dir,
                 picked_state, autosave_target, engine_select,
-                api_key_in, claude_token_in,
+                api_key_in, claude_token_in, agy_token_in,
             ],
             outputs,
             show_progress="full",

@@ -64,7 +64,7 @@ class AIEngineError(RuntimeError):
 
 
 def find_agy():
-    """Tìm đường dẫn thực thi của Antigravity (`agy.EXE` hoặc `agy`)."""
+    """Tìm đường dẫn thực thi của Antigravity (`agy.exe` hoặc `agy`)."""
     cmd = shutil.which("agy")
     if cmd:
         return cmd
@@ -72,21 +72,31 @@ def find_agy():
     if cmd:
         return cmd
 
+    user_home = os.path.expanduser("~")
+    candidates = [
+        "/usr/local/bin/agy",
+        "/usr/bin/agy",
+        "/root/.local/bin/agy",
+        os.path.join(user_home, ".local", "bin", "agy"),
+        os.path.join(user_home, ".local", "bin", "agy.exe"),
+        os.path.join(user_home, ".gemini", "bin", "agy.exe"),
+        os.path.join(user_home, ".gemini", "bin", "agy"),
+    ]
     local_app_data = os.environ.get("LOCALAPPDATA", "")
     if local_app_data:
-        candidate = os.path.join(local_app_data, "agy", "bin", "agy.EXE")
-        if os.path.isfile(candidate):
-            return candidate
-        candidate_lower = os.path.join(local_app_data, "agy", "bin", "agy.exe")
-        if os.path.isfile(candidate_lower):
-            return candidate_lower
-
-    user_home = os.path.expanduser("~")
+        candidates.extend([
+            os.path.join(local_app_data, "agy", "bin", "agy.EXE"),
+            os.path.join(local_app_data, "agy", "bin", "agy.exe"),
+        ])
     candidate_home = os.path.join(user_home, "AppData", "Local", "agy", "bin", "agy.EXE")
-    if os.path.isfile(candidate_home):
-        return candidate_home
+    candidates.append(candidate_home)
+
+    for c in candidates:
+        if c and os.path.isfile(c):
+            return c
 
     return None
+
 
 
 def find_claude():
@@ -250,8 +260,13 @@ def run_agy_prompt(
     img_dir: str = None,
     timeout: int = 600,
     api_key: str = None,
+    agy_token: str = None,
 ) -> str:
     """Thực thi prompt với Google Antigravity CLI (`agy -p`) hoặc Gemini Direct API."""
+    if agy_token and str(agy_token).strip():
+        from infrastructure import save_antigravity_token
+        save_antigravity_token(str(agy_token).strip())
+
     agy_bin = find_agy()
     if not agy_bin:
         # Fallback sang Gemini REST API nếu có API Key

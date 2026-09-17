@@ -7,9 +7,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     ORT_DISABLE_TELEMETRY=1 \
     GRADIO_SERVER_NAME="0.0.0.0" \
     GRADIO_SERVER_PORT=7860 \
+    PATH="/root/.local/bin:$PATH" \
     DOCKER=1
 
-# Install runtime & build dependencies + Node.js for Claude Code CLI
+# Install runtime & build dependencies + Node.js (for Claude Code) + Google Antigravity CLI (agy)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libimage-exiftool-perl \
@@ -21,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && npm install -g @anthropic-ai/claude-code \
+    && (curl -fsSL https://antigravity.google/cli/install.sh | bash || true) \
+    && (ln -sf /root/.local/bin/agy /usr/local/bin/agy || true) \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

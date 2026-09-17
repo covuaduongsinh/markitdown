@@ -139,19 +139,70 @@ def test_claude_cli_connection(claude_token=""):
         return False, f"❌ Lỗi thực thi Claude Code: {exc}", elapsed
 
 
-def test_antigravity_cli_connection():
-    """Kiểm tra kết nối Google Antigravity CLI bằng phiên đăng nhập gói thuê bao (Google Gemini Advanced).
+def save_antigravity_token(token_data: str) -> bool:
+    """Lưu token xác thực Antigravity CLI vào thư mục cấu hình ~/.gemini/antigravity-cli/."""
+    raw = (token_data or "").strip()
+    if not raw:
+        return False
+
+    home = os.path.expanduser("~")
+    gemini_cli_dir = os.path.join(home, ".gemini", "antigravity-cli")
+    os.makedirs(gemini_cli_dir, exist_ok=True)
+
+    token_file = os.path.join(gemini_cli_dir, "antigravity-oauth-token")
+    settings_file = os.path.join(gemini_cli_dir, "settings.json")
+
+    # Nếu chuỗi nhập vào là JSON đầy đủ
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            with open(token_file, "w", encoding="utf-8") as f:
+                json.dump(parsed, f, indent=2)
+            if not os.path.exists(settings_file):
+                with open(settings_file, "w", encoding="utf-8") as f:
+                    json.dump({"auth_method": parsed.get("auth_method", "consumer")}, f, indent=2)
+            return True
+    except Exception:
+        pass
+
+    # Nếu chỉ dán access_token hoặc refresh_token đơn lẻ
+    payload = {
+        "token": {
+            "access_token": raw,
+            "token_type": "Bearer",
+            "refresh_token": raw if raw.startswith("1//") else "",
+            "expiry": "2030-01-01T00:00:00Z",
+        },
+        "auth_method": "consumer",
+    }
+    try:
+        with open(token_file, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+        if not os.path.exists(settings_file):
+            with open(settings_file, "w", encoding="utf-8") as f:
+                json.dump({"auth_method": "consumer"}, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+
+def test_antigravity_cli_connection(agy_token=""):
+    """Kiểm tra kết nối Google Antigravity CLI bằng phiên đăng nhập gói thuê bao (Google Gemini Advanced/Pro).
 
     Trả về: (bool: is_ok, str: message, float: latency_ms)
     """
     from ai_engine import find_agy
 
+    if agy_token and agy_token.strip():
+        save_antigravity_token(agy_token.strip())
+
     agy_bin = find_agy()
     if not agy_bin:
         return (
             False,
-            "⚠️ Chưa tìm thấy Google Antigravity CLI ('agy') trong PATH.\n\n"
-            "👉 Antigravity CLI được cài đặt khi chạy MarkItDown trên máy tính cá nhân (Desktop).",
+            "⚠️ Chưa tìm thấy Google Antigravity CLI ('agy') trên hệ thống.\n\n"
+            "👉 **Trên máy tính**: Cài đặt Antigravity và chạy qua file `run_gui.bat`.\n"
+            "👉 **Trên Web VPS**: Lệnh `agy` được cài đặt tự động trong Docker container.",
             0.0,
         )
 
@@ -173,11 +224,14 @@ def test_antigravity_cli_connection():
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=15,
+            timeout=20,
             stdin=subprocess.DEVNULL,
             creationflags=flags,
         )
         elapsed = (time.perf_counter() - start) * 1000.0
+        out = (proc.stdout or "").strip()
+        err = (proc.stderr or "").strip()
+
         if proc.returncode == 0:
             return (
                 True,
@@ -185,8 +239,15 @@ def test_antigravity_cli_connection():
                 f"💎 Đang sử dụng phiên đăng nhập Thuê bao Google Antigravity (0đ phí API).",
                 elapsed,
             )
-        err = (proc.stderr or proc.stdout or "").strip()
-        return False, f"⚠️ Antigravity phản hồi lỗi: {err[:300]}", elapsed
+
+        if "authentication" in err.lower() or "auth" in err.lower() or "login" in err.lower() or "token" in err.lower():
+            return (
+                False,
+                "⚠️ Phiên đăng nhập Antigravity chưa được cấu hình hoặc đã hết hạn.\n\n"
+                "👉 Hãy dán nội dung token từ `C:\\Users\\<tên_bạn>\\.gemini\\antigravity-cli\\antigravity-oauth-token` vào ô bên trên.",
+                elapsed,
+            )
+        return False, f"⚠️ Antigravity phản hồi lỗi (exit {proc.returncode}): {err[:300] or out[:300]}", elapsed
     except subprocess.TimeoutExpired:
         elapsed = (time.perf_counter() - start) * 1000.0
         return False, f"⚠️ Quá thời gian kết nối tới Antigravity ({elapsed:.0f}ms).", elapsed
@@ -195,9 +256,12 @@ def test_antigravity_cli_connection():
         return False, f"❌ Lỗi thực thi Antigravity: {exc}", elapsed
 
 
-def get_infrastructure_status(api_key="", claude_token=""):
+def get_infrastructure_status(api_key="", claude_token="", agy_token=""):
     """Quét toàn bộ trạng thái hạ tầng và các module của MarkItDown."""
     from ai_engine import find_agy, find_claude
+
+    if agy_token and agy_token.strip():
+        save_antigravity_token(agy_token.strip())
 
     key = (api_key or "").strip() or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     c_token = (claude_token or "").strip() or os.environ.get("CLAUDE_CODE_SESSION_ACCESS_TOKEN") or os.environ.get("ANTHROPIC_SESSION_KEY")
@@ -207,18 +271,9 @@ def get_infrastructure_status(api_key="", claude_token=""):
     has_agy_cli = bool(find_agy())
     has_claude_cli = bool(find_claude())
 
-    # Trạng thái gói thuê bao tháng
-    sub_status = "unconfigured"
-    sub_desc = "Chưa kết nối phiên thuê bao CLI"
-    if has_agy_cli:
-        sub_status = "ready_agy"
-        sub_desc = "⚡ Google Antigravity CLI (Thuê bao tháng - Sẵn sàng)"
-    elif has_claude_cli and has_claude_token:
-        sub_status = "ready_claude_token"
-        sub_desc = "🟣 Claude Code CLI (Token thuê bao Pro/Max - Sẵn sàng)"
-    elif has_claude_cli:
-        sub_status = "ready_claude"
-        sub_desc = "🟣 Claude Code CLI (Sẵn sàng phiên máy chủ)"
+    # Kiểm tra token Antigravity trên đĩa
+    home = os.path.expanduser("~")
+    has_agy_token_file = os.path.exists(os.path.join(home, ".gemini", "antigravity-cli", "antigravity-oauth-token")) or bool(agy_token)
 
     # Trạng thái ONNX
     has_onnx = False
@@ -235,12 +290,17 @@ def get_infrastructure_status(api_key="", claude_token=""):
     env_name = "Docker Container (Linux VPS)" if is_docker else f"Desktop / Native ({sys.platform})"
 
     return {
-        "subscription": {
-            "status": sub_status,
-            "description": sub_desc,
-            "has_agy": has_agy_cli,
-            "has_claude": has_claude_cli,
-            "has_claude_token": has_claude_token,
+        "antigravity": {
+            "has_cli": has_agy_cli,
+            "has_token": has_agy_token_file,
+            "ready": has_agy_cli and has_agy_token_file,
+            "description": "⚡ Google Antigravity CLI (Sẵn sàng)" if (has_agy_cli and has_agy_token_file) else ("CLI sẵn sàng, cần Token" if has_agy_cli else "Chưa có CLI"),
+        },
+        "claude": {
+            "has_cli": has_claude_cli,
+            "has_token": has_claude_token,
+            "ready": has_claude_cli and (has_claude_token or not is_docker),
+            "description": "🟣 Claude Code CLI (Sẵn sàng)" if (has_claude_cli and (has_claude_token or not is_docker)) else ("CLI sẵn sàng, cần Token" if has_claude_cli else "Chưa có CLI"),
         },
         "api": {
             "has_gemini_key": has_gemini_key,
@@ -254,17 +314,17 @@ def get_infrastructure_status(api_key="", claude_token=""):
     }
 
 
-def render_infrastructure_html(api_key="", claude_token=""):
+def render_infrastructure_html(api_key="", claude_token="", agy_token=""):
     """Sinh HTML hiển thị bảng trạng thái hạ tầng hệ thống cho giao diện Web."""
-    status = get_infrastructure_status(api_key=api_key, claude_token=claude_token)
+    status = get_infrastructure_status(api_key=api_key, claude_token=claude_token, agy_token=agy_token)
 
     def _badge(ok, true_text, false_text):
         if ok:
             return f'<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;background:rgba(31,169,143,0.15);color:#1FA98F;border:1px solid rgba(31,169,143,0.3)">● {true_text}</span>'
         return f'<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;background:rgba(245,158,11,0.15);color:#d97706;border:1px solid rgba(245,158,11,0.3)">○ {false_text}</span>'
 
-    sub_ok = status["subscription"]["has_agy"] or status["subscription"]["has_claude_token"] or (status["subscription"]["has_claude"] and not status["environment"].startswith("Desktop"))
-    sub_badge = _badge(sub_ok, status["subscription"]["description"], "Chưa kết nối CLI / Token thuê bao")
+    agy_badge = _badge(status["antigravity"]["ready"], status["antigravity"]["description"], status["antigravity"]["description"])
+    claude_badge = _badge(status["claude"]["ready"], status["claude"]["description"], status["claude"]["description"])
     api_badge = _badge(status["api"]["has_gemini_key"], status["api"]["description"], "Chưa cấu hình API Key")
     onnx_badge = _badge(status["chessboard_onnx"]["available"], "Sẵn sàng (ONNX FEN)", "Tắt")
     env_text = status["environment"]
@@ -274,13 +334,17 @@ def render_infrastructure_html(api_key="", claude_token=""):
   <div style="font-size:13px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--c-subtext);margin-bottom:12px;display:flex;align-items:center;gap:6px;">
     <span>⚡ Trạng thái Hạ tầng &amp; Phiên Đăng nhập AI</span>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:10px;">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:10px;">
     <div style="background:var(--c-panel);border:1px solid var(--c-border);border-radius:10px;padding:10px 14px;">
-      <div style="font-size:12px;color:var(--c-subtext);margin-bottom:4px;">💎 Gói Thuê bao Tháng (CLI Session)</div>
-      <div>{sub_badge}</div>
+      <div style="font-size:12px;color:var(--c-subtext);margin-bottom:4px;">⚡ Antigravity CLI (Google Thuê bao)</div>
+      <div>{agy_badge}</div>
     </div>
     <div style="background:var(--c-panel);border:1px solid var(--c-border);border-radius:10px;padding:10px 14px;">
-      <div style="font-size:12px;color:var(--c-subtext);margin-bottom:4px;">🔑 Khóa API Dự phòng (Pay-as-you-go)</div>
+      <div style="font-size:12px;color:var(--c-subtext);margin-bottom:4px;">🟣 Claude Code CLI (Claude Thuê bao)</div>
+      <div>{claude_badge}</div>
+    </div>
+    <div style="background:var(--c-panel);border:1px solid var(--c-border);border-radius:10px;padding:10px 14px;">
+      <div style="font-size:12px;color:var(--c-subtext);margin-bottom:4px;">🔑 Khóa Gemini REST API (Dự phòng)</div>
       <div>{api_badge}</div>
     </div>
     <div style="background:var(--c-panel);border:1px solid var(--c-border);border-radius:10px;padding:10px 14px;">
@@ -294,3 +358,4 @@ def render_infrastructure_html(api_key="", claude_token=""):
   </div>
 </div>
 """
+
