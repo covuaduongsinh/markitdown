@@ -40,6 +40,7 @@ from ai_engine import (
     is_engine_available,
     get_default_engine,
 )
+import infrastructure
 
 # Thư mục tạm để chứa các tệp .md xuất ra (cho nút tải về)
 _OUTPUT_DIR = os.path.join(tempfile.gettempdir(), "markitdown_gui_output")
@@ -377,7 +378,13 @@ def convert_file(
     if use_ocr and is_image:
         if not is_engine_available(engine, api_key=api_key):
             # Không có CLI hoặc API Key -> thử chuyển đổi thường.
-            return _convert(file_path, enable_plugins, base_name, used_paths)
+            preview, raw_md, download, st = _convert(file_path, enable_plugins, base_name, used_paths)
+            if not (raw_md or "").strip():
+                st = (
+                    "⚠️ **Tệp ảnh**: Cần API Key để nhận diện văn bản & hình cờ.\n\n"
+                    "👉 Vui lòng mở tab **⚙️ Cài đặt Hạ tầng & API** để nhập Gemini API Key miễn phí!"
+                )
+            return preview, raw_md, download, st
         try:
             return _ocr_to_outputs(
                 file_path, base_name, model, board_dpi, used_paths, chess=chess,
@@ -395,9 +402,14 @@ def convert_file(
             preview, raw_md, download, st = _convert(
                 file_path, enable_plugins, base_name, used_paths
             )
-            cmd_name = "lệnh 'agy' hoặc Gemini API Key" if engine == "antigravity" else "lệnh 'claude'"
-            warning = f"⚠️ Máy chủ chưa cấu hình {cmd_name} — Đã chuyển đổi bằng MarkItDown tiêu chuẩn."
-            st = f"{warning}\n{st}" if st else warning
+            if (raw_md or "").strip():
+                warning = "ℹ️ Đã chuyển đổi văn bản chuẩn MarkItDown. (Để nhận diện thế cờ & dịch tiếng Việt, hãy nhập Gemini API Key tại tab **⚙️ Cài đặt Hạ tầng & API**)."
+                st = f"{warning}\n\n{st}" if st else warning
+            else:
+                st = (
+                    "⚠️ **PDF Scan (Dạng ảnh)**: Không tìm thấy lớp văn bản thô để trích xuất trực tiếp.\n\n"
+                    "👉 **Cách xử lý**: Vui lòng chuyển sang tab **⚙️ Cài đặt Hạ tầng & API** ở bên trái để nhập **Gemini API Key** (miễn phí), sau đó bấm Chuyển đổi lại để nhận diện toàn bộ nội dung & thế cờ!"
+                )
             return preview, raw_md, download, st
         try:
             return _ocr_to_outputs(
@@ -417,12 +429,12 @@ def convert_file(
     # PDF scan (không có lớp text) -> OCR fallback nếu được bật.
     if use_ocr and is_pdf and not (raw_md or "").strip():
         if not is_engine_available(engine, api_key=api_key):
-            cmd_name = "lệnh 'agy' hoặc Gemini API Key" if engine == "antigravity" else "lệnh 'claude'"
             return (
                 preview,
                 raw_md,
                 download,
-                f"⚠️ PDF scan không có text. Cần {cmd_name} để OCR.",
+                "⚠️ **PDF Scan (Dạng ảnh)**: Không có lớp văn bản.\n\n"
+                "👉 Vui lòng mở tab **⚙️ Cài đặt Hạ tầng & API** để nhập Gemini API Key miễn phí, sau đó bấm Chuyển đổi lại để OCR AI.",
             )
         try:
             return _ocr_to_outputs(
@@ -1047,7 +1059,12 @@ def on_convert_files(
                         sources.append(str(item))
 
         if not sources:
-            yield "", "", "", "ℹ️ Hãy chọn hoặc kéo-thả ít nhất một tệp trước."
+            yield (
+                "",
+                "",
+                "",
+                "⚠️ **Chưa có tệp nào được tải lên.**\n\nVui lòng kéo-thả tệp vào khung tải tệp ở trên trước khi bấm **Chuyển đổi**.",
+            )
             return
 
         chess = _is_chess_mode(mode_label)
@@ -1058,10 +1075,18 @@ def on_convert_files(
         n_ok = 0  # số tệp nguồn chuyển đổi thành công (không tính tệp _vn)
         done_paths, previews, raws, lines = [], [], [], []
 
+        # Phản hồi tức thì ngay tại frame đầu tiên
+        yield (
+            "",
+            "",
+            "",
+            f"🚀 **Đang khởi động tiến trình chuyển đổi ({total} tệp)...**",
+        )
+
         for i, fp in enumerate(sources, 1):
             name = os.path.basename(fp)
             # Báo tiến độ trước khi xử lý, giữ nguyên kết quả các tệp đã xong.
-            progress = "\n\n".join(lines + [f"⏳ Đang xử lý {i}/{total}: **{name}**…"])
+            progress = "\n\n".join(lines + [f"⏳ Đang xử lý {i}/{total}: **{name}**… (Đang phân tích định dạng)"])
             yield (
                 "\n\n---\n\n".join(previews),
                 "\n\n".join(raws),
@@ -1323,6 +1348,39 @@ def build_ui():
                             btn_url = gr.Button(
                                 "Chuyển đổi URL", variant="primary", elem_id="mid-convert-url"
                             )
+                        with gr.Tab("⚙️ Cài đặt Hạ tầng & API"):
+                            infra_status_html = gr.HTML(
+                                infrastructure.render_infrastructure_html(),
+                                elem_id="mid-infra-status",
+                            )
+                            with gr.Group():
+                                api_key_in = gr.Textbox(
+                                    label="Google Gemini API Key (Dùng trực tiếp trên Web)",
+                                    placeholder="AIzaSy... (lưu an toàn trên trình duyệt của bạn)",
+                                    type="password",
+                                    value="",
+                                    elem_classes="mid-api-key",
+                                    info="Dùng cho OCR nhận diện thế cờ & dịch tiếng Việt trực tiếp qua REST API (không cần cài CLI).",
+                                )
+                                with gr.Row():
+                                    btn_test_api = gr.Button(
+                                        "🔍 Kiểm tra kết nối API",
+                                        variant="secondary",
+                                        size="sm",
+                                    )
+                                api_test_status = gr.Markdown(
+                                    "",
+                                    elem_id="mid-api-test-status",
+                                )
+                                gr.HTML(
+                                    '<div style="margin-top:6px;padding:8px 12px;border-radius:8px;'
+                                    'background:rgba(31,169,143,0.08);border:1px solid rgba(31,169,143,0.2);'
+                                    'font-size:12.5px;color:var(--c-text);">'
+                                    '💡 <b>Chưa có API Key?</b> Nhận miễn phí 100% tại '
+                                    '<a href="https://aistudio.google.com/app/apikey" target="_blank" '
+                                    'style="color:#1FA98F;font-weight:700;text-decoration:underline;">'
+                                    'Google AI Studio (30 giây)</a>.</div>'
+                                )
 
                 # --- panel chế độ xử lý (thẻ HTML + radio ẩn để giữ backend) ---
                 with gr.Group(elem_classes=["mid-card", "mid-mode-card"]):
@@ -1366,15 +1424,6 @@ def build_ui():
                             label="Công cụ AI (Engine)",
                             elem_classes="mid-engine-select",
                             info="Antigravity (mặc định) tối ưu cho Gemini Flash/Pro, bàn cờ & dịch thuật. Claude Code (phương án 2) dùng claude CLI.",
-                        )
-
-                        api_key_in = gr.Textbox(
-                            label="Gemini API Key (Tùy chọn cho Web)",
-                            placeholder="AIzaSy... (dùng trực tiếp REST API trên web mà không cần CLI)",
-                            type="password",
-                            value="",
-                            elem_classes="mid-api-key",
-                            info="Tùy chọn: Nhập Google Gemini API Key để dùng OCR & Dịch trực tiếp khi chạy trên máy chủ web không cài CLI.",
                         )
 
                         force_ocr = gr.Checkbox(
@@ -1516,6 +1565,15 @@ def build_ui():
         # Lưu lại mỗi khi đổi preset / chế độ / thư mục lưu / engine / api_key.
         for _comp in (preset, mode, autosave_dir, engine_select, api_key_in):
             _comp.change(_save_prefs, [preset, mode, autosave_dir, engine_select, api_key_in], prefs)
+
+        # Kiểm tra kết nối API Key thời gian thực & cập nhật bảng trạng thái
+        def _on_test_api(k):
+            _ok, _msg, _lat = infrastructure.test_gemini_connection(k)
+            _html = infrastructure.render_infrastructure_html(k)
+            return _msg, _html
+
+        btn_test_api.click(_on_test_api, api_key_in, [api_test_status, infra_status_html])
+        api_key_in.change(lambda k: infrastructure.render_infrastructure_html(k), api_key_in, infra_status_html)
 
         # Mở hộp thoại Windows -> nạp đường dẫn thật vào State + hiển thị.
         btn_pick.click(on_pick_files, None, [picked_state, picked_view]).then(
