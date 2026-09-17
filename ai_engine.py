@@ -124,20 +124,42 @@ def find_gemini_api_key(api_key: str = None) -> str:
     return key.strip()
 
 
-def is_engine_available(engine=ENGINE_ANTIGRAVITY, api_key: str = None) -> bool:
+def is_engine_available(
+    engine: str = ENGINE_ANTIGRAVITY,
+    api_key: str = None,
+    claude_token: str = None,
+    agy_token: str = None,
+    **kwargs,
+) -> bool:
     """Kiểm tra xem engine hoặc API Key tương ứng có sẵn để sử dụng không."""
     if engine == ENGINE_ANTIGRAVITY:
-        return (find_agy() is not None) or bool(find_gemini_api_key(api_key))
+        if find_agy() is not None:
+            return True
+        if agy_token and str(agy_token).strip():
+            return True
+        user_home = os.path.expanduser("~")
+        token_path = os.path.join(user_home, ".gemini", "antigravity-cli", "antigravity-oauth-token")
+        if os.path.isfile(token_path) and os.path.getsize(token_path) > 0:
+            return True
+        return bool(find_gemini_api_key(api_key))
     elif engine == ENGINE_CLAUDE:
-        return find_claude() is not None
+        if find_claude() is not None:
+            return True
+        if claude_token and str(claude_token).strip():
+            return True
+        user_home = os.path.expanduser("~")
+        config_path = os.path.join(user_home, ".claude.json")
+        if os.path.isfile(config_path) and os.path.getsize(config_path) > 0:
+            return True
+        return False
     return False
 
 
-def get_default_engine(api_key: str = None) -> str:
+def get_default_engine(api_key: str = None, claude_token: str = None, agy_token: str = None, **kwargs) -> str:
     """Trả về engine mặc định ưu tiên."""
-    if find_agy() or find_gemini_api_key(api_key):
+    if is_engine_available(ENGINE_ANTIGRAVITY, api_key=api_key, agy_token=agy_token):
         return ENGINE_ANTIGRAVITY
-    if find_claude():
+    if is_engine_available(ENGINE_CLAUDE, claude_token=claude_token):
         return ENGINE_CLAUDE
     return ENGINE_ANTIGRAVITY
 

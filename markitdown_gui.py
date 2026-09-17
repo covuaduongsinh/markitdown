@@ -380,7 +380,7 @@ def convert_file(
 
     # Ảnh: built-in chỉ ra metadata/mô tả, nên OCR trực tiếp nếu được bật.
     if use_ocr and is_image:
-        if not is_engine_available(engine, api_key=api_key, claude_token=claude_token):
+        if not is_engine_available(engine, api_key=api_key, claude_token=claude_token, agy_token=agy_token):
             # Không có CLI hoặc API Key -> thử chuyển đổi thường.
             preview, raw_md, download, st = _convert(file_path, enable_plugins, base_name, used_paths)
             if not (raw_md or "").strip():
@@ -402,7 +402,7 @@ def convert_file(
 
     # PDF + "Buộc OCR": bỏ qua lớp text có sẵn, OCR lại toàn bộ bằng AI Engine.
     if use_ocr and is_pdf and force_ocr:
-        if not is_engine_available(engine, api_key=api_key, claude_token=claude_token):
+        if not is_engine_available(engine, api_key=api_key, claude_token=claude_token, agy_token=agy_token):
             # Fallback sang chuyển đổi chuẩn của MarkItDown kèm ghi chú
             preview, raw_md, download, st = _convert(
                 file_path, enable_plugins, base_name, used_paths
@@ -434,7 +434,7 @@ def convert_file(
 
     # PDF scan (không có lớp text) -> OCR fallback nếu được bật.
     if use_ocr and is_pdf and not (raw_md or "").strip():
-        if not is_engine_available(engine, api_key=api_key, claude_token=claude_token):
+        if not is_engine_available(engine, api_key=api_key, claude_token=claude_token, agy_token=agy_token):
             return (
                 preview,
                 raw_md,
@@ -946,7 +946,7 @@ def _translate_to_vn(
     import claude_translate
 
     engine_name = "Google Antigravity / Gemini" if engine == ENGINE_ANTIGRAVITY else "Claude Code"
-    if not is_engine_available(engine, api_key=api_key, claude_token=claude_token):
+    if not is_engine_available(engine, api_key=api_key, claude_token=claude_token, agy_token=agy_token):
         cmd_name = "lệnh 'agy' hoặc Gemini API Key" if engine == ENGINE_ANTIGRAVITY else "lệnh 'claude' hoặc Token thuê bao"
         return None, f"⚠️ Bỏ qua dịch: cần {engine_name} ({cmd_name})."
     try:
