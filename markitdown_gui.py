@@ -1385,12 +1385,16 @@ def build_ui():
                                     elem_id="mid-sub-test-status",
                                 )
                                 gr.HTML(
-                                    '<div style="margin-top:6px;padding:8px 12px;border-radius:8px;'
+                                    '<div style="margin-top:8px;padding:10px 14px;border-radius:8px;'
                                     'background:rgba(43,57,144,0.06);border:1px solid rgba(43,57,144,0.18);'
-                                    'font-size:12.5px;color:var(--c-text);">'
-                                    '💎 <b>Hướng dẫn kết nối Thuê bao tháng:</b><br>'
-                                    '• <b>Trên Máy tính (Desktop)</b>: Đăng nhập sẵn `claude` hoặc `agy`, ứng dụng tự động dùng phiên của bạn.<br>'
-                                    '• <b>Trên Web / VPS</b>: Lấy session token từ file <code>~/.claude.json</code> hoặc cookie đăng nhập rồi dán vào ô trên.</div>'
+                                    'font-size:12.5px;color:var(--c-text);line-height:1.6;">'
+                                    '💎 <b>Hướng dẫn kết nối Gói Thuê bao Tháng (0đ phí API):</b><br>'
+                                    '<b>1. Claude Code CLI (Claude Pro/Max/Team):</b><br>'
+                                    '• <i>Cách lấy Session Token</i>: Mở trình duyệt vào <a href="https://claude.ai" target="_blank" style="color:#2B3990;font-weight:700;">claude.ai</a> → nhấn <b>F12</b> → tab <b>Application</b> → <b>Cookies</b> → copy giá trị cookie <code>sessionKey</code> (bắt đầu bằng <code>sk-ant-sid01-...</code>) hoặc mở tệp <code>C:\\Users\\&lt;tên_bạn&gt;\\.claude.json</code> trên máy tính.<br>'
+                                    '• Dán token vào ô trên và bấm <b>Kiểm tra phiên đăng nhập</b>.<br>'
+                                    '<b>2. Google Antigravity CLI (Gemini Advanced):</b><br>'
+                                    '• Khi chạy ứng dụng trên máy tính cá nhân (Desktop qua <code>run_gui.bat</code>), MarkItDown tự động kết nối tài khoản Google của bạn thông qua <code>agy</code> CLI.<br>'
+                                    '• Trên môi trường Web VPS, bạn có thể nhập Gemini API Key miễn phí ở bên dưới để kích hoạt đầy đủ tính năng.</div>'
                                 )
 
                             gr.HTML('<div style="height:1px;background:var(--c-border);margin:12px 0;"></div>')

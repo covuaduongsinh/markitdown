@@ -92,7 +92,6 @@ def test_claude_cli_connection(claude_token=""):
             claude_bin,
             "-p",
             "Say 'OK' in one word",
-            "--dangerously-skip-permissions",
             "--disable-slash-commands",
             "--no-session-persistence",
         ]
@@ -117,14 +116,21 @@ def test_claude_cli_connection(claude_token=""):
                 elapsed,
             )
         err = (proc.stderr or proc.stdout or "").strip()
+        if not token:
+            return (
+                False,
+                f"⚠️ Chưa nhập Session Token của Claude Code.\n\n"
+                f"👉 Hãy lấy Token từ cookie `sessionKey` trên web claude.ai hoặc trong file `C:\\Users\\duongsinh\\.claude.json` và dán vào ô bên trên.",
+                elapsed,
+            )
         if "login" in err.lower() or "auth" in err.lower() or "session" in err.lower():
             return (
                 False,
-                f"⚠️ Phiên đăng nhập Claude Code chưa được kích hoạt hoặc đã hết hạn.\n\n"
-                f"👉 Hãy chạy lệnh `claude` trên máy tính để đăng nhập tài khoản thuê bao tháng, hoặc dán Token phiên đăng nhập vào ô bên dưới.",
+                f"⚠️ Phiên đăng nhập Claude Code chưa hợp lệ hoặc đã hết hạn.\n\n"
+                f"👉 Hãy kiểm tra lại Session Token vừa dán (bắt đầu bằng `sk-ant-...`).",
                 elapsed,
             )
-        return False, f"⚠️ Claude Code phản hồi lỗi (exit {proc.returncode}): {err[:300]}", elapsed
+        return False, f"⚠️ Claude Code phản hồi (exit {proc.returncode}): {err[:300]}", elapsed
     except subprocess.TimeoutExpired:
         elapsed = (time.perf_counter() - start) * 1000.0
         return False, f"⚠️ Quá thời gian kết nối tới Claude Code ({elapsed:.0f}ms).", elapsed
