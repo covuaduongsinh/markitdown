@@ -124,6 +124,8 @@ def _zip_all(paths):
     used = set()
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for p in paths:
+            if not os.path.exists(p):
+                continue
             arc = os.path.basename(p)
             root, ext = os.path.splitext(arc)
             n = 2
@@ -135,10 +137,11 @@ def _zip_all(paths):
     return zip_path
 
 
-def _download_panel(paths):
+def _download_panel(paths, auto_download=False):
     """HTML danh sách tệp kết quả, mỗi tệp một nút tải riêng.
 
     Khi có ≥2 tệp, chèn thêm một dòng "Tải tất cả (.zip)" ở đầu danh sách.
+    `auto_download=True`: thêm cờ data-auto-download="1" để JS client tự động tải về máy.
     """
     if not paths:
         return ""
@@ -151,7 +154,7 @@ def _download_panel(paths):
             f'<div class="dl-row dl-all">'
             f'<span class="dl-fileicon">{_DL_ZIP_ICON}</span>'
             f'<span class="dl-name">Tải tất cả · {len(paths)} tệp</span>'
-            f'<a class="dl-btn" href="{zip_href}" download="{zip_name}">'
+            f'<a class="dl-btn dl-all-btn" href="{zip_href}" download="{zip_name}">'
             f'{_DL_DOWN_ICON}Tải .zip</a></div>'
         )
     for p in paths:
@@ -160,11 +163,17 @@ def _download_panel(paths):
         rows.append(
             f'<div class="dl-row"><span class="dl-fileicon">{_DL_FILE_ICON}</span>'
             f'<span class="dl-name">{name}</span>'
-            f'<a class="dl-btn" href="{href}" download="{name}">{_DL_DOWN_ICON}Tải về</a></div>'
+            f'<a class="dl-btn dl-file-btn" href="{href}" download="{name}">{_DL_DOWN_ICON}Tải về</a></div>'
         )
+    auto_attr = ' data-auto-download="1"' if auto_download else ' data-auto-download="0"'
+    auto_badge = (
+        ' <span style="font-size:11px;font-weight:normal;color:var(--teal);margin-left:6px;">'
+        '⚡ Tự động tải về máy</span>'
+        if auto_download else ''
+    )
     return (
-        '<div class="dl-list"><div class="dl-title">Tệp kết quả · '
-        f'{len(paths)} tệp</div>'
+        f'<div class="dl-list"{auto_attr}><div class="dl-title">Tệp kết quả · '
+        f'{len(paths)} tệp{auto_badge}</div>'
         + "".join(rows)
         + "</div>"
     )
@@ -585,12 +594,55 @@ _SCRIPT = r"""
     });
   };
 
+  window.midDownloadedUrls = new Set();
+  window.midResetDownloads = function(){
+    window.midDownloadedUrls.clear();
+  };
+
+  window.midTriggerAutoDownloads = function(){
+    var container = document.getElementById('mid-downloads');
+    if (!container) return;
+    var list = container.querySelector('.dl-list[data-auto-download="1"]');
+    if (!list) {
+      if (!container.innerHTML.trim()) {
+        window.midDownloadedUrls.clear();
+      }
+      return;
+    }
+    var rows = list.querySelectorAll('.dl-row:not(.dl-all) a.dl-btn');
+    var queue = [];
+    rows.forEach(function(a){
+      var href = a.getAttribute('href');
+      var name = a.getAttribute('download') || '';
+      if (href && !window.midDownloadedUrls.has(href)){
+        window.midDownloadedUrls.add(href);
+        queue.push({href: href, name: name});
+      }
+    });
+
+    queue.forEach(function(item, idx){
+      setTimeout(function(){
+        var a = document.createElement('a');
+        a.href = item.href;
+        if (item.name) a.download = item.name;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function(){
+          if (a.parentNode) a.parentNode.removeChild(a);
+        }, 1000);
+      }, idx * 350);
+    });
+  };
+
   document.addEventListener('click', function(e){
     if (!e.target || !e.target.closest) return;
     var card = e.target.closest('[data-mid-mode]');
     if (card){ window.midSelectMode(+card.dataset.midMode); return; }
     var t = e.target.closest('[data-mid-action="toggle-theme"]');
     if (t){ window.midToggleTheme(); return; }
+    var clr = e.target.closest('.mid-clear-btn');
+    if (clr){ window.midResetDownloads(); }
   });
 
   function init(){
@@ -602,10 +654,16 @@ _SCRIPT = r"""
     setThemeBtn();
     window.midSyncModeCards();
     window.midRenderBoards();
+    window.midTriggerAutoDownloads();
   }
   function start(){
     init();
-    new MutationObserver(function(){ setThemeBtn(); window.midSyncModeCards(); window.midRenderBoards(); }).observe(document.body, {childList:true, subtree:true});
+    new MutationObserver(function(){
+      setThemeBtn();
+      window.midSyncModeCards();
+      window.midRenderBoards();
+      window.midTriggerAutoDownloads();
+    }).observe(document.body, {childList:true, subtree:true});
   }
   if (document.body) start();
   else document.addEventListener('DOMContentLoaded', start);
@@ -925,10 +983,10 @@ _PRESET_HINTS = {
 _STATUS_HINT = "👋 Chọn tệp hoặc dán URL rồi bấm **Chuyển đổi**."
 
 
-def _with_download_update(result):
+def _with_download_update(result, auto_download=False):
     """Đổi đường dẫn tải về thành bảng HTML chứa nút tải."""
     preview_md, raw_md, path, status_md = result
-    return preview_md, raw_md, _download_panel([path] if path else []), status_md
+    return preview_md, raw_md, _download_panel([path] if path else [], auto_download=auto_download), status_md
 
 
 def _translate_to_vn(
@@ -1044,8 +1102,10 @@ def on_convert_files(
     file_paths, mode_label, enable_plugins, use_ocr,
     model_label, ocr_effort_label, translate_model_label, translate_effort_label,
     force_ocr, board_dpi_label, translate_vn, merge_ocr_translate, ocr_pages_label,
-    autosave_on, autosave_dir, picked_paths, autosave_target, engine,
+    autosave_on, auto_download_on, autosave_dir, picked_paths, autosave_target, engine,
     api_key="", claude_token="", agy_token="",
+    dropbox_sync_on=True, dropbox_folder="/MarkItDown",
+    dropbox_token="", dropbox_refresh_token="", dropbox_app_key="", dropbox_app_secret="",
 ):
     try:
         raw_sources = picked_paths if picked_paths else file_paths
@@ -1099,7 +1159,7 @@ def on_convert_files(
             yield (
                 "\n\n---\n\n".join(previews),
                 "\n\n".join(raws),
-                _download_panel(done_paths),
+                _download_panel(done_paths, auto_download=auto_download_on),
                 progress,
             )
 
@@ -1138,7 +1198,19 @@ def on_convert_files(
                 )
                 if path and autosave_on:
                     saved, err = _autosave(path, save_dir)
-                    st += f"\n  💾 đã lưu: `{saved}`{save_note}" if saved else f"\n  {err}"
+                    st += f"\n  💾 [VPS] đã lưu: `{saved}`{save_note}" if saved else f"\n  {err}"
+                if path and dropbox_sync_on:
+                    dbx_path, dbx_err = infrastructure.upload_to_dropbox(
+                        path, target_folder=dropbox_folder,
+                        token=dropbox_token, refresh_token=dropbox_refresh_token,
+                        app_key=dropbox_app_key, app_secret=dropbox_app_secret,
+                    )
+                    if dbx_path:
+                        st += f"\n  ☁️ [Dropbox] đã lưu: `{dbx_path}`"
+                    elif dbx_err:
+                        st += f"\n  ⚠️ [Dropbox] {dbx_err}"
+                if path and auto_download_on:
+                    st += f"\n  ⚡ [Máy tính] Đang tải `{os.path.basename(path)}` về máy..."
                 if path:
                     n_ok += 1
                     done_paths.append(path)
@@ -1149,7 +1221,7 @@ def on_convert_files(
                     yield (
                         "\n\n---\n\n".join(previews),
                         "\n\n".join(raws),
-                        _download_panel(done_paths),
+                        _download_panel(done_paths, auto_download=auto_download_on),
                         "\n\n".join(
                             lines + [f"**{name}** — {st}",
                                      f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**…"]
@@ -1185,7 +1257,19 @@ def on_convert_files(
                     if vn_path:
                         if autosave_on:
                             saved, err = _autosave(vn_path, save_dir)
-                            st += f" · 💾 đã lưu: `{saved}`" if saved else f"\n  {err}"
+                            st += f" · 💾 [VPS] đã lưu: `{saved}`" if saved else f"\n  {err}"
+                        if dropbox_sync_on:
+                            dbx_path, dbx_err = infrastructure.upload_to_dropbox(
+                                vn_path, target_folder=dropbox_folder,
+                                token=dropbox_token, refresh_token=dropbox_refresh_token,
+                                app_key=dropbox_app_key, app_secret=dropbox_app_secret,
+                            )
+                            if dbx_path:
+                                st += f" · ☁️ [Dropbox] `{dbx_path}`"
+                            elif dbx_err:
+                                st += f"\n  ⚠️ [Dropbox] {dbx_err}"
+                        if auto_download_on:
+                            st += f" · ⚡ [Máy tính] Đang tải `{os.path.basename(vn_path)}`"
                         done_paths.append(vn_path)
 
                 # Sách cờ vua (mặc định): gom FEN các thế cờ -> tệp <tên gốc>_fen.txt
@@ -1196,7 +1280,19 @@ def on_convert_files(
                         st += f"\n  ♟️ Đã gom {n_fen} thế cờ → `{os.path.basename(fen_path)}`"
                         if autosave_on:
                             saved, err = _autosave(fen_path, save_dir)
-                            st += f" · 💾 đã lưu: `{saved}`" if saved else f"\n  {err}"
+                            st += f" · 💾 [VPS] đã lưu: `{saved}`" if saved else f"\n  {err}"
+                        if dropbox_sync_on:
+                            dbx_path, dbx_err = infrastructure.upload_to_dropbox(
+                                fen_path, target_folder=dropbox_folder,
+                                token=dropbox_token, refresh_token=dropbox_refresh_token,
+                                app_key=dropbox_app_key, app_secret=dropbox_app_secret,
+                            )
+                            if dbx_path:
+                                st += f" · ☁️ [Dropbox] `{dbx_path}`"
+                            elif dbx_err:
+                                st += f"\n  ⚠️ [Dropbox] {dbx_err}"
+                        if auto_download_on:
+                            st += f" · ⚡ [Máy tính] Đang tải `{os.path.basename(fen_path)}`"
                         done_paths.append(fen_path)
                 lines.append(f"**{name}** — {st}")
                 if preview:
@@ -1216,15 +1312,31 @@ def on_convert_files(
             yield (
                 "\n\n---\n\n".join(previews),
                 "\n\n".join(raws),
-                _download_panel(done_paths),
+                _download_panel(done_paths, auto_download=auto_download_on),
                 summary,
             )
     except Exception as top_exc:
         yield "", "", "", f"❌ Đã xảy ra lỗi không mong muốn: {top_exc}"
 
 
-def on_convert_url(url, enable_plugins):
-    return _with_download_update(convert_url(url, enable_plugins))
+def on_convert_url(
+    url, enable_plugins, auto_download_on=True,
+    dropbox_sync_on=False, dropbox_folder="/MarkItDown",
+    dropbox_token="", dropbox_refresh_token="", dropbox_app_key="", dropbox_app_secret="",
+):
+    preview, raw_md, path, st = convert_url(url, enable_plugins)
+    if path and dropbox_sync_on:
+        dbx_path, dbx_err = infrastructure.upload_to_dropbox(
+            path, target_folder=dropbox_folder,
+            token=dropbox_token, refresh_token=dropbox_refresh_token,
+            app_key=dropbox_app_key, app_secret=dropbox_app_secret,
+        )
+        if dbx_path:
+            st += f"\n  ☁️ [Dropbox] Đã đồng bộ: `{dbx_path}`"
+        elif dbx_err:
+            st += f"\n  ⚠️ [Dropbox] {dbx_err}"
+    paths = [path] if path else []
+    return preview, raw_md, _download_panel(paths, auto_download=auto_download_on), st
 
 
 def on_clear():
@@ -1269,6 +1381,8 @@ def _apply_preset(preset, mode_label, engine=ENGINE_ANTIGRAVITY):
         gr.update(value=True),             # translate_vn
         gr.update(value=opt["merge"]),     # merge_ocr_translate
         gr.update(value=True),             # autosave_on
+        gr.update(value=True),             # auto_download_on
+        gr.update(value=True),             # dropbox_sync_on
         gr.update(choices=ocr_choices, value=opt["ocr_model"]),
         gr.update(value=opt["ocr_effort"]),
         gr.update(choices=tr_choices, value=opt["tr_model"]),
@@ -1289,7 +1403,7 @@ def _set_running(running):
 
 
 def _load_prefs(p):
-    """BrowserState -> đặt lại preset/chế độ/thư mục lưu/engine/api_key/claude_token/agy_token khi tải trang."""
+    """BrowserState -> đặt lại preset/chế độ/thư mục lưu/engine/api_key/claude_token/agy_token/auto_download/dropbox khi tải trang."""
     p = p or {}
     default_eng = get_default_engine()
     return (
@@ -1300,10 +1414,19 @@ def _load_prefs(p):
         gr.update(value=p.get("api_key", "")),
         gr.update(value=p.get("claude_token", "")),
         gr.update(value=p.get("agy_token", "")),
+        gr.update(value=p.get("auto_download", True)),
+        gr.update(value=p.get("dropbox_token", "")),
+        gr.update(value=p.get("dropbox_app_key", "")),
+        gr.update(value=p.get("dropbox_app_secret", "")),
+        gr.update(value=p.get("dropbox_folder", "/MarkItDown")),
+        gr.update(value=p.get("dropbox_sync", True)),
     )
 
 
-def _save_prefs(preset_v, mode_v, dir_v, engine_v, api_key_v="", claude_token_v="", agy_token_v=""):
+def _save_prefs(
+    preset_v, mode_v, dir_v, engine_v, api_key_v="", claude_token_v="", agy_token_v="", auto_download_v=True,
+    dropbox_token_v="", dropbox_app_key_v="", dropbox_app_secret_v="", dropbox_folder_v="/MarkItDown", dropbox_sync_v=True,
+):
     """Gói lựa chọn hiện tại để lưu vào BrowserState (localStorage)."""
     return {
         "preset": preset_v,
@@ -1313,6 +1436,12 @@ def _save_prefs(preset_v, mode_v, dir_v, engine_v, api_key_v="", claude_token_v=
         "api_key": api_key_v,
         "claude_token": claude_token_v,
         "agy_token": agy_token_v,
+        "auto_download": auto_download_v,
+        "dropbox_token": dropbox_token_v,
+        "dropbox_app_key": dropbox_app_key_v,
+        "dropbox_app_secret": dropbox_app_secret_v,
+        "dropbox_folder": dropbox_folder_v,
+        "dropbox_sync": dropbox_sync_v,
     }
 
 
@@ -1465,14 +1594,60 @@ def build_ui():
                                     "",
                                     elem_id="mid-api-test-status",
                                 )
+                                gr.HTML('<div style="height:1px;background:var(--c-border);margin:12px 0;"></div>')
+
+                            with gr.Group():
+                                gr.HTML(
+                                    '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
+                                    '☁️ 4. Cấu hình Đồng bộ Đám mây Dropbox (Dropbox Cloud Sync)'
+                                    '</div>'
+                                )
+                                dropbox_token_in = gr.Textbox(
+                                    label="Dropbox Access Token hoặc Refresh Token",
+                                    placeholder="sl.u... hoặc Refresh Token (lưu an toàn trên trình duyệt)",
+                                    type="password",
+                                    value="",
+                                    elem_classes="mid-api-key",
+                                    info="Dùng để tự động đồng bộ tất cả tệp kết quả (.md, _vn.md, _fen.txt) lên tài khoản Dropbox của bạn.",
+                                )
+                                with gr.Row():
+                                    dropbox_app_key_in = gr.Textbox(
+                                        label="Dropbox App Key (Dành cho Refresh Token)",
+                                        placeholder="vd: abc123xyz...",
+                                        value="",
+                                        elem_classes="mid-api-key",
+                                    )
+                                    dropbox_app_secret_in = gr.Textbox(
+                                        label="Dropbox App Secret (Dành cho Refresh Token)",
+                                        placeholder="vd: sec123...",
+                                        type="password",
+                                        value="",
+                                        elem_classes="mid-api-key",
+                                    )
+                                dropbox_folder_in = gr.Textbox(
+                                    label="Thư mục mặc định trên Dropbox",
+                                    value="/MarkItDown",
+                                    elem_classes="mid-autosave-dir",
+                                    info="Các tệp chuyển đổi sẽ được lưu vào thư mục này trên Dropbox (mặc định: /MarkItDown).",
+                                )
+                                with gr.Row():
+                                    btn_test_dropbox = gr.Button(
+                                        "🔍 Kiểm tra kết nối Dropbox",
+                                        variant="secondary",
+                                        size="sm",
+                                    )
+                                dropbox_test_status = gr.Markdown(
+                                    "",
+                                    elem_id="mid-dropbox-test-status",
+                                )
                                 gr.HTML(
                                     '<div style="margin-top:6px;padding:8px 12px;border-radius:8px;'
-                                    'background:rgba(31,169,143,0.08);border:1px solid rgba(31,169,143,0.2);'
-                                    'font-size:12.5px;color:var(--c-text);">'
-                                    '💡 <b>Chưa có API Key?</b> Nhận miễn phí 100% tại '
-                                    '<a href="https://aistudio.google.com/app/apikey" target="_blank" '
-                                    'style="color:#1FA98F;font-weight:700;text-decoration:underline;">'
-                                    'Google AI Studio (30 giây)</a>.</div>'
+                                    'background:rgba(0,97,254,0.06);border:1px solid rgba(0,97,254,0.2);'
+                                    'font-size:12.5px;color:var(--c-text);line-height:1.6;">'
+                                    '☁️ <b>Cách lấy Token Dropbox (1 phút):</b><br>'
+                                    '• Truy cập <a href="https://www.dropbox.com/developers/apps" target="_blank" style="color:#0061FE;font-weight:700;text-decoration:underline;">Dropbox App Console</a> → Tạo App (chọn <b>Scoped Access</b> → <b>Full Dropbox</b> hoặc <b>App Folder</b>).<br>'
+                                    '• Tab <b>Permissions</b>: tick chọn <code>files.content.write</code>, <code>files.content.read</code>, <code>account_info.read</code> → Bấm <b>Submit</b>.<br>'
+                                    '• Tab <b>Settings</b>: Bấm <b>Generate Access Token</b> hoặc copy <b>App Key</b> &amp; <b>App Secret</b> để dán vào đây.</div>'
                                 )
 
                 # --- panel chế độ xử lý (thẻ HTML + radio ẩn để giữ backend) ---
@@ -1534,9 +1709,19 @@ def build_ui():
                             info="Mỗi trang vừa OCR vừa dịch — tiết kiệm ~30–40% thời gian/quota.",
                             elem_classes="mid-toggle", container=False,
                         )
+                        auto_download_on = gr.Checkbox(
+                            label="Tự động tải về máy tính (Trình duyệt)", value=True,
+                            info="Tự động tải các tệp kết quả (.md / .txt) về máy tính cá nhân qua trình duyệt khi xử lý xong.",
+                            elem_classes="mid-toggle", container=False,
+                        )
+                        dropbox_sync_on = gr.Checkbox(
+                            label="Tự động đồng bộ lên Dropbox", value=True,
+                            info="Tự động tải tệp kết quả (.md / .txt) lên Dropbox để các phần mềm khác cùng sử dụng.",
+                            elem_classes="mid-toggle", container=False,
+                        )
                         autosave_on = gr.Checkbox(
-                            label="Tự động lưu .md ra đĩa", value=True,
-                            info="Lưu cạnh file gốc ngay khi mỗi tệp xong.",
+                            label="Lưu bản sao trên máy chủ (VPS)", value=True,
+                            info="Lưu trên ổ đĩa máy chủ/VPS cạnh file gốc hoặc thư mục chỉ định.",
                             elem_classes="mid-toggle", container=False,
                         )
 
@@ -1590,7 +1775,7 @@ def build_ui():
                         autosave_target = gr.Radio(
                             choices=[AUTOSAVE_SRC, AUTOSAVE_CUSTOM],
                             value=AUTOSAVE_SRC,
-                            label="Nơi lưu .md",
+                            label="Nơi lưu .md trên VPS",
                             elem_classes="mid-autosave-target",
                             info=(
                                 "'Cùng thư mục với file gốc' chỉ áp dụng cho tệp chọn "
@@ -1599,7 +1784,7 @@ def build_ui():
                             ),
                         )
                         autosave_dir = gr.Textbox(
-                            label="Thư mục tùy chọn",
+                            label="Thư mục tùy chọn trên VPS",
                             value=os.path.join(os.path.expanduser("~"), "Downloads"),
                             elem_classes="mid-autosave-dir",
                         )
@@ -1633,13 +1818,19 @@ def build_ui():
                 "api_key": "",
                 "claude_token": "",
                 "agy_token": "",
+                "auto_download": True,
+                "dropbox_token": "",
+                "dropbox_app_key": "",
+                "dropbox_app_secret": "",
+                "dropbox_folder": "/MarkItDown",
+                "dropbox_sync": True,
             }
         )
 
         # ---------------- wiring sự kiện ----------------
         outputs = [preview, raw, downloads, status]
         preset_outputs = [
-            force_ocr, translate_vn, merge_ocr_translate, autosave_on,
+            force_ocr, translate_vn, merge_ocr_translate, autosave_on, auto_download_on, dropbox_sync_on,
             ocr_model, ocr_effort, translate_model, translate_effort,
             board_dpi, ocr_pages_per_call, preset_hint,
         ]
@@ -1650,16 +1841,36 @@ def build_ui():
         engine_select.change(_apply_preset, [preset, mode, engine_select], preset_outputs)
 
         # Khôi phục lựa chọn đã lưu khi tải trang -> đặt component -> tính lại
-        demo.load(_load_prefs, prefs, [preset, mode, autosave_dir, engine_select, api_key_in, claude_token_in, agy_token_in]).then(
+        demo.load(
+            _load_prefs,
+            prefs,
+            [
+                preset, mode, autosave_dir, engine_select,
+                api_key_in, claude_token_in, agy_token_in, auto_download_on,
+                dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in, dropbox_folder_in, dropbox_sync_on,
+            ],
+        ).then(
             _apply_preset, [preset, mode, engine_select], preset_outputs
         ).then(
             None, None, None,
             js="() => window.midSyncModeCards && window.midSyncModeCards()",
         )
 
-        # Lưu lại mỗi khi đổi preset / chế độ / thư mục lưu / engine / api_key / claude_token / agy_token.
-        for _comp in (preset, mode, autosave_dir, engine_select, api_key_in, claude_token_in, agy_token_in):
-            _comp.change(_save_prefs, [preset, mode, autosave_dir, engine_select, api_key_in, claude_token_in, agy_token_in], prefs)
+        # Lưu lại mỗi khi đổi preset / chế độ / thư mục lưu / engine / api_key / claude_token / agy_token / auto_download / dropbox.
+        for _comp in (
+            preset, mode, autosave_dir, engine_select,
+            api_key_in, claude_token_in, agy_token_in, auto_download_on,
+            dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in, dropbox_folder_in, dropbox_sync_on,
+        ):
+            _comp.change(
+                _save_prefs,
+                [
+                    preset, mode, autosave_dir, engine_select,
+                    api_key_in, claude_token_in, agy_token_in, auto_download_on,
+                    dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in, dropbox_folder_in, dropbox_sync_on,
+                ],
+                prefs,
+            )
 
         # Kiểm tra kết nối Antigravity CLI
         def _on_test_agy(a_tok, c_tok, k_api):
@@ -1688,6 +1899,13 @@ def build_ui():
         btn_test_api.click(_on_test_api, [api_key_in, claude_token_in, agy_token_in], [api_test_status, infra_status_html])
         api_key_in.change(lambda k, c, a: infrastructure.render_infrastructure_html(api_key=k, claude_token=c, agy_token=a), [api_key_in, claude_token_in, agy_token_in], infra_status_html)
 
+        # Kiểm tra kết nối Dropbox thời gian thực
+        def _on_test_dropbox(tok, ak, as_):
+            _ok, _msg, _lat = infrastructure.test_dropbox_connection(token=tok, refresh_token=tok, app_key=ak, app_secret=as_)
+            return _msg
+
+        btn_test_dropbox.click(_on_test_dropbox, [dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in], dropbox_test_status)
+
         # Mở hộp thoại Windows -> nạp đường dẫn thật vào State + hiển thị.
         btn_pick.click(on_pick_files, None, [picked_state, picked_view]).then(
             lambda p: gr.update(value=_convert_btn_label(len(p) if p else 0)),
@@ -1703,9 +1921,11 @@ def build_ui():
                 file_in, mode, enable_plugins, use_ocr,
                 ocr_model, ocr_effort, translate_model, translate_effort,
                 force_ocr, board_dpi, translate_vn, merge_ocr_translate,
-                ocr_pages_per_call, autosave_on, autosave_dir,
+                ocr_pages_per_call, autosave_on, auto_download_on, autosave_dir,
                 picked_state, autosave_target, engine_select,
                 api_key_in, claude_token_in, agy_token_in,
+                dropbox_sync_on, dropbox_folder_in,
+                dropbox_token_in, dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in,
             ],
             outputs,
             show_progress="full",
@@ -1714,11 +1934,29 @@ def build_ui():
 
         ev_url = btn_url.click(
             lambda: _set_running(True), None, [btn_file, btn_stop]
-        ).then(on_convert_url, [url_in, enable_plugins], outputs, show_progress="full")
+        ).then(
+            on_convert_url,
+            [
+                url_in, enable_plugins, auto_download_on,
+                dropbox_sync_on, dropbox_folder_in,
+                dropbox_token_in, dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in,
+            ],
+            outputs,
+            show_progress="full",
+        )
         ev_url.then(lambda: _set_running(False), None, [btn_file, btn_stop])
         ev_urls = url_in.submit(
             lambda: _set_running(True), None, [btn_file, btn_stop]
-        ).then(on_convert_url, [url_in, enable_plugins], outputs, show_progress="full")
+        ).then(
+            on_convert_url,
+            [
+                url_in, enable_plugins, auto_download_on,
+                dropbox_sync_on, dropbox_folder_in,
+                dropbox_token_in, dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in,
+            ],
+            outputs,
+            show_progress="full",
+        )
         ev_urls.then(lambda: _set_running(False), None, [btn_file, btn_stop])
 
         btn_stop.click(

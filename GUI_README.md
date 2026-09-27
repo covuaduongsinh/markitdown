@@ -81,3 +81,13 @@ Chọn ở panel "CHẾ ĐỘ XỬ LÝ":
 Mỗi trang PDF được nhận diện bàn cờ → FEN cục bộ bằng model ONNX
 (`chessboard_fen.py`, không tốn quota AI) trước khi gửi cho AI Engine OCR văn
 bản xung quanh.
+
+## Đồng bộ Tự động với Dropbox (Dropbox Sync)
+
+App hỗ trợ tự động đồng bộ 3 luồng sau khi chuyển đổi xong:
+1. ⚡ **Tự động tải về máy tính** qua trình duyệt web.
+2. 💾 **Lưu bản sao trên máy chủ** (cùng thư mục file gốc hoặc thư mục tùy chọn).
+3. ☁️ **Đồng bộ tự động lên Dropbox** (thư mục `/MarkItDown` hoặc thư mục cấu hình).
+
+Xem hướng dẫn chi tiết tại [docs/DROPBOX_GUIDE.md](file:///D:/code/markitdown/docs/DROPBOX_GUIDE.md).
+

@@ -314,6 +314,220 @@ def get_infrastructure_status(api_key="", claude_token="", agy_token=""):
     }
 
 
+def get_dropbox_token_from_refresh(refresh_token: str, app_key: str, app_secret: str):
+    """Lấy Access Token mới từ Refresh Token + App Key + App Secret qua Dropbox OAuth2 API.
+
+    Trả về: (str: access_token, str: error_msg)
+    """
+    rf = (refresh_token or "").strip()
+    ak = (app_key or "").strip()
+    as_ = (app_secret or "").strip()
+    if not rf or not ak or not as_:
+        return "", "Thiếu Refresh Token, App Key hoặc App Secret."
+
+    url = "https://api.dropboxapi.com/oauth2/token"
+    data = (
+        f"grant_type=refresh_token&refresh_token={urllib.request.quote(rf)}"
+        f"&client_id={urllib.request.quote(ak)}&client_secret={urllib.request.quote(as_)}"
+    ).encode("utf-8")
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": "MarkItDown-GUI/1.0",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            if resp.status == 200:
+                res = json.loads(resp.read().decode("utf-8"))
+                access_token = res.get("access_token", "")
+                if access_token:
+                    return access_token, None
+                return "", "Không nhận được access_token từ phản hồi của Dropbox."
+            return "", f"Dropbox phản hồi mã HTTP {resp.status}."
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.loads(exc.read().decode("utf-8"))
+            err_desc = body.get("error_description") or body.get("error", str(exc))
+        except Exception:
+            err_desc = str(exc)
+        return "", f"Lỗi làm mới token ({exc.code}): {err_desc}"
+    except Exception as exc:
+        return "", f"Lỗi kết nối khi làm mới token: {exc}"
+
+
+def resolve_dropbox_token(token="", refresh_token="", app_key="", app_secret=""):
+    """Phân giải Dropbox Access Token hợp lệ từ các nguồn cấu hình (Token trực tiếp, Refresh Token hoặc Biến môi trường).
+
+    Trả về: (str: access_token, str: error_msg)
+    """
+    tok = (token or "").strip() or os.environ.get("DROPBOX_ACCESS_TOKEN", "").strip()
+    rf = (refresh_token or "").strip() or os.environ.get("DROPBOX_REFRESH_TOKEN", "").strip()
+    ak = (app_key or "").strip() or os.environ.get("DROPBOX_APP_KEY", "").strip()
+    as_ = (app_secret or "").strip() or os.environ.get("DROPBOX_APP_SECRET", "").strip()
+
+    # Nếu có Refresh Token + Key + Secret -> ưu tiên lấy token mới nhất
+    if rf and ak and as_:
+        new_tok, err = get_dropbox_token_from_refresh(rf, ak, as_)
+        if new_tok:
+            return new_tok, None
+        # Nếu refresh lỗi mà có token trực tiếp thì thử fallback
+        if tok:
+            return tok, f"Lưu ý: Không làm mới được từ Refresh Token ({err}), dùng Access Token có sẵn."
+        return "", err
+
+    if tok:
+        return tok, None
+
+    return "", "Chưa cung cấp Dropbox Access Token hoặc Refresh Token."
+
+
+def test_dropbox_connection(token="", refresh_token="", app_key="", app_secret=""):
+    """Kiểm tra kết nối tới tài khoản Dropbox, lấy thông tin người dùng và dung lượng lưu trữ.
+
+    Trả về: (bool: is_ok, str: message, float: latency_ms)
+    """
+    start = time.perf_counter()
+    access_token, err = resolve_dropbox_token(token, refresh_token, app_key, app_secret)
+    if not access_token:
+        elapsed = (time.perf_counter() - start) * 1000.0
+        return False, f"❌ {err}", elapsed
+
+    account_url = "https://api.dropboxapi.com/2/users/get_current_account"
+    space_url = "https://api.dropboxapi.com/2/users/get_space_usage"
+
+    try:
+        # 1. Lấy thông tin tài khoản
+        req_acc = urllib.request.Request(
+            account_url,
+            data=b"null",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "User-Agent": "MarkItDown-GUI/1.0",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req_acc, timeout=12) as resp_acc:
+            acc_data = json.loads(resp_acc.read().decode("utf-8"))
+
+        display_name = acc_data.get("name", {}).get("display_name", "Tài khoản Dropbox")
+        email = acc_data.get("email", "")
+
+        # 2. Lấy thông tin dung lượng
+        space_info = ""
+        try:
+            req_sp = urllib.request.Request(
+                space_url,
+                data=b"null",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "MarkItDown-GUI/1.0",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req_sp, timeout=10) as resp_sp:
+                sp_data = json.loads(resp_sp.read().decode("utf-8"))
+                used = sp_data.get("used", 0)
+                alloc = sp_data.get("allocation", {})
+                allocated = alloc.get("allocated", 0)
+                if allocated > 0:
+                    used_gb = used / (1024 ** 3)
+                    alloc_gb = allocated / (1024 ** 3)
+                    space_info = f" · Dung lượng: {used_gb:.2f} GB / {alloc_gb:.1f} GB"
+        except Exception:
+            pass
+
+        elapsed = (time.perf_counter() - start) * 1000.0
+        msg = f"✅ Kết nối thành công tới Dropbox ({elapsed:.0f}ms)!\n👤 Tài khoản: **{display_name}** ({email}){space_info}\n☁️ Sẵn sàng đồng bộ kết quả chuyển đổi."
+        return True, msg, elapsed
+
+    except urllib.error.HTTPError as exc:
+        elapsed = (time.perf_counter() - start) * 1000.0
+        try:
+            body = exc.read().decode("utf-8")
+            err_json = json.loads(body)
+            msg = err_json.get("error_summary", str(exc))
+        except Exception:
+            msg = str(exc)
+        if exc.code == 401:
+            return False, f"❌ Lỗi xác thực Dropbox (401 Unauthorized): Token không hợp lệ hoặc đã hết hạn.\n\n👉 Mẹo: Hãy sử dụng cấu hình 'Refresh Token + App Key + App Secret' để tự động duy trì kết nối vĩnh viễn.", elapsed
+        return False, f"❌ Lỗi Dropbox API ({exc.code}): {msg}", elapsed
+    except Exception as exc:
+        elapsed = (time.perf_counter() - start) * 1000.0
+        return False, f"❌ Lỗi kết nối mạng tới Dropbox: {exc}", elapsed
+
+
+def upload_to_dropbox(file_path: str, target_folder: str = "/MarkItDown", token="", refresh_token="", app_key="", app_secret=""):
+    """Tải một tệp cục bộ lên thư mục chỉ định trên Dropbox.
+
+    Trả về: (str: remote_path, str: error_msg)
+    """
+    if not file_path or not os.path.exists(file_path):
+        return None, f"Tệp cục bộ không tồn tại: {file_path}"
+
+    access_token, err = resolve_dropbox_token(token, refresh_token, app_key, app_secret)
+    if not access_token:
+        return None, f"Không thể xác thực Dropbox: {err}"
+
+    folder = (target_folder or "/MarkItDown").strip()
+    if not folder.startswith("/"):
+        folder = "/" + folder
+    if folder.endswith("/") and len(folder) > 1:
+        folder = folder[:-1]
+
+    filename = os.path.basename(file_path)
+    remote_path = f"{folder}/{filename}" if folder != "/" else f"/{filename}"
+
+    # Đọc dữ liệu file
+    try:
+        with open(file_path, "rb") as f:
+            data = f.read()
+    except Exception as exc:
+        return None, f"Không đọc được tệp {file_path}: {exc}"
+
+    upload_url = "https://content.dropboxapi.com/2/files/upload"
+    api_args = {
+        "path": remote_path,
+        "mode": "overwrite",
+        "autorename": False,
+        "mute": False,
+        "strict_conflict": False,
+    }
+
+    try:
+        req = urllib.request.Request(
+            upload_url,
+            data=data,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Dropbox-API-Arg": json.dumps(api_args),
+                "Content-Type": "application/octet-stream",
+                "User-Agent": "MarkItDown-GUI/1.0",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            if resp.status == 200:
+                return remote_path, None
+            return None, f"Dropbox phản hồi mã HTTP {resp.status}"
+    except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read().decode("utf-8")
+            err_json = json.loads(body)
+            msg = err_json.get("error_summary", str(exc))
+        except Exception:
+            msg = str(exc)
+        return None, f"Lỗi tải lên Dropbox ({exc.code}): {msg}"
+    except Exception as exc:
+        return None, f"Lỗi kết nối khi tải lên Dropbox: {exc}"
+
+
 def render_infrastructure_html(api_key="", claude_token="", agy_token=""):
     """Sinh HTML hiển thị bảng trạng thái hạ tầng hệ thống cho giao diện Web."""
     status = get_infrastructure_status(api_key=api_key, claude_token=claude_token, agy_token=agy_token)
@@ -358,4 +572,5 @@ def render_infrastructure_html(api_key="", claude_token="", agy_token=""):
   </div>
 </div>
 """
+
 

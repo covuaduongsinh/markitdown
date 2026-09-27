@@ -42,7 +42,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
     numpy \
     chess \
     onnxruntime \
-    opencv-python-headless
+    opencv-python-headless \
+    dropbox \
+    requests
 
 EXPOSE 7860
 
