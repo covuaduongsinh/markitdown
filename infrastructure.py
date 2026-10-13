@@ -77,14 +77,12 @@ def test_claude_cli_connection(claude_token=""):
             0.0,
         )
 
-    token = (claude_token or "").strip()
+    token = (claude_token or "").strip() or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
     env = os.environ.copy()
     env["DISABLE_AUTOUPDATER"] = "1"
     env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
     if token:
-        env["CLAUDE_CODE_SESSION_ACCESS_TOKEN"] = token
-        env["ANTHROPIC_SESSION_KEY"] = token
-        env["ANTHROPIC_API_KEY"] = token
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = token
 
     start = time.perf_counter()
     try:
@@ -119,15 +117,15 @@ def test_claude_cli_connection(claude_token=""):
         if not token:
             return (
                 False,
-                f"⚠️ Chưa nhập Session Token của Claude Code.\n\n"
-                f"👉 Hãy lấy Token từ cookie `sessionKey` trên web claude.ai hoặc trong file `C:\\Users\\duongsinh\\.claude.json` và dán vào ô bên trên.",
+                f"⚠️ Chưa có OAuth Token của Claude Code.\n\n"
+                f"👉 Chạy `claude setup-token` (xem hướng dẫn bên dưới ô) để lấy token sống 1 năm, dán vào ô bên trên.",
                 elapsed,
             )
         if "login" in err.lower() or "auth" in err.lower() or "session" in err.lower():
             return (
                 False,
                 f"⚠️ Phiên đăng nhập Claude Code chưa hợp lệ hoặc đã hết hạn.\n\n"
-                f"👉 Hãy kiểm tra lại Session Token vừa dán (bắt đầu bằng `sk-ant-...`).",
+                f"👉 Hãy chạy lại `claude setup-token` để lấy OAuth Token mới và dán vào ô bên trên.",
                 elapsed,
             )
         return False, f"⚠️ Claude Code phản hồi (exit {proc.returncode}): {err[:300]}", elapsed
@@ -264,7 +262,7 @@ def get_infrastructure_status(api_key="", claude_token="", agy_token=""):
         save_antigravity_token(agy_token.strip())
 
     key = (api_key or "").strip() or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    c_token = (claude_token or "").strip() or os.environ.get("CLAUDE_CODE_SESSION_ACCESS_TOKEN") or os.environ.get("ANTHROPIC_SESSION_KEY")
+    c_token = (claude_token or "").strip() or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
 
     has_gemini_key = bool(key)
     has_claude_token = bool(c_token)

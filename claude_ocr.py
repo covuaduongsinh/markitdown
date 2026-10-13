@@ -412,15 +412,19 @@ def _claude_fast_flags(effort="low"):
 
 
 def _claude_env(claude_token=None):
-    """Env cho tiến trình `claude`: tắt auto-update/telemetry khi khởi động."""
+    """Env cho tiến trình `claude`: tắt auto-update/telemetry khi khởi động.
+
+    Token là OAuth token 1 năm sinh bởi `claude setup-token` (xem docs/tinh-nang/05-ha-tang-va-ket-noi.md),
+    set đúng biến chính thức `CLAUDE_CODE_OAUTH_TOKEN`. KHÔNG set `ANTHROPIC_API_KEY`: biến đó có độ ưu
+    tiên xác thực CAO HƠN CLAUDE_CODE_OAUTH_TOKEN, nên set nó bằng một token không phải API key thật sẽ
+    khiến CLI luôn xác thực sai kiểu và thất bại.
+    """
     env = os.environ.copy()
     env["DISABLE_AUTOUPDATER"] = "1"
     env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
-    token = (claude_token or "").strip() or os.environ.get("CLAUDE_CODE_SESSION_ACCESS_TOKEN") or os.environ.get("ANTHROPIC_SESSION_KEY")
+    token = (claude_token or "").strip() or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
     if token:
-        env["CLAUDE_CODE_SESSION_ACCESS_TOKEN"] = token
-        env["ANTHROPIC_SESSION_KEY"] = token
-        env["ANTHROPIC_API_KEY"] = token
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = token
     return env
 
 

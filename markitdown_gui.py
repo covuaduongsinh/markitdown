@@ -41,6 +41,7 @@ from ai_engine import (
     get_default_engine,
 )
 import infrastructure
+import claude_login_bridge
 
 # Thư mục tạm để chứa các tệp .md xuất ra (cho nút tải về)
 _OUTPUT_DIR = os.path.join(tempfile.gettempdir(), "markitdown_gui_output")
@@ -1542,8 +1543,8 @@ def build_ui():
                                     '</div>'
                                 )
                                 claude_token_in = gr.Textbox(
-                                    label="Claude Code Session Token / OAuth Key",
-                                    placeholder="sk-ant-sid01-... hoặc dán Token phiên đăng nhập",
+                                    label="Claude Code OAuth Token",
+                                    placeholder="Dán token sinh bởi lệnh `claude setup-token` (hạn dùng ~1 năm)",
                                     type="password",
                                     value="",
                                     elem_classes="mid-claude-token",
@@ -1563,10 +1564,36 @@ def build_ui():
                                     '<div style="margin-top:8px;padding:10px 14px;border-radius:8px;'
                                     'background:rgba(43,57,144,0.06);border:1px solid rgba(43,57,144,0.18);'
                                     'font-size:12.5px;color:var(--c-text);line-height:1.6;">'
-                                    '🟣 <b>Cách lấy Claude Code Session Token:</b><br>'
-                                    '• Mở trình duyệt vào <a href="https://claude.ai" target="_blank" style="color:#2B3990;font-weight:700;">claude.ai</a> → nhấn <b>F12</b> → tab <b>Application</b> → <b>Cookies</b> → copy giá trị cookie <code>sessionKey</code> (bắt đầu bằng <code>sk-ant-sid01-...</code>) hoặc mở tệp <code>C:\\Users\\&lt;tên_bạn&gt;\\.claude.json</code> trên máy tính.<br>'
-                                    '• Dán token vào ô trên và bấm <b>Kiểm tra kết nối Claude Code CLI</b>.</div>'
+                                    '🟣 <b>Cách lấy Claude Code OAuth Token (hạn dùng ~1 năm):</b><br>'
+                                    '• Trên máy có cài Claude Code CLI (hoặc SSH vào server), chạy lệnh <code>claude setup-token</code>.<br>'
+                                    '• Mở URL hiện ra trên trình duyệt của bạn, đăng nhập bằng tài khoản Claude Pro/Max, dán mã xác nhận ngược lại terminal nếu được hỏi.<br>'
+                                    '• Copy token được in ra, dán vào ô trên và bấm <b>Kiểm tra kết nối Claude Code CLI</b>.</div>'
                                 )
+
+                                gr.HTML('<div style="height:1px;background:var(--c-border);margin:10px 0;"></div>')
+                                gr.HTML(
+                                    '<div style="font-size:12.5px;font-weight:700;color:var(--c-text);margin-bottom:4px;">'
+                                    '🔐 Hoặc đăng nhập trực tiếp ngay tại đây (không cần SSH vào VPS)'
+                                    '</div>'
+                                )
+                                with gr.Row():
+                                    btn_claude_login_start = gr.Button(
+                                        "🔐 Đăng nhập Claude Code", variant="secondary", size="sm"
+                                    )
+                                    btn_claude_login_cancel = gr.Button(
+                                        "✖ Hủy", variant="stop", size="sm", visible=False
+                                    )
+                                claude_login_url_md = gr.Markdown("", visible=False)
+                                claude_login_code_in = gr.Textbox(
+                                    label="Dán mã xác nhận (nếu trang web yêu cầu)",
+                                    placeholder="Dán mã hiện trên trình duyệt sau khi đăng nhập claude.ai",
+                                    visible=False,
+                                )
+                                btn_claude_login_submit = gr.Button(
+                                    "✅ Xác nhận mã", variant="primary", size="sm", visible=False
+                                )
+                                claude_login_result_md = gr.Markdown("")
+                                claude_login_session_state = gr.State("")
 
                             gr.HTML('<div style="height:1px;background:var(--c-border);margin:12px 0;"></div>')
 
@@ -1889,6 +1916,98 @@ def build_ui():
 
         btn_test_sub.click(_on_test_claude, [claude_token_in, agy_token_in, api_key_in], [sub_test_status, infra_status_html])
         claude_token_in.change(lambda c, a, k: infrastructure.render_infrastructure_html(api_key=k, claude_token=c, agy_token=a), [claude_token_in, agy_token_in, api_key_in], infra_status_html)
+
+        # Đăng nhập Claude Code ngay trên giao diện (claude setup-token qua pipe, không cần SSH)
+        def _on_claude_login_start():
+            res = claude_login_bridge.start_claude_login()
+            status, url, token, err, sid = (
+                res.get("status"), res.get("url"), res.get("token"), res.get("error"), res.get("session_id", ""),
+            )
+            if status == "success" and token:
+                return (
+                    gr.update(visible=False), gr.update(visible=False), gr.update(visible=False),
+                    f"🎉 **Đăng nhập thành công!** Token đã tự điền vào ô Token Claude Code ở trên để dùng ngay.\n\n"
+                    f"👉 **Để dùng vĩnh viễn**, copy chuỗi dưới đây và dán vào biến môi trường "
+                    f"`CLAUDE_CODE_OAUTH_TOKEN` trong cấu hình Dokploy (Environment Variables) rồi redeploy:\n\n"
+                    f"```\n{token}\n```",
+                    sid, gr.update(value=token), gr.update(visible=False),
+                )
+            if status == "success" and not token:
+                tail = "\n".join(res.get("tail", []))
+                return (
+                    gr.update(visible=False), gr.update(visible=False), gr.update(visible=False),
+                    f"⚠️ CLI báo thành công nhưng không tự nhận ra token trong output. "
+                    f"Hãy tự copy dòng token (thường là dòng cuối, dài, không khoảng trắng) từ log dưới:\n\n```\n{tail}\n```",
+                    sid, gr.update(), gr.update(visible=False),
+                )
+            if url:
+                return (
+                    gr.update(visible=True, value=f"🔗 Mở link này **trên máy của bạn** (không phải VPS) để đăng nhập:\n\n{url}"),
+                    gr.update(visible=True, value=""),
+                    gr.update(visible=True),
+                    "⏳ Đăng nhập xong trên trình duyệt, nếu trang yêu cầu dán mã — dán vào ô trên rồi bấm Xác nhận.",
+                    sid, gr.update(), gr.update(visible=True),
+                )
+            return (
+                gr.update(visible=False), gr.update(visible=False), gr.update(visible=False),
+                f"❌ {err or 'Không khởi động được, thử lại.'}", sid, gr.update(), gr.update(visible=False),
+            )
+
+        btn_claude_login_start.click(
+            _on_claude_login_start, None,
+            [claude_login_url_md, claude_login_code_in, btn_claude_login_submit,
+             claude_login_result_md, claude_login_session_state, claude_token_in, btn_claude_login_cancel],
+        )
+
+        def _on_claude_login_submit(code, sid):
+            res = claude_login_bridge.submit_claude_login_code(code, session_id=sid)
+            status, token, err = res.get("status"), res.get("token"), res.get("error")
+            if status == "success" and token:
+                return (
+                    gr.update(visible=False), gr.update(visible=False),
+                    f"🎉 Lấy token thành công! Đã tự điền vào ô Token ở trên.\n\n"
+                    f"👉 Copy và dán vào `CLAUDE_CODE_OAUTH_TOKEN` trên Dokploy:\n\n```\n{token}\n```",
+                    gr.update(value=token),
+                )
+            if status == "success" and not token:
+                tail = "\n".join(res.get("tail", []))
+                return (
+                    gr.update(visible=False), gr.update(visible=False),
+                    f"⚠️ Thành công nhưng không tự nhận ra token. Tự copy từ log dưới:\n\n```\n{tail}\n```",
+                    gr.update(),
+                )
+            if status == "unknown":
+                return (
+                    gr.update(visible=True), gr.update(visible=True),
+                    "⚠️ Chưa rõ kết quả (quá thời gian chờ) — có thể đã thành công. "
+                    "Hãy bấm 'Kiểm tra kết nối Claude Code CLI' ở trên, hoặc thử lại.",
+                    gr.update(),
+                )
+            return (
+                gr.update(visible=False), gr.update(visible=False),
+                f"❌ {err or 'Mã không hợp lệ hoặc đã hết hạn.'} Hãy bấm 'Đăng nhập Claude Code' để thử lại.",
+                gr.update(),
+            )
+
+        btn_claude_login_submit.click(
+            _on_claude_login_submit, [claude_login_code_in, claude_login_session_state],
+            [claude_login_code_in, btn_claude_login_submit, claude_login_result_md, claude_token_in],
+        ).then(
+            lambda c, a, k: infrastructure.render_infrastructure_html(api_key=k, claude_token=c, agy_token=a),
+            [claude_token_in, agy_token_in, api_key_in], infra_status_html,
+        )
+
+        def _on_claude_login_cancel():
+            claude_login_bridge.cleanup_claude_login(force=True)
+            return (
+                gr.update(visible=False), gr.update(visible=False), gr.update(visible=False),
+                "⏹ Đã hủy phiên đăng nhập.",
+            )
+
+        btn_claude_login_cancel.click(
+            _on_claude_login_cancel, None,
+            [claude_login_url_md, claude_login_code_in, btn_claude_login_submit, claude_login_result_md],
+        )
 
         # Kiểm tra kết nối API Key thời gian thực & cập nhật bảng trạng thái
         def _on_test_api(k, c_tok, a_tok):

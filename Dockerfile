@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && npm install -g @anthropic-ai/claude-code \
+    && claude --version \
     && (curl -fsSL https://antigravity.google/cli/install.sh | bash || true) \
     && (ln -sf /root/.local/bin/agy /usr/local/bin/agy || true) \
     && rm -rf /var/lib/apt/lists/*
