@@ -13,14 +13,18 @@ KHÁC VỚI `infrastructure.py`: các hàm `test_*_connection` ở đó chạy-x
 request HTTP (Gradio chạy callback trong cùng một tiến trình Python, nhiều thread) — nên cần
 một singleton cấp module bảo vệ bằng lock, không thể gói gọn trong một hàm chạy-xong-là-xong.
 
-CHƯA KIỂM CHỨNG — cần thử thật trên VPS khi triển khai, đừng tin các giả định dưới đây tới khi
-đã quan sát hành vi thật:
-  - Định dạng chính xác dòng URL / dòng nhắc "dán mã" / dòng in token cuối cùng của
-    `claude setup-token`.
-  - CLI có tự thoát (exit 0) ngay sau khi in token, hay treo chờ thêm (ảnh hưởng tới
-    _SUCCESS_LINGER_S bên dưới).
+QUAN TRỌNG — đã kiểm chứng thật trên VPS (2026-10-13): CLI Node.js của `claude` dùng block
+buffering cho stdout khi nó KHÔNG phải TTY (pipe thường) — khi gọi qua `subprocess.PIPE`,
+tiến trình chạy nhưng không in ra byte nào, treo vô thời hạn cho tới khi tự thoát. Vì vậy
+module này BẮT BUỘC cấp một pseudo-terminal thật (`pty.openpty`) cho stdin/stdout/stderr của
+tiến trình con trên POSIX; `subprocess.PIPE` chỉ còn lại làm fallback để đọc code trên Windows
+(không hoạt động đúng ở đó, chỉ POSIX/Linux production mới chạy đúng).
+
+CHƯA KIỂM CHỨNG — cần thử thêm, đừng tin các giả định dưới đây tới khi đã quan sát hành vi thật:
   - Tiền tố thật của token sinh ra (để sau này siết `_BARE_TOKEN_RE` bằng tiền tố thật).
   - `claude setup-token` có ghi `~/.claude/.credentials.json` như side-effect không.
+  - CLI có tự thoát (exit 0) ngay sau khi in token, hay treo chờ thêm (ảnh hưởng tới
+    _SUCCESS_LINGER_S bên dưới).
 """
 
 import os
@@ -31,10 +35,24 @@ import threading
 import time
 import uuid
 
+try:
+    import pty
+    import fcntl
+    import termios
+    import struct
+
+    _HAS_PTY = True
+except ImportError:  # Windows — không có module pty/fcntl/termios
+    _HAS_PTY = False
+
+_PTY_COLS = 500  # rộng bất thường để URL đăng nhập dài không bị terminal tự ngắt dòng giữa chừng
+_PTY_ROWS = 50
+
 _LOCK = threading.Lock()
 
 _STATE = {
     "proc": None,  # Popen đang chạy, hoặc None
+    "master_fd": None,  # fd đầu "cha" của pty (None nếu dùng fallback PIPE trên Windows)
     "session_id": None,  # uuid hex — phân biệt lần login hiện tại với lần cũ đã bị dọn
     "status": "idle",  # idle | starting | waiting_code | working | success | error | unknown
     "url": None,
@@ -46,11 +64,11 @@ _STATE = {
 }
 
 IDLE_TIMEOUT_S = 300  # 5 phút không ai tương tác -> dọn tiến trình bỏ dở
-URL_WAIT_TIMEOUT_S = 45  # CHƯA KIỂM CHỨNG — ước lượng thời gian hợp lý để CLI in URL
-CODE_RESULT_TIMEOUT_S = 60  # CHƯA KIỂM CHỨNG — ước lượng thời gian từ lúc dán mã tới khi có token
+URL_WAIT_TIMEOUT_S = 45  # ước lượng thời gian hợp lý để CLI in URL
+CODE_RESULT_TIMEOUT_S = 60  # ước lượng thời gian từ lúc dán mã tới khi có token
 _SUCCESS_LINGER_S = 3.0  # chờ thêm sau khi bắt được token trước khi tự kill (phòng CLI treo)
 
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07]*\x07|\x1b.")
 _URL_RE = re.compile(r"https?://\S+")
 _ERROR_RE = re.compile(r"(error|failed|invalid|expired|denied)", re.I)
 _SUCCESS_RE = re.compile(r"(success|logged in|authentication successful)", re.I)
@@ -101,29 +119,44 @@ def _kill_tree(proc, grace_s=2.0):
             pass
 
 
-def _write_stdin_safe(proc, text, chunk_size=4096):
-    """Ghi vào stdin dạng byte, không cắt giữa ký tự UTF-8 nhiều byte."""
-    if proc.stdin is None:
-        return False
+def _close_fd_quiet(fd):
+    if fd is None:
+        return
     try:
-        if proc.poll() is not None:
-            return False
-    except Exception:
-        return False
+        os.close(fd)
+    except OSError:
+        pass
+
+
+def _write_stdin_safe(proc, master_fd, text, chunk_size=4096):
+    """Ghi mã xác nhận vào pty (hoặc stdin PIPE fallback), dạng byte, không cắt giữa ký tự UTF-8."""
     data = text.encode("utf-8", errors="replace")
     try:
+        if master_fd is not None:
+            i = 0
+            while i < len(data):
+                n = os.write(master_fd, data[i:])
+                if n <= 0:
+                    return False
+                i += n
+            return True
+        if proc.stdin is None:
+            return False
+        if proc.poll() is not None:
+            return False
         i = 0
         while i < len(data):
             j = min(i + chunk_size, len(data))
             while j > i and (data[j - 1] & 0xC0) == 0xC0:
-                # byte mở đầu một ký tự nhiều byte đứng cuối mẩu -> lùi lại để không cắt đôi
-                j -= 1
+                j -= 1  # byte mở đầu ký tự nhiều byte đứng cuối mẩu -> lùi lại, không cắt đôi
             if j <= i:
                 j = min(i + chunk_size, len(data))
             proc.stdin.write(data[i:j])
             proc.stdin.flush()
             i = j
         return True
+    except OSError:
+        return False
     except Exception:
         return False
 
@@ -148,7 +181,10 @@ def _on_idle_timeout(session_id):
         _STATE["status"] = "unknown"
         _STATE["error"] = "Quá 5 phút không có tương tác — phiên đăng nhập bị hủy."
         _STATE["proc"] = None
+        master_fd = _STATE["master_fd"]
+        _STATE["master_fd"] = None
     _kill_tree(proc)
+    _close_fd_quiet(master_fd)
 
 
 def _finalize_locked(rc, candidate_token, saw_success_marker):
@@ -165,50 +201,71 @@ def _finalize_locked(rc, candidate_token, saw_success_marker):
         _STATE["error"] = _STATE.get("error") or f"Tiến trình `claude setup-token` thoát mã {rc}."
 
 
-def _reader_loop(session_id, proc):
+def _scan_buffer_locked(clean_text, candidate_token, saw_success_marker):
+    """Quét TOÀN BỘ văn bản đã làm sạch ANSI (không chỉ dòng mới nhất) để tìm URL/token —
+    cần thiết vì output qua pty có animation/cursor-control, ranh giới dòng không đáng tin."""
+    if _STATE["url"] is None:
+        m = _URL_RE.search(clean_text)
+        if m:
+            _STATE["url"] = m.group(0)
+            if _STATE["status"] == "starting":
+                _STATE["status"] = "waiting_code"
+
+    if _SUCCESS_RE.search(clean_text):
+        saw_success_marker = True
+
+    for line in reversed(clean_text.splitlines()):
+        s = line.strip()
+        if s and _BARE_TOKEN_RE.match(s) and not _URL_RE.search(s):
+            candidate_token = s
+            break
+
+    if _ERROR_RE.search(clean_text) and not saw_success_marker:
+        _STATE["error"] = clean_text.strip()[-300:]
+
+    return candidate_token, saw_success_marker
+
+
+def _reader_loop(session_id, proc, master_fd):
+    """Đọc output non-blocking. Nếu có `master_fd` (pty POSIX), đọc bằng os.read theo chunk
+    và quét lại toàn bộ buffer tích lũy mỗi lần (tránh vỡ dòng do animation/cursor-control của
+    CLI). Nếu không (fallback PIPE trên Windows), đọc theo dòng như một pipe thường."""
     candidate_token = None
     saw_success_marker = False
     linger_timer = None
+    raw_buf = b""
     try:
-        for raw_line in iter(proc.stdout.readline, b""):
-            line = raw_line.decode("utf-8", errors="replace")
-            clean = _ANSI_RE.sub("", line).rstrip("\r\n")
-            stripped = clean.strip()
+        while True:
+            try:
+                if master_fd is not None:
+                    chunk = os.read(master_fd, 4096)
+                else:
+                    chunk = proc.stdout.readline()
+                    if not chunk:
+                        break
+            except OSError:
+                break  # slave đóng (CLI thoát) -> master đọc báo lỗi, coi như EOF
+            if not chunk:
+                break
+            raw_buf += chunk
+            if len(raw_buf) > 65536:
+                raw_buf = raw_buf[-65536:]  # chặn phình vô hạn nếu CLI in rất nhiều
+            clean_text = _ANSI_RE.sub("", raw_buf.decode("utf-8", errors="replace"))
+
             with _LOCK:
                 if _STATE["session_id"] != session_id:
                     return  # phiên này đã bị dọn/thay thế -> tự rút lui
-                _STATE["lines"].append(clean)
-                if len(_STATE["lines"]) > 200:
-                    _STATE["lines"] = _STATE["lines"][-200:]
+                _STATE["lines"] = clean_text.splitlines()[-200:]
                 _STATE["last_activity"] = time.time()
-
-                if _STATE["url"] is None:
-                    m = _URL_RE.search(stripped)
-                    if m:
-                        _STATE["url"] = m.group(0)
-                        if _STATE["status"] == "starting":
-                            _STATE["status"] = "waiting_code"
-
-                if _SUCCESS_RE.search(stripped):
-                    saw_success_marker = True
-                if (
-                    stripped
-                    and _BARE_TOKEN_RE.match(stripped)
-                    and not _URL_RE.search(stripped)
-                ):
-                    candidate_token = stripped  # luôn lấy ứng viên MỚI NHẤT thoả điều kiện
-
-                if _ERROR_RE.search(stripped) and not saw_success_marker:
-                    _STATE["error"] = clean
-
+                candidate_token, saw_success_marker = _scan_buffer_locked(
+                    clean_text, candidate_token, saw_success_marker
+                )
                 got_token_now = candidate_token is not None and saw_success_marker
 
             if got_token_now and linger_timer is None:
-                # Phòng trường hợp CLI treo sau khi in token thay vì tự thoát (CHƯA KIỂM CHỨNG
-                # hành vi thật) — chờ thêm một chút rồi tự kill để không treo người dùng vô thời hạn.
-                linger_timer = threading.Timer(
-                    _SUCCESS_LINGER_S, _kill_tree, args=(proc,)
-                )
+                # Phòng trường hợp CLI treo sau khi in token thay vì tự thoát — chờ thêm một
+                # chút rồi tự kill để không treo người dùng vô thời hạn.
+                linger_timer = threading.Timer(_SUCCESS_LINGER_S, _kill_tree, args=(proc,))
                 linger_timer.daemon = True
                 linger_timer.start()
     except Exception as exc:
@@ -228,8 +285,11 @@ def _reader_loop(session_id, proc):
                 return
             _finalize_locked(rc, candidate_token, saw_success_marker)
             _STATE["proc"] = None
+            fd_to_close = _STATE["master_fd"]
+            _STATE["master_fd"] = None
             if _STATE["watchdog"]:
                 _STATE["watchdog"].cancel()
+        _close_fd_quiet(fd_to_close)
 
 
 def _login_env():
@@ -239,7 +299,55 @@ def _login_env():
     for k in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
         env.pop(k, None)
     env["DISABLE_AUTOUPDATER"] = "1"
+    env["TERM"] = env.get("TERM") or "xterm"
     return env
+
+
+def _spawn_claude_setup_token(bin_path, env):
+    """Spawn `claude setup-token` cấp pty thật trên POSIX (bắt buộc — CLI block-buffer stdout
+    khi không phải TTY, đã xác nhận thật trên VPS). Trả về (proc, master_fd); master_fd là
+    None khi dùng fallback PIPE (chỉ Windows, không chạy đúng ở đó)."""
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if _HAS_PTY and os.name != "nt":
+        master_fd, slave_fd = pty.openpty()
+        try:
+            # URL đăng nhập rất dài (>200 ký tự); pty mặc định 80 cột sẽ khiến terminal tự
+            # ngắt dòng giữa URL, làm regex chỉ bắt được đoạn đầu. Đặt cửa sổ rộng bất
+            # thường để tránh ngắt dòng (đã xác nhận cần thiết qua thử nghiệm thật trên VPS).
+            fcntl.ioctl(
+                slave_fd, termios.TIOCSWINSZ,
+                struct.pack("HHHH", _PTY_ROWS, _PTY_COLS, 0, 0),
+            )
+        except Exception:
+            pass
+        try:
+            proc = subprocess.Popen(
+                [bin_path, "setup-token"],
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                env=env,
+                close_fds=True,
+                start_new_session=True,
+            )
+        except Exception:
+            os.close(master_fd)
+            os.close(slave_fd)
+            raise
+        os.close(slave_fd)  # cha chỉ giữ master; slave đã được con kế thừa
+        return proc, master_fd
+
+    proc = subprocess.Popen(
+        [bin_path, "setup-token"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=0,
+        env=env,
+        creationflags=flags,
+        start_new_session=(os.name != "nt"),
+    )
+    return proc, None
 
 
 def start_claude_login(claude_bin=None):
@@ -254,6 +362,7 @@ def start_claude_login(claude_bin=None):
         if _STATE["status"] in ("starting", "waiting_code", "working"):
             return _snapshot_locked()  # đang có phiên chạy -> trả lại, không spawn chồng
         old_proc = _STATE["proc"]
+        old_fd = _STATE["master_fd"]
         session_id = uuid.uuid4().hex
         bin_path = claude_bin or find_claude()
         if not bin_path:
@@ -264,34 +373,27 @@ def start_claude_login(claude_bin=None):
                     "đã được cài trong container (xem Dockerfile)."
                 ),
                 proc=None,
+                master_fd=None,
                 session_id=session_id,
             )
             return _snapshot_locked()
 
         env = _login_env()
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         try:
-            proc = subprocess.Popen(
-                [bin_path, "setup-token"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                bufsize=0,
-                env=env,
-                creationflags=flags,
-                start_new_session=(os.name != "nt"),
-            )
+            proc, master_fd = _spawn_claude_setup_token(bin_path, env)
         except Exception as exc:
             _STATE.update(
                 status="error",
                 error=f"Không chạy được 'claude setup-token': {exc}",
                 proc=None,
+                master_fd=None,
                 session_id=session_id,
             )
             return _snapshot_locked()
 
         _STATE.update(
             proc=proc,
+            master_fd=master_fd,
             session_id=session_id,
             status="starting",
             url=None,
@@ -301,11 +403,12 @@ def start_claude_login(claude_bin=None):
             last_activity=time.time(),
         )
         _arm_watchdog_locked(session_id)
-        t = threading.Thread(target=_reader_loop, args=(session_id, proc), daemon=True)
+        t = threading.Thread(target=_reader_loop, args=(session_id, proc, master_fd), daemon=True)
         t.start()
 
     if old_proc is not None:
         _kill_tree(old_proc)  # dọn phiên cũ (idle/success/error) ngoài lock
+        _close_fd_quiet(old_fd)
 
     deadline = time.time() + URL_WAIT_TIMEOUT_S
     while time.time() < deadline:
@@ -326,11 +429,11 @@ def start_claude_login(claude_bin=None):
 
 
 def submit_claude_login_code(code, session_id=None):
-    """Ghi mã xác nhận vào stdin tiến trình đang chờ, chờ kết quả (token hoặc lỗi)."""
+    """Ghi mã xác nhận vào pty/stdin tiến trình đang chờ, chờ kết quả (token hoặc lỗi)."""
     with _LOCK:
         if _STATE["status"] == "success":
             return _snapshot_locked()  # đã có kết quả từ trước
-        if _STATE["proc"] is None or _STATE["status"] != "waiting_code":
+        if _STATE["proc"] is None or _STATE["status"] not in ("waiting_code", "starting"):
             return {
                 "status": "error",
                 "error": "Không có phiên đăng nhập đang chờ mã. Hãy bấm 'Đăng nhập Claude Code' lại.",
@@ -341,12 +444,13 @@ def submit_claude_login_code(code, session_id=None):
                 "error": "Phiên đăng nhập đã thay đổi hoặc hết hạn. Hãy bấm 'Đăng nhập Claude Code' lại.",
             }
         proc = _STATE["proc"]
+        master_fd = _STATE["master_fd"]
         sid = _STATE["session_id"]
         _STATE["status"] = "working"
         _STATE["last_activity"] = time.time()
         _arm_watchdog_locked(sid)
 
-    if not _write_stdin_safe(proc, (code or "").strip() + "\n"):
+    if not _write_stdin_safe(proc, master_fd, (code or "").strip() + "\n"):
         with _LOCK:
             if _STATE["session_id"] == sid:
                 _STATE["status"] = "error"
@@ -373,16 +477,19 @@ def cleanup_claude_login(force=False):
     """Dọn tiến trình bỏ dở. force=True: dọn bất kể trạng thái (dùng cho nút 'Hủy')."""
     with _LOCK:
         proc = _STATE["proc"]
+        master_fd = _STATE["master_fd"]
         if proc is None and not force:
             return _snapshot_locked()
         if _STATE["watchdog"]:
             _STATE["watchdog"].cancel()
         _STATE["proc"] = None
+        _STATE["master_fd"] = None
         if _STATE["status"] not in ("success", "error"):
             _STATE["status"] = "idle"
             _STATE["error"] = None
         snap = _snapshot_locked()
     _kill_tree(proc)
+    _close_fd_quiet(master_fd)
     return snap
 
 

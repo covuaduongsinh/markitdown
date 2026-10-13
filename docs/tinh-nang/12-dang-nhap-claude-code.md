@@ -60,11 +60,32 @@ flowchart TD
 
 ## 3. Singleton trạng thái (`claude_login_bridge.py`)
 
-Biến module `_STATE` (bảo vệ bởi `_LOCK`) giữ: `proc` (Popen đang chạy), `session_id` (uuid, phân biệt
-phiên cũ/mới — thread đọc cũ tự rút lui ngay khi phát hiện `session_id` đã đổi), `status`
-(`idle|starting|waiting_code|working|success|error|unknown`), `url`, `token`, `error`, `lines` (tối đa
-200 dòng log gần nhất), và một `watchdog` (`threading.Timer`) tự dọn tiến trình bỏ dở sau
-`IDLE_TIMEOUT_S = 300` giây không ai tương tác.
+Biến module `_STATE` (bảo vệ bởi `_LOCK`) giữ: `proc` (Popen đang chạy), `master_fd` (đầu "cha" của
+pty), `session_id` (uuid, phân biệt phiên cũ/mới — thread đọc cũ tự rút lui ngay khi phát hiện
+`session_id` đã đổi), `status` (`idle|starting|waiting_code|working|success|error|unknown`), `url`,
+`token`, `error`, `lines` (tối đa 200 dòng log gần nhất), và một `watchdog` (`threading.Timer`) tự dọn
+tiến trình bỏ dở sau `IDLE_TIMEOUT_S = 300` giây không ai tương tác.
+
+**Đã kiểm chứng thật trên VPS (2026-10-13), hai phát hiện bắt buộc phải sửa so với bản thiết kế ban đầu:**
+
+1. **CLI `claude` block-buffer stdout khi không phải TTY.** Spawn bằng `subprocess.PIPE` thường (không
+   pty) khiến `claude setup-token` chạy nhưng không in ra byte nào — treo vô thời hạn, `_reader_loop`
+   không bao giờ thấy gì. Phải cấp pseudo-terminal thật bằng `pty.openpty()` cho stdin/stdout/stderr của
+   tiến trình con (`_spawn_claude_setup_token`); `subprocess.PIPE` chỉ còn là fallback để đọc code trên
+   Windows (không chạy đúng ở đó).
+2. **pty mặc định 80 cột làm URL đăng nhập (dài >200 ký tự) bị ngắt dòng giữa chừng**, khiến regex chỉ
+   bắt được đoạn đầu URL. Phải set kích thước cửa sổ pty rộng bất thường (`fcntl.ioctl(...,
+   TIOCSWINSZ, ...)`, 500×50) ngay sau `pty.openpty()`, trước khi spawn.
+
+Hệ quả thiết kế khác: vì output qua pty có animation/cursor-control (CLI vẽ spinner `*✢✶✻✽...`), ranh
+giới dòng không đáng tin — `_reader_loop` gộp toàn bộ byte đọc được vào một buffer, làm sạch mã ANSI,
+rồi quét lại **toàn bộ buffer** (không chỉ dòng mới nhất) mỗi lần có dữ liệu mới (`_scan_buffer_locked`).
+
+**Giới hạn khi tự kiểm thử (ghi lại để không ai hiểu nhầm):** `_STATE` là biến **module-level trong bộ
+nhớ của một tiến trình Python** — chỉ có ý nghĩa khi `start_claude_login` và `submit_claude_login_code`
+được gọi từ **cùng một tiến trình dài hạn** (đúng thiết kế: app Gradio chạy liên tục). Gọi hai lệnh
+`docker exec python3 ...` riêng biệt để test (hai tiến trình Python ngắn hạn khác nhau) sẽ luôn thấy
+`_STATE` rỗng ở lệnh thứ hai — không phải lỗi, chỉ là vi phạm giả định thiết kế khi tự kiểm thử thủ công.
 
 Hai hàm chính:
 - `start_claude_login()` — spawn `[claude_bin, "setup-token"]` (**không** `shell=True`), chờ có giới hạn
@@ -90,21 +111,24 @@ thành công, kết quả tự gán vào `claude_token_in.value` — tận dụn
 
 ## 5. Điểm cần lưu ý và hạn chế
 
-**Chưa kiểm chứng — cần thử thật trên VPS, đừng tin các giả định sau tới khi đã quan sát thật:**
-- Định dạng chính xác dòng URL / dòng nhắc "dán mã" / dòng in token cuối cùng của `claude setup-token`
-  (heuristic hiện tại: dòng không khoảng trắng, dài trên 20 ký tự, xuất hiện sau dấu hiệu "success").
+**Đã kiểm chứng thật trên VPS (2026-10-13)** — spawn `claude setup-token` thật qua pty, bắt được nguyên
+vẹn URL đăng nhập (xem mục 3). **Còn chưa kiểm chứng tới cuối** (chưa hoàn tất một lượt đăng nhập trọn
+vẹn với mã xác nhận thật — chỉ mới xác nhận tới bước `waiting_code`):
+- Định dạng chính xác dòng in token sau khi dán mã thành công (heuristic hiện tại: dòng không khoảng
+  trắng, dài trên 20 ký tự, xuất hiện sau dấu hiệu "success"/"logged in").
 - CLI có tự thoát (exit 0) ngay sau khi in token, hay treo thêm — module có timer phòng thủ tự kill sau
   3 giây kể từ khi bắt được token, nhưng đây là suy đoán, chưa xác nhận có cần thiết không.
-- `claude setup-token` có ghi `~/.claude/.credentials.json` như side-effect không (ảnh hưởng đánh giá có
-  nên lo ngại việc kill-tree làm hỏng file đó hay không, như từng xảy ra ở dự án cầu nối CLI khác).
+- `claude setup-token` có ghi `~/.claude/.credentials.json` như side-effect không.
 
 **Vận hành**
 - Chỉ một phiên đăng nhập được chạy cùng lúc trên toàn server (singleton cấp tiến trình Python, không
   phải cấp người dùng) — nếu nhiều tab cùng bấm "Đăng nhập", tab sau sẽ nhận lại đúng trạng thái của
   phiên đang chạy thay vì tạo tiến trình mới chồng lên.
-- Test cục bộ (không gọi AI thật) đã kiểm chứng: bắt URL, ghi stdin, heuristic success/error, timeout,
-  dọn tiến trình — bằng một CLI Python giả lập hành vi `claude setup-token`. Phần hành vi thật của CLI
-  thật (mục "chưa kiểm chứng" ở trên) cần thử trên VPS khi triển khai.
+- Test cục bộ bằng CLI Python giả lập (không gọi AI thật) đã kiểm chứng toàn bộ logic: bắt URL, ghi
+  stdin, heuristic success/error, timeout, dọn tiến trình — cả qua PIPE thường lẫn qua pty thật trên
+  Linux. Test với `claude setup-token` thật trên VPS xác nhận bắt URL đúng tới bước chờ mã; chưa thử
+  trọn vẹn bước dán mã thành công vì giới hạn khi tự kiểm thử qua nhiều tiến trình `docker exec` riêng
+  biệt (xem mục 3) — cần thử lại qua chính giao diện web (một tiến trình dài hạn) để xác nhận hết luồng.
 
 ## 6. Đường dẫn tham chiếu nhanh
 
