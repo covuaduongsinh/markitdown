@@ -15,7 +15,7 @@
 
 ## 2. Trạng thái dự án
 
-- Web production: `https://markitdown.dsc.edu.vn` (Docker → Dokploy, VPS). Push lên `origin main` là kích hoạt deploy theo kế hoạch trong `docs/plans/`. (2026-09-27)
+- Web production: `https://markitdown.dsc.edu.vn` (Docker → Dokploy, VPS). Đang chạy commit `269b3c4` (đã đồng bộ upstream v0.1.9). (2026-11-21)
 - Tính năng mới nhất: Dropbox sync (`2c1df67`, 2026-09-27). Kế hoạch trước đó: Trung tâm cài đặt hạ tầng (2026-09-17).
 - Bộ tài liệu 2026-09-30: xem `docs/README.md`. S10 đã sửa 2026-10-13 (xem bên dưới); các mục khác trong `docs/RA-SOAT-RUI-RO.md` chưa sửa.
 - Cây làm việc sạch; bộ tài liệu và kế hoạch đồng bộ đã được commit vào `main` ngày 2026-11-21.
