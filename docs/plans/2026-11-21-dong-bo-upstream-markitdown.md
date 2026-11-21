@@ -56,9 +56,9 @@
 
 ## 4. Các bước triển khai
 
-- [ ] Bước 1: Commit các tệp tài liệu và kế hoạch hiện tại để working tree sạch trước merge.
-- [ ] Bước 2: Chạy `git merge upstream/main --no-ff -m "merge upstream/main: ed17895 fix ExifTool, DocIntel, dependencies, tests refactor"`.
-- [ ] Bước 3: Xử lý xung đột (nếu có, đặc biệt là `README.md`) và hoàn tất commit merge.
-- [ ] Bước 4: Chạy kiểm thử tự động (roundtrip test + smoke import test).
-- [ ] Bước 5: Cập nhật tài liệu `MEMORY.md`, `TECH.md`, `docs/LICH-SU-PHAT-TRIEN.md`.
-- [ ] Bước 6: Commit bổ sung tài liệu và push lên `origin main`.
+- [x] Bước 1: Commit các tệp tài liệu và kế hoạch hiện tại để working tree sạch trước merge (`8d77815`).
+- [x] Bước 2: Chạy `git merge upstream/main --no-ff -m "merge upstream/main: ed17895 fix ExifTool, DocIntel, dependencies, tests refactor"` (`a722ceb`).
+- [x] Bước 3: Xử lý xung đột (tự động giải quyết sạch ở `README.md`, giữ banner fork ở đầu).
+- [x] Bước 4: Chạy kiểm thử tự động (roundtrip test + smoke import test toàn bộ module: PASS 100%).
+- [x] Bước 5: Cập nhật tài liệu `MEMORY.md`, `TECH.md`, `docs/LICH-SU-PHAT-TRIEN.md`.
+- [x] Bước 6: Commit bổ sung tài liệu và push lên `origin main`.

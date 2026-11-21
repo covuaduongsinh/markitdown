@@ -9,7 +9,7 @@
 |---|---|---|
 | Python (dev, venv) | 3.12 (`cpython-3.12-windows-x86_64`) | `.venv/pyvenv.cfg` |
 | Python (Docker) | 3.12 (`python:3.12-slim`) | `Dockerfile` |
-| Python (thư viện upstream hỗ trợ) | 3.10 – 3.13 | `packages/markitdown/pyproject.toml` |
+| Python (thư viện upstream hỗ trợ) | 3.10 – 3.14 | `packages/markitdown/pyproject.toml` |
 | Hệ điều hành dev | Windows 10; production Linux (Docker) | |
 | Lưu ý | `python` trên PATH của máy dev có thể là 3.8 — **luôn dùng `.venv\Scripts\python.exe`** | |
 
@@ -31,9 +31,9 @@
 
 | Gói | Phiên bản | Ghi chú |
 |---|---|---|
-| `markitdown` | 0.1.8b3 | lõi; extras `[all]`, `[pdf]`, `[docx]`, `[pptx]`, `[xlsx]`, `[xls]`, `[outlook]`, `[audio-transcription]`, `[youtube-transcription]`, `[az-doc-intel]`, `[az-content-understanding]` |
-| `markitdown-ocr` | 0.1.1b2 | phụ thuộc `markitdown>=0.1.8b3`, `PyMuPDF>=1.24.0`… |
-| `markitdown-mcp` | 0.0.1a7 | MCP SDK 2.x |
+| `markitdown` | 0.1.9 | lõi; extras `[all]`, `[pdf]`, `[docx]`, `[pptx]`, `[xlsx]`, `[xls]`, `[outlook]`, `[audio-transcription]`, `[youtube-transcription]`, `[az-doc-intel]`, `[az-content-understanding]` |
+| `markitdown-ocr` | 0.1.2 | phụ thuộc `markitdown>=0.1.9`, `PyMuPDF>=1.24.0`… |
+| `markitdown-mcp` | 0.0.1a8 | MCP SDK 2.x |
 | `markitdown-sample-plugin` | 0.1.0a1 | `striprtf` |
 
 Build: `hatchling`; kiểm thử: `hatch test`, `pytest`; định dạng: `black 23.7.0` (pre-commit).

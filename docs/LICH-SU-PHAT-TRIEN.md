@@ -142,6 +142,22 @@ input/output).
   được quan sát trên VPS thật — xem mục "chưa kiểm chứng" trong `docs/tinh-nang/12-dang-nhap-claude-code.md`.
 - Chưa build lại Docker image / deploy lên Dokploy — thay đổi mới chỉ nằm trong working tree, chưa commit/push.
 
+### 2026-11-21: Đồng bộ upstream microsoft/markitdown lên v0.1.9 (commit ed17895)
+
+**Yêu cầu của chủ dự án:** Repo gốc có update, lên kế hoạch và triển khai update, đồng bộ vào repo ở local và GitHub. Từ giờ, các kế hoạch luôn để ở thư mục `/docs/plans`.
+
+**Đã làm:**
+- Tạo kế hoạch chi tiết tại [`plans/2026-11-21-dong-bo-upstream-markitdown.md`](plans/2026-11-21-dong-bo-upstream-markitdown.md).
+- Commit toàn bộ bộ tài liệu kiến trúc, vận hành và kế hoạch vào nhánh `main` (`8d77815`).
+- Merge thành công 23 commit mới từ `upstream/main` (`945314a..ed17895`) với merge commit `a722ceb`.
+- Không phát sinh xung đột: git ort tự động gộp `README.md` (giữ nguyên banner fork Cờ vua Dương Sinh ở đầu và nhận nội dung mới về Azure Document Intelligence, hosted service của upstream). Toàn bộ 8 tệp mã nguồn riêng của fork ở thư mục gốc không bị ảnh hưởng.
+- Cập nhật phiên bản các gói trong `TECH.md` (`markitdown` 0.1.9, `markitdown-ocr` 0.1.2, `markitdown-mcp` 0.0.1a8).
+- Cập nhật bộ nhớ dự án trong `MEMORY.md`.
+
+**Cách kiểm chứng:**
+- Smoke test import upstream `MarkItDown()` và toàn bộ 7 module riêng của fork (`markitdown_gui`, `claude_ocr`, `claude_translate`, `chessboard_fen`, `ai_engine`, `infrastructure`, `claude_login_bridge`): đạt 100%.
+- Kiểm tra toàn bộ test case roundtrip FEN và bảo vệ khối dịch tiếng Việt (`_test_translate_roundtrip.py`): đạt 100%.
+
 ## 5. Cách nối tiếp lịch sử này
 
 Khi làm một thay đổi có ý nghĩa, thêm một mục vào mục 4 với: ngày, yêu cầu, những gì đã làm, quyết định + lý do,

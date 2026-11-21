@@ -18,7 +18,8 @@
 - Web production: `https://markitdown.dsc.edu.vn` (Docker → Dokploy, VPS). Push lên `origin main` là kích hoạt deploy theo kế hoạch trong `docs/plans/`. (2026-09-27)
 - Tính năng mới nhất: Dropbox sync (`2c1df67`, 2026-09-27). Kế hoạch trước đó: Trung tâm cài đặt hạ tầng (2026-09-17).
 - Bộ tài liệu 2026-09-30: xem `docs/README.md`. S10 đã sửa 2026-10-13 (xem bên dưới); các mục khác trong `docs/RA-SOAT-RUI-RO.md` chưa sửa.
-- Cây làm việc sạch tại thời điểm bắt đầu phiên 2026-09-30 (`git status` rỗng); các tệp `.md` mới của phiên đó **chưa được commit** cho tới khi chủ dự án yêu cầu.
+- Cây làm việc sạch; bộ tài liệu và kế hoạch đồng bộ đã được commit vào `main` ngày 2026-11-21.
+- 2026-11-21: Đồng bộ upstream `microsoft/markitdown` từ commit `945314a` lên `ed17895` (v0.1.9, 23 commit mới). Upstream nâng cấp DocIntel, sửa ExifTool Windows, nâng phụ thuộc và tái cấu trúc test suite. Test fork và upstream import đều đạt 100%.
 - 2026-10-13: thêm `claude_login_bridge.py` (nút "Đăng nhập Claude Code" trên web, dùng `claude setup-token`)
   và sửa `_claude_env`/`infrastructure.py` dùng đúng biến `CLAUDE_CODE_OAUTH_TOKEN` thay vì 3 biến sai cũ
   (`CLAUDE_CODE_SESSION_ACCESS_TOKEN`, `ANTHROPIC_SESSION_KEY`, `ANTHROPIC_API_KEY`). Xem
@@ -40,10 +41,11 @@
 | 2026-10-13 | Tài liệu chính thức Claude Code CLI: `ANTHROPIC_API_KEY` có độ ưu tiên xác thực **cao hơn** `CLAUDE_CODE_OAUTH_TOKEN`; mã cũ set cả hai bằng cùng một cookie `sessionKey` → CLI luôn thử xác thực sai kiểu qua API key giả | Không bao giờ set `ANTHROPIC_API_KEY` bằng giá trị không phải API key thật, kể cả "chỉ để thử" |
 | 2026-10-13 | `claude setup-token` sinh OAuth token sống ~1 năm cho CI/server không trình duyệt; khi không reach được localhost callback (SSH/container), CLI tự chuyển sang hiện mã để dán ngược lại terminal | Dùng cơ chế này thay cookie `sessionKey` (hết hạn nhanh) cho mọi app chạy Claude Code trên server headless |
 | 2026-10-13 | Container production (Dokploy) chạy **không mount volume nào** (`docker inspect` → `Mounts: []`) | Mọi state ghi trong container (kể cả `~/.claude.json`) mất khi redeploy; chỉ biến môi trường cấu hình trong Dokploy mới bền vững |
+| 2026-11-21 | Upstream `microsoft/markitdown` bump lên v0.1.9, mở rộng Python 3.10-3.14, nâng cấp DocIntel API key & query fields | Toàn bộ 8 tệp fork giữ nguyên tương thích; test roundtrip FEN và smoke import đạt 100% |
 
 ## 4. Quyết định đã chốt (đừng đảo lại nếu không có lý do mới)
 
-- Fork **không sửa lõi** `packages/markitdown`; mọi mã riêng ở thư mục gốc để merge upstream dễ. Đã merge upstream 2 lần (`46d5350`, `ba0a8ad`).
+- Fork **không sửa lõi** `packages/markitdown`; mọi mã riêng ở thư mục gốc để merge upstream dễ. Đã merge upstream 3 lần (`46d5350`, `ba0a8ad`, `a722ceb`).
 - Giao diện: **Phương án A** trong `design_handoff_markitdown_gui/` (hai cột, navy `#2B3990`, sun `#F6B92B`, teal `#1FA98F`).
 - Ký hiệu nước đi đầu ra: `1.e4 e5` / `2.Mf3 Mc6`, V/H/X/T/M, nhập thành `0-0`. Chương → `#`, biến → `##`, ván → `###`.
 - Sách Tây Ban Nha: nguồn `T` (Torre) → `X`, nguồn `A` (Alfil) → `T`. **Không** giữ nguyên chữ.
