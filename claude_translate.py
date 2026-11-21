@@ -310,7 +310,7 @@ def _call_claude(chunk, model="opus", timeout=600, instruction=None, effort="low
     return out
 
 
-def _call_agy(chunk, model="gemini-3.7-flash", timeout=600, instruction=None, effort="low", api_key=None, agy_token=None):
+def _call_agy(chunk, model="gemini-3.8-flash", timeout=600, instruction=None, effort="low", api_key=None, agy_token=None):
     """Gọi Antigravity CLI (`agy -p`) hoặc Gemini API dịch một chunk. Trả về text đã dịch."""
     from ai_engine import run_agy_prompt, AIEngineError
 
@@ -420,7 +420,7 @@ def _translate_chunk(chunk, model, timeout, instruction, effort="low",
 
 
 def translate_markdown_vn(
-    md, model="gemini-3.7-flash", progress=None, timeout=600, chess=True,
+    md, model="gemini-3.8-flash", progress=None, timeout=600, chess=True,
     workers=TRANSLATE_WORKERS, chess_lang="en", effort="low", engine="antigravity",
     api_key=None, claude_token=None, agy_token=None,
 ):

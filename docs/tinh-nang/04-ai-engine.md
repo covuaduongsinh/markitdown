@@ -41,7 +41,7 @@ Nếu không có động cơ nào, ứng dụng **vẫn chạy** và chuyển đ
 
 | Danh sách | Model (giá trị) |
 |---|---|
-| `ANTIGRAVITY_OCR_MODELS` | `gemini-3.6-flash`, `gemini-3.7-flash`, `gemini-3.8-flash`, `gemini-3.1-pro`, `claude-sonnet-4-6`, `claude-opus-4-6-thinking` |
+| `ANTIGRAVITY_OCR_MODELS` | `gemini-3.8-flash`, `gemini-4-neon`, `gemini-4-hydrogen`, `gemini-4-argon`, `claude-sonnet-5-5`, `claude-opus-5-5` |
 | `ANTIGRAVITY_TRANSLATE_MODELS` | như trên **trừ** `claude-opus-4-6-thinking` |
 | `CLAUDE_OCR_MODELS` | `sonnet`, `haiku`, `opus` |
 | `CLAUDE_TRANSLATE_MODELS` | `haiku`, `sonnet`, `opus` |

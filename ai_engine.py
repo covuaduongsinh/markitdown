@@ -30,20 +30,20 @@ ENGINE_LABELS = [
 
 # Danh sách model cho từng Engine
 ANTIGRAVITY_OCR_MODELS = [
-    ("Gemini 3.6 Flash — Siêu tiết kiệm token", "gemini-3.6-flash"),
-    ("Gemini 3.7 Flash — Cân bằng & Nhanh (Mặc định)", "gemini-3.7-flash"),
-    ("Gemini 3.8 Flash — Tốc độ cao", "gemini-3.8-flash"),
-    ("Gemini 3.1 Pro — Chính xác cao", "gemini-3.1-pro"),
-    ("Claude Sonnet 4.6 (Thinking)", "claude-sonnet-4-6"),
-    ("Claude Opus 4.6 (Thinking)", "claude-opus-4-6-thinking"),
+    ("Gemini 3.8 Flash — Tốc độ cao & Cân bằng (Mặc định)", "gemini-3.8-flash"),
+    ("Gemini 4 Neon — Cân bằng & Thông minh", "gemini-4-neon"),
+    ("Gemini 4 Hydrogen — Siêu nhẹ & Nhanh", "gemini-4-hydrogen"),
+    ("Gemini 4 Argon — Phân tích cờ sâu", "gemini-4-argon"),
+    ("Claude Sonnet 5.5 (Thinking)", "claude-sonnet-5-5"),
+    ("Claude Opus 5.5 (Thinking)", "claude-opus-5-5"),
 ]
 
 ANTIGRAVITY_TRANSLATE_MODELS = [
-    ("Gemini 3.6 Flash — Siêu tiết kiệm token", "gemini-3.6-flash"),
-    ("Gemini 3.7 Flash — Tự nhiên & Nhanh (Mặc định)", "gemini-3.7-flash"),
-    ("Gemini 3.8 Flash — Tốc độ cao", "gemini-3.8-flash"),
-    ("Gemini 3.1 Pro — Văn phong cao cấp", "gemini-3.1-pro"),
-    ("Claude Sonnet 4.6 (Thinking)", "claude-sonnet-4-6"),
+    ("Gemini 3.8 Flash — Tự nhiên & Nhanh (Mặc định)", "gemini-3.8-flash"),
+    ("Gemini 4 Neon — Văn phong mượt mà", "gemini-4-neon"),
+    ("Gemini 4 Hydrogen — Tốc độ cao", "gemini-4-hydrogen"),
+    ("Gemini 4 Argon — Chuyên sâu văn bản cờ", "gemini-4-argon"),
+    ("Claude Sonnet 5.5 (Thinking)", "claude-sonnet-5-5"),
 ]
 
 CLAUDE_OCR_MODELS = [
@@ -184,14 +184,18 @@ def _map_gemini_api_model(model_name: str) -> str:
     """Ánh xạ tên model sang model ID chuẩn của Google Gemini API."""
     m = (model_name or "").lower().strip()
     if "flash" in m:
+        if "3.8" in m or "3-8" in m:
+            return "gemini-2.5-flash"
         if "3.7" in m or "3-7" in m:
-            return "gemini-2.5-flash"  # Fallback hoặc chuẩn model REST
+            return "gemini-2.5-flash"
         if "2.5" in m or "2-5" in m:
             return "gemini-2.5-flash"
         if "2.0" in m or "2-0" in m:
             return "gemini-2.0-flash"
         if "1.5" in m or "1-5" in m:
             return "gemini-1.5-flash"
+        return "gemini-2.5-flash"
+    if "neon" in m or "hydrogen" in m or "argon" in m:
         return "gemini-2.5-flash"
     if "pro" in m:
         if "2.5" in m or "2-5" in m:
@@ -277,7 +281,7 @@ def call_gemini_api_direct(
 
 def run_agy_prompt(
     prompt: str,
-    model: str = "gemini-3.7-flash",
+    model: str = "gemini-3.8-flash",
     effort: str = "low",
     img_dir: str = None,
     timeout: int = 600,
@@ -305,7 +309,7 @@ def run_agy_prompt(
             "Hãy cài đặt Antigravity hoặc nhập Gemini API Key trong Tùy chọn nâng cao."
         )
 
-    model_name = model.strip() if model else "gemini-3.7-flash"
+    model_name = model.strip() if model else "gemini-3.8-flash"
     effort_val = effort if effort in ("low", "medium", "high") else "low"
 
     cmd = [

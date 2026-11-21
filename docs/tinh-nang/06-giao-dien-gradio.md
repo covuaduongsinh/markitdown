@@ -39,7 +39,7 @@ Giá trị thật từ `_PRESET_OPTS_AGY` (dòng 1348) và `_PRESET_OPTS_CLAUDE`
 | Preset | Engine | Gộp OCR+dịch | Model OCR | Effort OCR | Model dịch | Effort dịch | DPI bàn cờ | Trang/lần |
 |---|---|:-:|---|---|---|---|---:|---:|
 | Tiết kiệm | Antigravity | ✅ | `gemini-3.6-flash` | low | `gemini-3.6-flash` | low | 250 | 2 |
-| Cân bằng | Antigravity | ✅ | `gemini-3.7-flash` | auto | `gemini-3.7-flash` | low | 250 | 1 |
+| Cân bằng | Antigravity | ✅ | `gemini-3.8-flash` | auto | `gemini-3.8-flash` | low | 250 | 1 |
 | Chính xác | Antigravity | ❌ | `gemini-3.1-pro` | high | `gemini-3.1-pro` | medium | 400 | 1 |
 | Tiết kiệm | Claude Code | ✅ | `haiku` | low | `haiku` | low | 250 | 2 |
 | Cân bằng | Claude Code | ✅ | `sonnet` | auto | `haiku` | low | 250 | 1 |

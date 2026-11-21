@@ -582,7 +582,7 @@ def _ensure_translated(text, chess, chess_lang, model, engine="antigravity"):
 
 
 def ocr_image_path(
-    img_path, model="gemini-3.7-flash", timeout=600, board_fens=None, chess=True,
+    img_path, model="gemini-3.8-flash", timeout=600, board_fens=None, chess=True,
     chess_lang="en", effort=None, translate_to=None, engine="antigravity",
     api_key=None, claude_token=None, agy_token=None,
 ):
@@ -606,7 +606,7 @@ def ocr_image_path(
 
 
 def ocr_image_group(
-    items, model="gemini-3.7-flash", timeout=600, chess=True, chess_lang="en",
+    items, model="gemini-3.8-flash", timeout=600, chess=True, chess_lang="en",
     effort=None, translate_to=None, engine="antigravity", api_key=None, claude_token=None,
     agy_token=None,
 ):
@@ -691,7 +691,7 @@ def _ocr_page_group(items, model, page_timeout, chess, chess_lang="en",
 
 
 def ocr_pdf(
-    pdf_path, model="gemini-3.7-flash", dpi=200, progress=None, page_timeout=600,
+    pdf_path, model="gemini-3.8-flash", dpi=200, progress=None, page_timeout=600,
     board_dpi=BOARD_DPI, chess=True, workers=OCR_WORKERS, chess_lang="en",
     effort=None, translate_to=None, pages_per_call=1, engine="antigravity",
     api_key=None, claude_token=None, agy_token=None,
@@ -788,7 +788,7 @@ def _ocr_image_with_retry(img_path, **kwargs):
 
 
 def ocr_image_file(
-    img_path, model="gemini-3.7-flash", page_timeout=600, chess=True,
+    img_path, model="gemini-3.8-flash", page_timeout=600, chess=True,
     chess_lang="en", effort=None, translate_to=None, engine="antigravity",
     api_key=None, claude_token=None, agy_token=None,
 ):

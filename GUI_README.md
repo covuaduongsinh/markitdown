@@ -37,12 +37,12 @@ trong `ai_engine.py`, đã đối chiếu với `agy models` thực tế):
 
 | Model | Dùng cho |
 | --- | --- |
-| `gemini-3.6-flash` | Siêu tiết kiệm token |
-| `gemini-3.7-flash` | Cân bằng & nhanh (mặc định) |
-| `gemini-3.8-flash` | Tốc độ cao |
-| `gemini-3.1-pro` | Chính xác cao / văn phong cao cấp |
-| `claude-sonnet-4-6` | Thinking, chỉ cho OCR/dịch chất lượng cao |
-| `claude-opus-4-6-thinking` | Thinking, chỉ cho OCR |
+| `gemini-3.8-flash` | Tốc độ cao & Cân bằng (mặc định) |
+| `gemini-4-neon` | Thế hệ 4 mới nhất, cân bằng & thông minh |
+| `gemini-4-hydrogen` | Siêu nhẹ & tốc độ cao |
+| `gemini-4-argon` | Phân tích cờ sâu |
+| `claude-sonnet-5-5` | Thinking, OCR/dịch chất lượng cao |
+| `claude-opus-5-5` | Thinking, cao cấp nhất |
 
 > Lưu ý: `gemini-3.1-pro` trên `agy` chỉ có 2 mức effort thật là **high** và
 > **low** (không có **medium**). Preset "Chính xác" hiện gán `tr_effort=medium`
@@ -59,9 +59,9 @@ Giá trị thật lấy từ `_PRESET_OPTS_AGY` / `_PRESET_OPTS_CLAUDE`
 
 | Preset | Antigravity: model OCR / dịch, effort, DPI, gộp trang | Claude Code: model OCR / dịch, effort, DPI, gộp trang |
 | --- | --- | --- |
-| **Tiết kiệm** | gemini-3.6-flash / gemini-3.6-flash, low, DPI 250, 2 trang/lần, gộp OCR+dịch | haiku / haiku, low, DPI 250, 2 trang/lần, gộp OCR+dịch |
-| **Cân bằng** (mặc định) | gemini-3.7-flash / gemini-3.7-flash, auto, DPI 250, 1 trang/lần, gộp OCR+dịch | sonnet / haiku, auto, DPI 250, 1 trang/lần, gộp OCR+dịch |
-| **Chính xác** | gemini-3.1-pro / gemini-3.1-pro, high/medium, DPI 400, 1 trang/lần, dịch riêng | opus / sonnet, high/medium, DPI 400, 1 trang/lần, dịch riêng |
+| **Tiết kiệm** | gemini-4-hydrogen / gemini-4-hydrogen, low, DPI 250, 2 trang/lần, gộp OCR+dịch | haiku / haiku, low, DPI 250, 2 trang/lần, gộp OCR+dịch |
+| **Cân bằng** (mặc định) | gemini-3.8-flash / gemini-3.8-flash, auto, DPI 250, 1 trang/lần, gộp OCR+dịch | sonnet / haiku, auto, DPI 250, 1 trang/lần, gộp OCR+dịch |
+| **Chính xác** | gemini-4-argon / gemini-4-argon, high/medium, DPI 400, 1 trang/lần, dịch riêng | opus / sonnet, high/medium, DPI 400, 1 trang/lần, dịch riêng |
 
 "Gộp OCR+dịch" (`merge`) = OCR và dịch tiếng Việt trong cùng 1 lượt gọi AI,
 tiết kiệm thêm ~30–40% lượt gọi so với dịch riêng một pass.

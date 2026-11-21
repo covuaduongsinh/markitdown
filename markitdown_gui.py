@@ -282,11 +282,11 @@ def _chess_lang_from_mode(label):
 
 
 def _model_from_label(label):
-    """'gemini-3.7-flash (cân bằng)' -> 'gemini-3.7-flash', 'opus (chính xác)' -> 'opus'."""
+    """'gemini-3.8-flash (cân bằng)' -> 'gemini-3.8-flash', 'opus (chính xác)' -> 'opus'."""
     if not label:
-        return "gemini-3.7-flash"
+        return "gemini-3.8-flash"
     tok = str(label).strip().split()
-    return tok[0].lower() if tok else "gemini-3.7-flash"
+    return tok[0].lower() if tok else "gemini-3.8-flash"
 
 
 _EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
@@ -1347,12 +1347,12 @@ def on_clear():
 
 # Presets ánh xạ theo từng Engine
 _PRESET_OPTS_AGY = {
-    PRESET_SAVER: dict(merge=True, ocr_model="gemini-3.6-flash", ocr_effort="low",
-                       tr_model="gemini-3.6-flash", tr_effort="low", dpi="250", pages="2"),
-    PRESET_BALANCED: dict(merge=True, ocr_model="gemini-3.7-flash", ocr_effort="auto",
-                          tr_model="gemini-3.7-flash", tr_effort="low", dpi="250", pages="1"),
-    PRESET_ACCURATE: dict(merge=False, ocr_model="gemini-3.1-pro", ocr_effort="high",
-                          tr_model="gemini-3.1-pro", tr_effort="medium", dpi="400", pages="1"),
+    PRESET_SAVER: dict(merge=True, ocr_model="gemini-4-hydrogen", ocr_effort="low",
+                       tr_model="gemini-4-hydrogen", tr_effort="low", dpi="250", pages="2"),
+    PRESET_BALANCED: dict(merge=True, ocr_model="gemini-3.8-flash", ocr_effort="auto",
+                          tr_model="gemini-3.8-flash", tr_effort="low", dpi="250", pages="1"),
+    PRESET_ACCURATE: dict(merge=False, ocr_model="gemini-4-argon", ocr_effort="high",
+                          tr_model="gemini-4-argon", tr_effort="medium", dpi="400", pages="1"),
 }
 
 _PRESET_OPTS_CLAUDE = {
@@ -1756,8 +1756,8 @@ def build_ui():
 
                         init_ocr_choices = ANTIGRAVITY_OCR_MODELS if default_eng == ENGINE_ANTIGRAVITY else CLAUDE_OCR_MODELS
                         init_tr_choices = ANTIGRAVITY_TRANSLATE_MODELS if default_eng == ENGINE_ANTIGRAVITY else CLAUDE_TRANSLATE_MODELS
-                        init_ocr_val = "gemini-3.7-flash" if default_eng == ENGINE_ANTIGRAVITY else "sonnet"
-                        init_tr_val = "gemini-3.7-flash" if default_eng == ENGINE_ANTIGRAVITY else "haiku"
+                        init_ocr_val = "gemini-3.8-flash" if default_eng == ENGINE_ANTIGRAVITY else "sonnet"
+                        init_tr_val = "gemini-3.8-flash" if default_eng == ENGINE_ANTIGRAVITY else "haiku"
 
                         with gr.Row(elem_classes="mid-selects"):
                             ocr_model = gr.Dropdown(
