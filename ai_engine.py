@@ -18,6 +18,8 @@ import sys
 import urllib.error
 import urllib.request
 
+from proc_control import check_cancelled, run_cli
+
 
 ENGINE_ANTIGRAVITY = "antigravity"
 ENGINE_CLAUDE = "claude"
@@ -343,17 +345,8 @@ def run_agy_prompt(
     cwd = img_dir if img_dir and os.path.isdir(img_dir) else None
 
     try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-            cwd=cwd,
-            stdin=subprocess.DEVNULL,
-            env=env,
-        )
+        # run_cli đăng ký tiến trình vào CancelToken hiện hành để nút Dừng diệt được (proc_control).
+        proc = run_cli(cmd, timeout=timeout, cwd=cwd, env=env)
     except subprocess.TimeoutExpired as exc:
         raise AIEngineError(f"Antigravity quá thời gian ({timeout}s) khi xử lý.") from exc
 

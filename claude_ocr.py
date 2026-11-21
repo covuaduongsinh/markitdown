@@ -20,6 +20,8 @@ import subprocess
 import sys
 import tempfile
 
+from proc_control import OperationCancelled, check_cancelled, run_cli, submit_in_context, use_token
+
 try:
     import chessboard_fen  # nhận diện bàn cờ -> FEN cục bộ bằng model ONNX
 except Exception:
@@ -501,16 +503,8 @@ def _run_claude_ocr(prompt, img_dir, model, effort, timeout, claude_token=None):
     ] + _claude_fast_flags(effort)
 
     try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-            cwd=img_dir,
-            stdin=subprocess.DEVNULL,
-            env=_claude_env(claude_token=claude_token),
+        proc = run_cli(
+            cmd, timeout=timeout, cwd=img_dir, env=_claude_env(claude_token=claude_token),
         )
     except subprocess.TimeoutExpired as exc:
         raise ClaudeOCRError(f"Claude Code quá thời gian ({timeout}s) khi OCR.") from exc
@@ -540,6 +534,7 @@ def _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine="antigravity
     """Điều phối chạy OCR qua Antigravity / Gemini API (mặc định) hoặc Claude Code."""
     from ai_engine import ENGINE_ANTIGRAVITY, ENGINE_CLAUDE, ENGINE_FAKE, run_agy_prompt, AIEngineError
 
+    check_cancelled()  # đã bấm Dừng -> không gọi AI nữa
     if engine == ENGINE_FAKE:
         from fake_engine import fake_ocr
 
@@ -699,86 +694,122 @@ def ocr_pdf(
     board_dpi=BOARD_DPI, chess=True, workers=OCR_WORKERS, chess_lang="en",
     effort=None, translate_to=None, pages_per_call=1, engine="antigravity",
     api_key=None, claude_token=None, agy_token=None,
+    pages=None, done_pages=None, on_page=None, cancel=None,
 ):
-    """OCR toàn bộ PDF scan qua Antigravity hoặc Claude Code. Trả về Markdown ghép các trang."""
+    """OCR toàn bộ PDF scan qua Antigravity hoặc Claude Code. Trả về Markdown ghép các trang.
+
+    Tham số tùy chọn cho công việc nền (mặc định giữ hành vi cũ):
+    - pages: tập số trang (đếm từ 1) cần làm; None = tất cả. Kết quả chỉ gồm các trang này.
+    - done_pages: dict {số trang: văn bản} đã có sẵn (điểm lưu) -> dùng lại, không gọi AI.
+    - on_page(page_no, text, error): gọi (ở luồng gọi hàm này) mỗi khi một trang xong;
+      lỗi/trống thì text=None và error là thông báo. Dùng để ghi điểm lưu.
+    - cancel: proc_control.CancelToken; bị hủy thì ngừng nộp trang mới, diệt tiến trình AI đang chạy
+      và ném OperationCancelled (các trang đã xong đã được báo qua on_page).
+    """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     import pypdfium2 as pdfium
 
     pages_per_call = max(1, int(pages_per_call or 1))
+    done_pages = done_pages or {}
     tmp_dir = tempfile.mkdtemp(prefix="mid_ocr_")
     try:
-        pdf = pdfium.PdfDocument(pdf_path)
-        try:
-            n_pages = len(pdf)
-            if n_pages == 0:
-                raise ClaudeOCRError("PDF không có trang nào.")
-            parts = [None] * n_pages
-            n_failed = 0
-            n_done = 0
-            if progress is not None:
-                progress(0, n_pages)
-            with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-                futures = {}
-                group = []
+        with use_token(cancel):
+            pdf = pdfium.PdfDocument(pdf_path)
+            try:
+                n_pages = len(pdf)
+                if n_pages == 0:
+                    raise ClaudeOCRError("PDF không có trang nào.")
+                target = [p for p in range(1, n_pages + 1) if pages is None or p in pages]
+                if not target:
+                    raise ClaudeOCRError("Khoảng trang đã chọn không có trang nào trong tệp.")
+                parts = {p: done_pages[p] for p in target if p in done_pages}
+                todo = [p for p in target if p not in parts]
+                n_total = len(target)
+                n_failed = 0
+                n_done = len(parts)
+                cancelled = False
+                if progress is not None:
+                    progress(n_done, n_total)
+                pool = ThreadPoolExecutor(max_workers=max(1, workers))
+                try:
+                    futures = {}
+                    group = []
 
-                def _submit(g):
-                    items = [(png, fens) for _no, png, fens in g]
-                    fut = pool.submit(
-                        _ocr_page_group, items, model, page_timeout, chess,
-                        chess_lang, effort, translate_to, engine=engine,
-                        api_key=api_key, claude_token=claude_token,
-                        agy_token=agy_token,
-                    )
-                    futures[fut] = [no for no, _png, _fens in g]
-
-                for i in range(1, n_pages + 1):
-                    if chess:
-                        png, hi_res = _render_page_pair(
-                            pdf[i - 1], tmp_dir, i, ocr_dpi=dpi, board_dpi=board_dpi
+                    def _submit(g):
+                        items = [(png, fens) for _no, png, fens in g]
+                        fut = submit_in_context(
+                            pool, _ocr_page_group, items, model, page_timeout, chess,
+                            chess_lang, effort, translate_to, engine=engine,
+                            api_key=api_key, claude_token=claude_token,
+                            agy_token=agy_token,
                         )
-                        board_fens = _page_board_fens(hi_res)
-                        del hi_res
-                    else:
-                        png = _render_page(pdf[i - 1], tmp_dir, i, dpi=dpi)
-                        board_fens = None
-                    group.append((i, png, board_fens))
-                    if len(group) >= pages_per_call:
-                        _submit(group)
-                        group = []
-                if group:
-                    _submit(group)
+                        futures[fut] = [no for no, _png, _fens in g]
 
-                for fut in as_completed(futures):
-                    idxs = futures[fut]
-                    try:
-                        results = fut.result()
-                    except ClaudeOCRError as exc:
-                        for pi in idxs:
-                            n_failed += 1
-                            parts[pi - 1] = f"*[Lỗi OCR trang {pi}: {exc}]*"
+                    for i in todo:
+                        if cancel is not None and cancel.is_set():
+                            cancelled = True
+                            break
+                        if chess:
+                            png, hi_res = _render_page_pair(
+                                pdf[i - 1], tmp_dir, i, ocr_dpi=dpi, board_dpi=board_dpi
+                            )
+                            board_fens = _page_board_fens(hi_res)
+                            del hi_res
+                        else:
+                            png = _render_page(pdf[i - 1], tmp_dir, i, dpi=dpi)
+                            board_fens = None
+                        group.append((i, png, board_fens))
+                        if len(group) >= pages_per_call:
+                            _submit(group)
+                            group = []
+                    if group and not cancelled:
+                        _submit(group)
+
+                    for fut in as_completed(futures):
+                        idxs = futures[fut]
+                        try:
+                            results = fut.result()
+                        except OperationCancelled:
+                            cancelled = True
+                            continue
+                        except ClaudeOCRError as exc:
+                            for pi in idxs:
+                                n_failed += 1
+                                parts[pi] = f"*[Lỗi OCR trang {pi}: {exc}]*"
+                                n_done += 1
+                                if on_page is not None:
+                                    on_page(pi, None, str(exc))
+                                if progress is not None:
+                                    progress(n_done, n_total)
+                            continue
+                        for k, pi in enumerate(idxs):
+                            text = results[k] if k < len(results) else ""
+                            if text and text.strip():
+                                parts[pi] = text.strip()
+                                if on_page is not None:
+                                    on_page(pi, parts[pi], None)
+                            else:
+                                parts[pi] = f"*[Trang {pi}: không trích được nội dung]*"
+                                if on_page is not None:
+                                    on_page(pi, None, "không trích được nội dung")
                             n_done += 1
                             if progress is not None:
-                                progress(n_done, n_pages)
-                        continue
-                    for k, pi in enumerate(idxs):
-                        text = results[k] if k < len(results) else ""
-                        if text and text.strip():
-                            parts[pi - 1] = text.strip()
-                        else:
-                            parts[pi - 1] = f"*[Trang {pi}: không trích được nội dung]*"
-                        n_done += 1
-                        if progress is not None:
-                            progress(n_done, n_pages)
-        finally:
-            pdf.close()
-        if n_failed == n_pages:
+                                progress(n_done, n_total)
+                finally:
+                    # Bị hủy: không chờ các lượt gọi còn dở (CLI đã bị diệt; REST không ngắt được).
+                    pool.shutdown(wait=not cancelled, cancel_futures=True)
+                if cancelled or (cancel is not None and cancel.is_set()):
+                    raise OperationCancelled()
+            finally:
+                pdf.close()
+        if todo and n_failed == len(todo) and not any(p in done_pages for p in target):
             engine_name = "Antigravity/Gemini" if engine == "antigravity" else "Claude Code"
             raise ClaudeOCRError(
                 f"OCR thất bại ở toàn bộ {n_failed} trang. "
                 f"Hãy kiểm tra {engine_name} còn phiên đăng nhập/hạn mức/API Key không."
             )
-        return "\n\n".join(p for p in parts if p).strip()
+        return "\n\n".join(parts[p] for p in target if parts.get(p)).strip()
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 

@@ -5,6 +5,7 @@ Không có tiến trình ``agy``/``claude`` nào được chạy, không có yê
 
 Biến môi trường:
 - ``MID_FAKE_DELAY``      giây ngủ mỗi lần "gọi AI" (mặc định 0.3).
+- ``MID_FAKE_DELAY_SCALE`` ``1`` = trễ nhân với số trang lớn nhất trong lượt (trang sau xong muộn hơn) — để thử Dừng giữa chừng.
 - ``MID_FAKE_FAIL_PAGES`` danh sách số trang (ví dụ ``3,5``) mà lần OCR sẽ ném ``ClaudeOCRError``
   — để thử luồng "OCR lại trang lỗi". Số trang lấy từ tên tệp ảnh ``page_NNN.png`` trong prompt.
 
@@ -15,7 +16,9 @@ tách marker ``HET_TRANG``, hậu kiểm khối bàn cờ, bảo vệ placeholde
 
 import os
 import re
-import time
+import threading
+
+import proc_control
 
 ENV_FLAG = "MID_FAKE_ENGINE"
 
@@ -42,6 +45,22 @@ _FENS = [
 
 _PAGE_FILE_RE = re.compile(r"page_(\d+)\.png")
 _MULTI_PAGE_RE = re.compile(r"^- TRANG \d+:", re.MULTILINE)
+
+
+# Nhật ký lượt "gọi AI" của tiến trình này, dùng cho test đếm số lượt:
+# ("ocr", [số trang trong lượt]) hoặc ("translate", None).
+CALLS = []
+_CALLS_LOCK = threading.Lock()
+
+
+def reset_calls():
+    with _CALLS_LOCK:
+        CALLS.clear()
+
+
+def _log(kind, pages=None):
+    with _CALLS_LOCK:
+        CALLS.append((kind, pages))
 
 
 def is_enabled():
@@ -80,10 +99,12 @@ def fake_ocr(prompt):
     # Import muộn để cắt vòng phụ thuộc (claude_ocr import fake_engine).
     from claude_ocr import _PAGE_BREAK, _PROMPT_MERGE_BANNER, ClaudeOCRError
 
-    time.sleep(_delay())
     numbers = [int(m) for m in _PAGE_FILE_RE.findall(prompt)]
     n_group = max(1, len(_MULTI_PAGE_RE.findall(prompt)))
     numbers = (numbers + [1] * n_group)[:n_group]
+    _log("ocr", list(numbers))
+    scale = max(numbers) if os.environ.get("MID_FAKE_DELAY_SCALE", "").strip() == "1" else 1
+    proc_control.sleep(_delay() * scale)  # thức dậy ngay khi bấm Dừng (ném OperationCancelled)
     bad = sorted(set(numbers) & _fail_pages())
     if bad:
         raise ClaudeOCRError("Engine giả: giả lập lỗi OCR ở trang " + ", ".join(map(str, bad)))
@@ -95,7 +116,8 @@ def fake_ocr(prompt):
 
 def fake_translate(chunk):
     """Dịch giả: thay từng câu Anh đã biết bằng câu Việt; giữ nguyên phần còn lại (placeholder, FEN…)."""
-    time.sleep(_delay())
+    _log("translate")
+    proc_control.sleep(_delay())
     out = chunk
     for en, vi in _SENTENCES:
         if "{n}" in en:

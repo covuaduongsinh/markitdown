@@ -20,6 +20,7 @@ import re
 import subprocess
 
 from claude_ocr import ClaudeOCRError, _claude_env, _claude_fast_flags, find_claude
+from proc_control import OperationCancelled, check_cancelled, run_cli, submit_in_context, use_token
 
 # Regex block chessboard — giống _CHESSBOARD_BLOCK_RE trong claude_ocr.py.
 _CHESSBOARD_BLOCK_RE = re.compile(r"```[ \t]*chessboard[^\n]*\n(.*?)```", re.DOTALL)
@@ -275,16 +276,7 @@ def _call_claude(chunk, model="opus", timeout=600, instruction=None, effort="low
     ] + _claude_fast_flags(effort)
 
     try:
-        proc = subprocess.run(
-            cmd,
-            input=chunk,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-            env=_claude_env(claude_token),
-        )
+        proc = run_cli(cmd, input=chunk, timeout=timeout, env=_claude_env(claude_token))
     except subprocess.TimeoutExpired as exc:
         raise ClaudeOCRError(
             f"Claude Code quá thời gian ({timeout}s) khi dịch."
@@ -333,6 +325,7 @@ def _call_agy(chunk, model="gemini-3.8-flash", timeout=600, instruction=None, ef
 
 def _call_engine_translate(chunk, model, timeout=600, instruction=None, effort="low", engine="antigravity", api_key=None, claude_token=None, agy_token=None):
     """Điều phối dịch thuật qua Antigravity / Gemini API (mặc định) hoặc Claude Code."""
+    check_cancelled()  # đã bấm Dừng -> không gọi AI nữa
     if engine == "fake":
         from fake_engine import fake_translate
 
@@ -385,9 +378,17 @@ def _looks_untranslated(text, chess_lang="en"):
 TRANSLATE_WORKERS = 8
 
 
+def chunk_cache_key(chunk, chess, chess_lang):
+    """Khóa điểm lưu của một đoạn dịch: băm nội dung đoạn + chế độ (đổi chế độ thì không dùng lại)."""
+    import hashlib
+
+    raw = f"{int(bool(chess))}|{chess_lang}|{chunk}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+
+
 def _translate_chunk(chunk, model, timeout, instruction, effort="low",
                      chess_lang="en", engine="antigravity", api_key=None,
-                     claude_token=None, agy_token=None):
+                     claude_token=None, agy_token=None, cache=None, cache_key=None):
     """Dịch 1 chunk với 1 lần thử lại + hậu kiểm placeholder + hậu kiểm ngôn ngữ.
 
     Chunk lỗi hoặc bị mất placeholder -> trả về nguyên văn chunk kèm ghi chú,
@@ -395,6 +396,10 @@ def _translate_chunk(chunk, model, timeout, instruction, effort="low",
     dịch (còn nguyên ngôn ngữ gốc) thì thử lại; vẫn vậy thì giữ kết quả cuối
     kèm ghi chú cảnh báo.
     """
+    if cache is not None and cache_key:
+        hit = cache.get(cache_key)
+        if hit:
+            return hit
     translated = None
     err = None
     for _attempt in range(2):  # thử lại 1 lần nếu lỗi / nếu chưa dịch
@@ -420,13 +425,15 @@ def _translate_chunk(chunk, model, timeout, instruction, effort="low",
     # Đã thử lại mà vẫn như chưa dịch -> giữ kết quả nhưng cảnh báo để dễ dò.
     if _looks_untranslated(translated, chess_lang):
         return f"{translated}\n\n*[Cảnh báo: đoạn này có thể chưa được dịch]*"
+    if cache is not None and cache_key:
+        cache.put(cache_key, translated)  # chỉ lưu bản dịch sạch, không lưu bản dự phòng kèm cảnh báo
     return translated
 
 
 def translate_markdown_vn(
     md, model="gemini-3.8-flash", progress=None, timeout=600, chess=True,
     workers=TRANSLATE_WORKERS, chess_lang="en", effort="low", engine="antigravity",
-    api_key=None, claude_token=None, agy_token=None,
+    api_key=None, claude_token=None, agy_token=None, chunk_cache=None, cancel=None,
 ):
     """Dịch Markdown sang tiếng Việt qua Antigravity hoặc Claude Code.
 
@@ -437,6 +444,8 @@ def translate_markdown_vn(
     giống nhau, chỉ khác ký hiệu nguồn.
     chess=False (tài liệu thường): dịch thông thường, giữ nguyên mọi code block.
     engine: 'antigravity' (mặc định) hoặc 'claude'.
+    chunk_cache: đối tượng có get(key)/put(key, text) -> điểm lưu theo đoạn (dịch lại không tốn lượt cho đoạn đã dịch).
+    cancel: proc_control.CancelToken; bị hủy thì ném OperationCancelled.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -458,21 +467,26 @@ def translate_markdown_vn(
     n_done = 0
     if progress is not None:
         progress(0, n_chunks)
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = {
-            pool.submit(
-                _translate_chunk, c, model, timeout, instruction,
-                effort=effort, chess_lang=chess_lang, engine=engine,
-                api_key=api_key, claude_token=claude_token,
-                agy_token=agy_token,
-            ): idx
-            for idx, c in enumerate(chunks)
-        }
-        for fut in as_completed(futures):
-            idx = futures[fut]
-            out_chunks[idx] = fut.result()
-            n_done += 1
-            if progress is not None:
-                progress(n_done, n_chunks)
+    with use_token(cancel):
+        pool = ThreadPoolExecutor(max_workers=max(1, workers))
+        try:
+            futures = {
+                submit_in_context(
+                    pool, _translate_chunk, c, model, timeout, instruction,
+                    effort=effort, chess_lang=chess_lang, engine=engine,
+                    api_key=api_key, claude_token=claude_token,
+                    agy_token=agy_token, cache=chunk_cache,
+                    cache_key=chunk_cache_key(c, chess, chess_lang),
+                ): idx
+                for idx, c in enumerate(chunks)
+            }
+            for fut in as_completed(futures):
+                idx = futures[fut]
+                out_chunks[idx] = fut.result()  # OperationCancelled thoát ra ngoài
+                n_done += 1
+                if progress is not None:
+                    progress(n_done, n_chunks)
+        finally:
+            pool.shutdown(wait=not (cancel is not None and cancel.is_set()), cancel_futures=True)
     merged = "\n\n".join(c for c in out_chunks if c)
     return _restore_boards(merged, blocks)

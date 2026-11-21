@@ -121,7 +121,7 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
 
 ### Giai đoạn 2 — Công việc nền, tin cậy cho sách dài (cỡ L)
 
-- [ ] **G2.1 `jobs.py` — công việc lưu đĩa.**
+- [x] **G2.1 `jobs.py` — công việc lưu đĩa.**
   ```
   <MID_DATA_DIR>/jobs/<job_id>/
     job.json            trạng thái, tùy chọn, tiến độ từng tệp (ghi nguyên tử: ghi tệp tạm rồi os.replace)
@@ -132,8 +132,8 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
     ketqua.zip
   ```
   `MID_DATA_DIR` mặc định `<tmp>/markitdown_gui_data` trên máy dev; trên production là `/data` (volume bền, mục G2.9). `job_id` ngẫu nhiên (`secrets.token_urlsafe`), tên thư mục không lấy từ tên tệp người dùng. `JobManager` chạy **một công việc một lúc** (`MID_MAX_JOBS=1`), các công việc sau xếp hàng. Trạng thái: `queued → running → done | error | cancelled`. `job.json` **không lưu** khóa/token.
-- [ ] **G2.2 Điểm lưu theo trang.** `claude_ocr.ocr_pdf` nhận thêm tham số tùy chọn (mặc định giữ hành vi cũ): `pages` (tập trang cần làm), `done_pages` (dict trang → văn bản đã có, bỏ qua không gọi AI), `on_page(page_no, text, error)`, `cancel` (`threading.Event`). Dịch riêng: lưu theo băm nội dung đoạn.
-- [ ] **G2.3 Dừng thật (B7).** Đổi `subprocess.run` → `Popen` có đăng ký tiến trình ở ba nơi gọi CLI (`ai_engine.run_agy_prompt`, `claude_ocr._run_claude_ocr`, `claude_translate._call_claude`); khi `cancel` bật: ngừng nộp nhóm trang mới, diệt cây tiến trình đang chạy (tái dùng cách `_kill_tree` của `claude_login_bridge.py`), giữ lại các trang đã xong.
+- [x] **G2.2 Điểm lưu theo trang.** `claude_ocr.ocr_pdf` nhận thêm tham số tùy chọn (mặc định giữ hành vi cũ): `pages` (tập trang cần làm), `done_pages` (dict trang → văn bản đã có, bỏ qua không gọi AI), `on_page(page_no, text, error)`, `cancel` (`threading.Event`). Dịch riêng: lưu theo băm nội dung đoạn.
+- [x] **G2.3 Dừng thật (B7).** Đổi `subprocess.run` → `Popen` có đăng ký tiến trình ở ba nơi gọi CLI (`ai_engine.run_agy_prompt`, `claude_ocr._run_claude_ocr`, `claude_translate._call_claude`); khi `cancel` bật: ngừng nộp nhóm trang mới, diệt cây tiến trình đang chạy (tái dùng cách `_kill_tree` của `claude_login_bridge.py`), giữ lại các trang đã xong.
   - *Đạt khi:* với engine giả `MID_FAKE_DELAY=5`, bấm Dừng → trong ≤ 3 s không còn luồng/tiến trình con nào của công việc; trạng thái `cancelled`; trang đã xong vẫn tải được.
 - [ ] **G2.4 Giao diện hỏi trạng thái.** Bấm Chuyển đổi → tạo công việc, lưu `job_id` vào `gr.BrowserState`; `gr.Timer` (~2 s, chỉ bật khi có công việc đang chạy) gọi `render_job(job_id)`; chỉ gửi lại phần xem trước khi có tệp mới xong. Mở lại trang → tự gắn vào công việc đang chạy. Bỏ `_stream_job`. **Kiểm tài liệu `gr.Timer` đúng bản đã ghim.**
 - [ ] **G2.5 Chạy tiếp và làm lại trang lỗi.** Nút "Chạy tiếp" (công việc bị dừng/lỗi/app khởi động lại) và "OCR lại N trang lỗi" — chỉ gọi AI cho trang còn thiếu, rồi ghép lại tệp kết quả.

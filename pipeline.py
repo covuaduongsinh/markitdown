@@ -13,6 +13,7 @@ import shutil
 import tempfile
 import traceback
 import zipfile
+import contextvars
 from typing import NamedTuple
 
 from markitdown import MarkItDown
@@ -23,6 +24,17 @@ import infrastructure
 # Thư mục tạm để chứa các tệp .md xuất ra (cho nút tải về)
 _OUTPUT_DIR = os.path.join(tempfile.gettempdir(), "markitdown_gui_output")
 os.makedirs(_OUTPUT_DIR, exist_ok=True)
+
+# Công việc nền (jobs.py) đặt thư mục xuất riêng cho từng tệp; không đặt thì dùng _OUTPUT_DIR như trước.
+_OUT_DIR_OVERRIDE = contextvars.ContextVar("mid_out_dir", default=None)
+
+
+def _out_dir():
+    d = _OUT_DIR_OVERRIDE.get()
+    if d:
+        os.makedirs(d, exist_ok=True)
+        return d
+    return _OUTPUT_DIR
 
 
 def _safe_filename(name: str) -> str:
@@ -37,7 +49,7 @@ def _write_md(markdown: str, base_name: str, used_paths=None) -> str:
     `used_paths`: các đường dẫn đã xuất trong cùng lô — nếu trùng thì
     thêm hậu tố _2, _3... để không ghi đè kết quả của tệp trước.
     """
-    out_path = os.path.join(_OUTPUT_DIR, _safe_filename(base_name) + ".md")
+    out_path = os.path.join(_out_dir(), _safe_filename(base_name) + ".md")
     if used_paths:
         root, ext = os.path.splitext(out_path)
         n = 2
@@ -60,7 +72,7 @@ def _write_fen_file(md, base_name, used_paths=None):
     fens = claude_ocr.extract_fens(md)
     if not fens:
         return None, 0
-    out_path = os.path.join(_OUTPUT_DIR, _safe_filename(base_name) + "_fen.txt")
+    out_path = os.path.join(_out_dir(), _safe_filename(base_name) + "_fen.txt")
     if used_paths:
         root, ext = os.path.splitext(out_path)
         n = 2
@@ -72,14 +84,14 @@ def _write_fen_file(md, base_name, used_paths=None):
     return out_path, len(fens)
 
 
-def _zip_all(paths):
+def _zip_all(paths, zip_path=None):
     """Gộp các tệp .md kết quả vào 1 zip cố định trong _OUTPUT_DIR, trả về đường dẫn.
 
     Dùng tên cố định để mỗi lần gọi ghi đè (không tích lũy zip cũ). Dedup tên
     trùng bên trong archive (a.md, a_2.md...) để không mất tệp khi nhiều nguồn
     cùng tên gốc.
     """
-    zip_path = os.path.join(_OUTPUT_DIR, "markitdown_ketqua.zip")
+    zip_path = zip_path or os.path.join(_out_dir(), "markitdown_ketqua.zip")
     used = set()
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for p in paths:
@@ -285,13 +297,64 @@ def _pages_from_label(label):
     return min(3, max(1, n))
 
 
+def parse_page_ranges(text, n_pages):
+    """'1-5, 20, 31-40' -> tập số trang (đếm từ 1), cắt theo n_pages. Trống -> None (= tất cả các trang).
+
+    Chấp nhận dấu phẩy/chấm phẩy/khoảng trắng làm dấu ngăn và '-' hoặc '–' làm dấu khoảng; thứ tự và trùng lặp
+    không quan trọng. Ném ValueError (thông báo tiếng Việt) khi sai cú pháp, số trang < 1, khoảng ngược hoặc
+    không có trang nào nằm trong tệp.
+    """
+    text = (text or "").strip()
+    if not text:
+        return None
+    pages = set()
+    for tok in re.split(r"[,;\s]+", text):
+        if not tok:
+            continue
+        m = re.fullmatch(r"(\d+)(?:[-–](\d+))?", tok)
+        if not m:
+            raise ValueError(f"Khoảng trang không hợp lệ: '{tok}'. Ví dụ đúng: 1-5, 20, 31-40")
+        a = int(m.group(1))
+        b = int(m.group(2)) if m.group(2) else a
+        if a < 1 or b < 1:
+            raise ValueError("Số trang phải từ 1 trở lên.")
+        if b < a:
+            raise ValueError(f"Khoảng '{tok}' bị ngược (trang đầu lớn hơn trang cuối).")
+        pages.update(range(a, min(b, n_pages) + 1))
+    if not pages:
+        raise ValueError(f"Không có trang nào nằm trong tệp (tệp có {n_pages} trang).")
+    return pages
+
+
+def count_pdf_pages(path):
+    """Số trang của PDF, hoặc None nếu không đọc được."""
+    try:
+        import pypdfium2 as pdfium
+
+        pdf = pdfium.PdfDocument(path)
+        try:
+            return len(pdf)
+        finally:
+            pdf.close()
+    except Exception:
+        return None
+
+
+def estimate_ocr_calls(n_target, pages_per_call):
+    """Số lượt gọi AI cần để OCR n_target trang khi mỗi lượt gồm pages_per_call trang."""
+    ppc = max(1, int(pages_per_call or 1))
+    return (max(0, int(n_target)) + ppc - 1) // ppc
+
+
 def _ocr_to_outputs(
     file_path, base_name, model, board_dpi=400, used_paths=None, chess=True,
     progress=None, chess_lang="en", effort=None, merge_translate=False,
     pages_per_call=1, engine="antigravity", api_key=None, claude_token=None,
-    agy_token=None,
+    agy_token=None, ocr_pdf_kwargs=None,
 ):
-    """Chạy OCR (PDF hoặc ảnh) qua AI Engine (Antigravity hoặc Claude Code) và trả về 4-tuple kết quả.
+    """Chạy OCR (PDF hoặc ảnh) qua AI Engine (Antigravity hoặc Claude Code) và trả về ConvertResult.
+
+    ocr_pdf_kwargs: tham số tùy chọn chuyển thẳng cho `claude_ocr.ocr_pdf` (pages, done_pages, on_page, cancel).
 
     merge_translate=True: gộp OCR + dịch sang tiếng Việt trong cùng lệnh gọi
     (bỏ pass dịch riêng) — ghi tệp `<tên>_vn.md`.
@@ -307,7 +370,7 @@ def _ocr_to_outputs(
             progress=progress, chess_lang=chess_lang, effort=effort,
             translate_to=translate_to, pages_per_call=pages_per_call,
             engine=engine, api_key=api_key, claude_token=claude_token,
-            agy_token=agy_token,
+            agy_token=agy_token, **(ocr_pdf_kwargs or {}),
         )
     else:
         text = claude_ocr.ocr_image_file(
@@ -336,7 +399,7 @@ def convert_file(
     board_dpi_label=None, used_paths=None, chess=True, progress=None,
     chess_lang="en", ocr_effort_label=None, merge_translate=False,
     ocr_pages_label=None, engine="antigravity", api_key=None,
-    claude_token=None, agy_token=None,
+    claude_token=None, agy_token=None, ocr_pdf_kwargs=None,
 ):
     if not file_path:
         return ConvertResult("", "", None, "ℹ️ Hãy chọn hoặc kéo-thả một tệp trước.")
@@ -370,7 +433,7 @@ def convert_file(
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
                 engine=engine, api_key=api_key, claude_token=claude_token,
-                agy_token=agy_token,
+                agy_token=agy_token, ocr_pdf_kwargs=ocr_pdf_kwargs,
             )
         except Exception as exc:
             return ConvertResult("", "", None, f"❌ Lỗi OCR: {exc}")
@@ -397,7 +460,7 @@ def convert_file(
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
                 engine=engine, api_key=api_key, claude_token=claude_token,
-                agy_token=agy_token,
+                agy_token=agy_token, ocr_pdf_kwargs=ocr_pdf_kwargs,
             )
         except Exception as exc:
             return ConvertResult("", "", None, f"❌ Lỗi OCR: {exc}")
@@ -423,7 +486,7 @@ def convert_file(
                 progress=progress, chess_lang=chess_lang, effort=ocr_effort,
                 merge_translate=merge_translate, pages_per_call=pages_per_call,
                 engine=engine, api_key=api_key, claude_token=claude_token,
-                agy_token=agy_token,
+                agy_token=agy_token, ocr_pdf_kwargs=ocr_pdf_kwargs,
             )
         except Exception as exc:
             return ConvertResult("", "", None, f"❌ Lỗi OCR: {exc}")
@@ -445,9 +508,11 @@ def convert_url(url, enable_plugins):
 def _translate_to_vn(
     raw_md, orig_path, model, done_paths, chess=True, progress=None,
     chess_lang="en", effort="low", engine=ENGINE_ANTIGRAVITY, api_key=None,
-    claude_token=None, agy_token=None,
+    claude_token=None, agy_token=None, translate_kwargs=None,
 ):
     """Dịch raw_md sang tiếng Việt, ghi tệp `<tên gốc>_vn.md`.
+
+    translate_kwargs: tham số tùy chọn cho `translate_markdown_vn` (chunk_cache, cancel).
 
     chess: True -> dịch theo quy tắc cờ vua; False -> dịch tài liệu thường.
     chess_lang: 'en' (ký hiệu Anh) hoặc 'ru' (ký hiệu Nga) khi chess=True.
@@ -464,7 +529,7 @@ def _translate_to_vn(
         vn_text = claude_translate.translate_markdown_vn(
             raw_md, model=model, chess=chess, progress=progress,
             chess_lang=chess_lang, effort=effort, engine=engine, api_key=api_key,
-            claude_token=claude_token, agy_token=agy_token,
+            claude_token=claude_token, agy_token=agy_token, **(translate_kwargs or {}),
         )
         vn_name = os.path.splitext(os.path.basename(orig_path))[0] + "_vn"
         vn_path = _write_md(vn_text, vn_name, done_paths)
