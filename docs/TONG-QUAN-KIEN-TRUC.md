@@ -76,7 +76,12 @@ Chi tiết phiên bản và biến môi trường: xem [`../TECH.md`](../TECH.md
 
 | Tệp | Dòng | Vai trò | Tài liệu chi tiết |
 |---|---:|---|---|
-| **`markitdown_gui.py`** | 2.104 | Giao diện Gradio + điều phối toàn bộ luồng | [06](tinh-nang/06-giao-dien-gradio.md) |
+| **`markitdown_gui.py`** | 1.043 | Giao diện Gradio: `build_ui`, handler, khởi chạy | [06](tinh-nang/06-giao-dien-gradio.md) |
+| `pipeline.py` | 477 | Lõi chuyển đổi không phụ thuộc Gradio: ghi tệp, `convert_file`, `_publish_output`, dịch | [06](tinh-nang/06-giao-dien-gradio.md) |
+| `ui_theme.py` + `assets/ui/` | 124 + 153 JS + 229 CSS | Theme, CSS/JS đọc từ tệp, thanh tiêu đề, thẻ chế độ | [06](tinh-nang/06-giao-dien-gradio.md) |
+| `presets.py` | 119 | Preset chất lượng, nhớ tùy chọn | [06](tinh-nang/06-giao-dien-gradio.md) |
+| `ui_render.py` | 68 | HTML danh sách tải về | [06](tinh-nang/06-giao-dien-gradio.md) |
+| `fake_engine.py` | 106 | Engine giả để kiểm thử (`MID_FAKE_ENGINE=1`) | [04](tinh-nang/04-ai-engine.md) |
 | **`claude_ocr.py`** | 810 | OCR PDF/ảnh: prompt, gộp trang, hậu kiểm FEN | [01](tinh-nang/01-ocr-pdf-anh.md) |
 | `infrastructure.py` | 574 | Kiểm tra kết nối, token Antigravity, Dropbox | [05](tinh-nang/05-ha-tang-va-ket-noi.md), [07](tinh-nang/07-dong-bo-dropbox.md) |
 | `chessboard_fen.py` | 511 | Nhận diện bàn cờ → FEN bằng ONNX | [03](tinh-nang/03-nhan-dien-ban-co-fen.md) |
@@ -87,6 +92,10 @@ Chi tiết phiên bản và biến môi trường: xem [`../TECH.md`](../TECH.md
 | `run_gui.bat` | 45 | Khởi động trên Windows, dò CLI | [10](tinh-nang/10-trien-khai-docker-vps.md) |
 | `Dockerfile` | 52 | Đóng gói web production | [10](tinh-nang/10-trien-khai-docker-vps.md) |
 | `_test_dropbox_sync.py`, `_test_translate_roundtrip.py` | 72 + 90 | Kiểm thử của fork (không nằm trong CI) | [11](tinh-nang/11-kiem-thu.md) |
+
+> **Ghi chú 2026-11-21 (G0.3):** `markitdown_gui.py` (trước đó 2.104 dòng) đã tách thành `markitdown_gui.py`, `pipeline.py`, `ui_theme.py`,
+> `presets.py`, `ui_render.py` và `assets/ui/app.{css,js}`. Số dòng/số tổng bên dưới và các trích dẫn `markitdown_gui.py:NNN` trong tài liệu
+> là của **tệp trước khi tách** — hãy tìm theo tên hàm/hằng.
 
 Tổng bảy tệp chạy thật (`markitdown_gui`, `claude_ocr`, `infrastructure`, `chessboard_fen`,
 `claude_translate`, `ai_engine`, `pick_files`) = 1.985 + 806 + 576 + 511 + 474 + 362 + 24 = **4.738 dòng**.
@@ -286,7 +295,7 @@ Danh sách đầy đủ, có đánh dấu mức độ chắc chắn: [`RA-SOAT-R
 
 | Muốn xem… | Mở |
 |---|---|
-| Luồng bấm nút Chuyển đổi | **`markitdown_gui.py`** `on_convert_files` (dòng 1101) |
+| Luồng bấm nút Chuyển đổi | **`markitdown_gui.py`** `on_convert_files` |
 | Cách ghép prompt OCR | **`claude_ocr.py`** `_build_prompt`, `_build_prompt_multi` (207, 271) |
 | Vòng lặp OCR theo trang, song song, thử lại | **`claude_ocr.py`** `ocr_pdf` (689) |
 | Hậu kiểm và chuẩn hóa khối `chessboard` | `claude_ocr.py` `_normalize_chessboard_blocks` (330) |
@@ -294,6 +303,6 @@ Danh sách đầy đủ, có đánh dấu mức độ chắc chắn: [`RA-SOAT-R
 | Bảng ký hiệu Anh/Nga/Tây Ban Nha → Việt | `claude_translate.py` `_CHESS_II_EN/RU/ES` (48, 66, 95) |
 | Pipeline ONNX 5 mô hình | **`chessboard_fen.py`** `infer_fen` (367) |
 | Chọn engine, tìm CLI | `ai_engine.py` `find_agy`, `find_claude`, `is_engine_available` (66, 102, 127) |
-| Preset Tiết kiệm/Cân bằng/Chính xác | `markitdown_gui.py` `_PRESET_OPTS_AGY`, `_PRESET_OPTS_CLAUDE` (1348, 1357) |
+| Preset Tiết kiệm/Cân bằng/Chính xác | `presets.py` `_PRESET_OPTS_AGY`, `_PRESET_OPTS_CLAUDE` |
 | Đồng bộ Dropbox | `infrastructure.py` `upload_to_dropbox` (466) |
 | Chạy trên VPS | `Dockerfile`, `docs/plans/2026-09-27-dropbox-sync-integration.md` |

@@ -9,977 +9,66 @@ hoặc nhấp đúp run_gui.bat
 Sau khi chạy, mở trình duyệt tại http://127.0.0.1:7860
 """
 
-import base64
-import json
 import os
 import queue
-import re
-import shutil
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import traceback
-import zipfile
-from urllib.parse import quote
 
 import gradio as gr
-from markitdown import MarkItDown
 
 from ai_engine import (
     ENGINE_ANTIGRAVITY,
-    ENGINE_CLAUDE,
     ENGINE_LABELS,
     ANTIGRAVITY_OCR_MODELS,
     ANTIGRAVITY_TRANSLATE_MODELS,
     CLAUDE_OCR_MODELS,
     CLAUDE_TRANSLATE_MODELS,
-    find_agy,
-    find_claude,
-    is_engine_available,
     get_default_engine,
 )
 import infrastructure
 import claude_login_bridge
-
-# Thư mục tạm để chứa các tệp .md xuất ra (cho nút tải về)
-_OUTPUT_DIR = os.path.join(tempfile.gettempdir(), "markitdown_gui_output")
-os.makedirs(_OUTPUT_DIR, exist_ok=True)
-
-
-def _safe_filename(name: str) -> str:
-    """Bỏ ký tự không hợp lệ trong tên tệp Windows."""
-    name = re.sub(r'[<>:"/\\|?*\n\r\t]+', "_", name).strip().strip(".")
-    return name or "ketqua"
-
-
-def _write_md(markdown: str, base_name: str, used_paths=None) -> str:
-    """Ghi nội dung Markdown ra tệp .md trong thư mục tạm, trả về đường dẫn.
-
-    `used_paths`: các đường dẫn đã xuất trong cùng lô — nếu trùng thì
-    thêm hậu tố _2, _3... để không ghi đè kết quả của tệp trước.
-    """
-    out_path = os.path.join(_OUTPUT_DIR, _safe_filename(base_name) + ".md")
-    if used_paths:
-        root, ext = os.path.splitext(out_path)
-        n = 2
-        while out_path in used_paths:
-            out_path = f"{root}_{n}{ext}"
-            n += 1
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write(markdown)
-    return out_path
-
-
-def _write_fen_file(md, base_name, used_paths=None):
-    """Trích FEN từ md, ghi tệp <base>_fen.txt (1 FEN mỗi dòng).
-
-    Trả về (đường dẫn, số FEN) hoặc (None, 0) nếu md không có thế cờ nào.
-    Dedup hậu tố _2, _3... như `_write_md` để không ghi đè kết quả tệp trước.
-    """
-    import claude_ocr
-
-    fens = claude_ocr.extract_fens(md)
-    if not fens:
-        return None, 0
-    out_path = os.path.join(_OUTPUT_DIR, _safe_filename(base_name) + "_fen.txt")
-    if used_paths:
-        root, ext = os.path.splitext(out_path)
-        n = 2
-        while out_path in used_paths:
-            out_path = f"{root}_{n}{ext}"
-            n += 1
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(fens) + "\n")
-    return out_path, len(fens)
-
-
-_DL_FILE_ICON = (
-    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1FA98F" '
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
-    '<polyline points="14 2 14 8 20 8"/></svg>'
+from pipeline import (
+    _OUTPUT_DIR,
+    AUTOSAVE_CUSTOM,
+    AUTOSAVE_SRC,
+    MODE_CHESS,
+    MODE_CHESS_ES,
+    MODE_CHESS_RU,
+    MODE_GENERAL,
+    _chess_lang_from_mode,
+    _effort_from_label,
+    _is_chess_mode,
+    _model_from_label,
+    _publish_output,
+    _resolve_save_dir,
+    _translate_to_vn,
+    _write_fen_file,
+    convert_file,
+    convert_url,
 )
-_DL_DOWN_ICON = (
-    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-    'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'
-    '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
-    '<polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'
+from presets import (
+    PRESET_ACCURATE,
+    PRESET_BALANCED,
+    PRESET_SAVER,
+    _PRESET_HINTS,
+    _apply_preset,
+    _load_prefs,
+    _save_prefs,
 )
-_DL_ZIP_ICON = (
-    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" '
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    '<path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>'
+from ui_render import _download_panel
+from ui_theme import (
+    _ASSETS_DIR,
+    CSS,
+    HEAD,
+    MODE_CARDS_HTML,
+    THEME,
+    TOPBAR_HTML,
 )
 
 
-def _zip_all(paths):
-    """Gộp các tệp .md kết quả vào 1 zip cố định trong _OUTPUT_DIR, trả về đường dẫn.
-
-    Dùng tên cố định để mỗi lần gọi ghi đè (không tích lũy zip cũ). Dedup tên
-    trùng bên trong archive (a.md, a_2.md...) để không mất tệp khi nhiều nguồn
-    cùng tên gốc.
-    """
-    zip_path = os.path.join(_OUTPUT_DIR, "markitdown_ketqua.zip")
-    used = set()
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for p in paths:
-            if not os.path.exists(p):
-                continue
-            arc = os.path.basename(p)
-            root, ext = os.path.splitext(arc)
-            n = 2
-            while arc in used:
-                arc = f"{root}_{n}{ext}"
-                n += 1
-            used.add(arc)
-            zf.write(p, arcname=arc)
-    return zip_path
-
-
-def _download_panel(paths, auto_download=False):
-    """HTML danh sách tệp kết quả, mỗi tệp một nút tải riêng.
-
-    Khi có ≥2 tệp, chèn thêm một dòng "Tải tất cả (.zip)" ở đầu danh sách.
-    `auto_download=True`: thêm cờ data-auto-download="1" để JS client tự động tải về máy.
-    """
-    if not paths:
-        return ""
-    rows = []
-    if len(paths) >= 2:
-        zip_path = _zip_all(paths)
-        zip_name = os.path.basename(zip_path)
-        zip_href = "/gradio_api/file=" + quote(zip_path.replace("\\", "/"))
-        rows.append(
-            f'<div class="dl-row dl-all">'
-            f'<span class="dl-fileicon">{_DL_ZIP_ICON}</span>'
-            f'<span class="dl-name">Tải tất cả · {len(paths)} tệp</span>'
-            f'<a class="dl-btn dl-all-btn" href="{zip_href}" download="{zip_name}">'
-            f'{_DL_DOWN_ICON}Tải .zip</a></div>'
-        )
-    for p in paths:
-        name = os.path.basename(p)
-        href = "/gradio_api/file=" + quote(p.replace("\\", "/"))
-        rows.append(
-            f'<div class="dl-row"><span class="dl-fileicon">{_DL_FILE_ICON}</span>'
-            f'<span class="dl-name">{name}</span>'
-            f'<a class="dl-btn dl-file-btn" href="{href}" download="{name}">{_DL_DOWN_ICON}Tải về</a></div>'
-        )
-    auto_attr = ' data-auto-download="1"' if auto_download else ' data-auto-download="0"'
-    auto_badge = (
-        ' <span style="font-size:11px;font-weight:normal;color:var(--teal);margin-left:6px;">'
-        '⚡ Tự động tải về máy</span>'
-        if auto_download else ''
-    )
-    return (
-        f'<div class="dl-list"{auto_attr}><div class="dl-title">Tệp kết quả · '
-        f'{len(paths)} tệp{auto_badge}</div>'
-        + "".join(rows)
-        + "</div>"
-    )
-
-
-def _autosave(path, folder):
-    """Copy tệp .md vào thư mục người dùng chọn ngay khi xong.
-
-    Không ghi đè tệp có sẵn (thêm hậu tố _2, _3...).
-    Trả về (đường dẫn đích, None) hoặc (None, thông báo lỗi).
-    """
-    folder = (folder or "").strip()
-    if not folder:
-        return None, "⚠️ Chưa nhập thư mục lưu kết quả."
-    try:
-        os.makedirs(folder, exist_ok=True)
-        dest = os.path.join(folder, os.path.basename(path))
-        root, ext = os.path.splitext(dest)
-        n = 2
-        while os.path.exists(dest):
-            dest = f"{root}_{n}{ext}"
-            n += 1
-        shutil.copy2(path, dest)
-        return dest, None
-    except OSError as exc:
-        return None, f"⚠️ Không lưu được vào thư mục: {exc}"
-
-
-def _resolve_save_dir(fp, target, custom_dir, sources_are_real):
-    """Tính thư mục đích để tự động lưu tệp .md của một tệp nguồn `fp`.
-
-    Trả về (thư mục đích, ghi chú). 'Cùng thư mục với file gốc' chỉ dùng được khi
-    `fp` là đường dẫn thật (chọn bằng hộp thoại); tệp kéo-thả không có đường dẫn
-    gốc nên lùi về `custom_dir` kèm ghi chú.
-    """
-    if target == AUTOSAVE_SRC and sources_are_real:
-        return os.path.dirname(os.path.abspath(fp)), ""
-    if target == AUTOSAVE_SRC:  # kéo-thả: không có đường dẫn gốc
-        return custom_dir, " (kéo-thả → dùng thư mục tùy chọn)"
-    return custom_dir, ""
-
-
-def _convert(source, enable_plugins, base_name, used_paths=None):
-    """Lõi chuyển đổi dùng chung cho cả tệp lẫn URL.
-
-    Trả về (preview_md, raw_md, download_path, status_md).
-    """
-    try:
-        md = MarkItDown(enable_plugins=enable_plugins)
-        result = md.convert(source)
-        text = result.markdown or ""
-
-        if not text.strip():
-            return (
-                "",
-                "",
-                None,
-                "⚠️ Chuyển đổi xong nhưng không trích được nội dung văn bản nào.",
-            )
-
-        title = getattr(result, "title", None)
-        name = _safe_filename(title) if title else base_name
-        download_path = _write_md(text, name, used_paths)
-
-        status = f"✅ Thành công — {len(text):,} ký tự"
-        if title:
-            status += f" · Tiêu đề: {title}"
-        return text, text, download_path, status
-    except Exception as exc:  # hiển thị lỗi thân thiện thay vì để app sập
-        detail = traceback.format_exc(limit=2)
-        msg = (
-            f"❌ Lỗi khi chuyển đổi: {type(exc).__name__}: {exc}\n\n"
-            "Gợi ý: kiểm tra định dạng có được hỗ trợ không, "
-            "hoặc thiếu phụ thuộc (vd: audio cần ffmpeg)."
-        )
-        return "", f"```\n{detail}\n```", None, msg
-
-
-IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff"}
-
-# Nhãn các chế độ xử lý trên giao diện.
-MODE_CHESS = "📚 Sách cờ vua tiếng Anh (mặc định)"
-MODE_CHESS_RU = "📚 Sách cờ vua tiếng Nga"
-MODE_CHESS_ES = "📚 Sách cờ vua tiếng Tây Ban Nha"
-MODE_GENERAL = "📄 Tài liệu thường (chế độ gốc)"
-
-# Nhãn lựa chọn nơi tự động lưu tệp .md kết quả.
-AUTOSAVE_SRC = "📂 Cùng thư mục với file gốc"
-AUTOSAVE_CUSTOM = "📁 Thư mục tùy chọn (ô bên dưới)"
-
-
-def _is_chess_mode(label):
-    """Nhãn chế độ -> True nếu là chế độ sách cờ vua (mặc định khi nhãn lạ)."""
-    return label != MODE_GENERAL
-
-
-def _chess_lang_from_mode(label):
-    """Nhãn chế độ -> ngôn ngữ ký hiệu nguồn: 'ru' sách Nga, 'es' sách Tây Ban
-    Nha, 'en' còn lại."""
-    if label == MODE_CHESS_RU:
-        return "ru"
-    if label == MODE_CHESS_ES:
-        return "es"
-    return "en"
-
-
-def _model_from_label(label):
-    """'gemini-3.8-flash (cân bằng)' -> 'gemini-3.8-flash', 'opus (chính xác)' -> 'opus'."""
-    if not label:
-        return "gemini-3.8-flash"
-    tok = str(label).strip().split()
-    return tok[0].lower() if tok else "gemini-3.8-flash"
-
-
-_EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
-
-
-def _effort_from_label(label, default="low"):
-    """'low (tiết kiệm nhất)' -> 'low'; 'auto …'/nhãn lạ -> default.
-
-    Với OCR truyền default=None ('auto' -> giữ logic low/medium tự động);
-    với Dịch default='low'.
-    """
-    tok = (label or "").strip().split()
-    val = tok[0].lower() if tok else ""
-    return val if val in _EFFORT_LEVELS else default
-
-
-def _dpi_from_label(label):
-    """'400 (nét nhất — mặc định)' -> 400; nhãn lạ -> 400."""
-    try:
-        return int((label or "").strip().split()[0])
-    except (ValueError, IndexError):
-        return 400
-
-
-def _pages_from_label(label):
-    """'2 trang/lần' -> 2; nhãn lạ -> 1 (an toàn). Giới hạn 1..3."""
-    try:
-        n = int((label or "").strip().split()[0])
-    except (ValueError, IndexError):
-        return 1
-    return min(3, max(1, n))
-
-
-def _ocr_to_outputs(
-    file_path, base_name, model, board_dpi=400, used_paths=None, chess=True,
-    progress=None, chess_lang="en", effort=None, merge_translate=False,
-    pages_per_call=1, engine="antigravity", api_key=None, claude_token=None,
-    agy_token=None,
-):
-    """Chạy OCR (PDF hoặc ảnh) qua AI Engine (Antigravity hoặc Claude Code) và trả về 4-tuple kết quả.
-
-    merge_translate=True: gộp OCR + dịch sang tiếng Việt trong cùng lệnh gọi
-    (bỏ pass dịch riêng) — ghi tệp `<tên>_vn.md`.
-    pages_per_call>1: gộp nhiều trang PDF vào 1 lệnh gọi (giảm số lệnh).
-    """
-    import claude_ocr
-
-    translate_to = "vi" if merge_translate else None
-    ext = os.path.splitext(file_path)[1].lower()
-    if ext == ".pdf":
-        text = claude_ocr.ocr_pdf(
-            file_path, model=model, board_dpi=board_dpi, chess=chess,
-            progress=progress, chess_lang=chess_lang, effort=effort,
-            translate_to=translate_to, pages_per_call=pages_per_call,
-            engine=engine, api_key=api_key, claude_token=claude_token,
-            agy_token=agy_token,
-        )
-    else:
-        text = claude_ocr.ocr_image_file(
-            file_path, model=model, chess=chess, chess_lang=chess_lang,
-            effort=effort, translate_to=translate_to, engine=engine,
-            api_key=api_key, claude_token=claude_token,
-            agy_token=agy_token,
-        )
-
-    if not text.strip():
-        return "", "", None, "⚠️ OCR xong nhưng không trích được nội dung."
-
-    out_name = f"{base_name}_vn" if merge_translate else base_name
-    download_path = _write_md(text, out_name, used_paths)
-    label = "OCR+dịch (gộp 1 bước)" if merge_translate else "OCR"
-    engine_name = "Google Antigravity / Gemini" if engine == "antigravity" else "Claude Code"
-    status = (
-        f"✅ Đã {label} bằng {engine_name} (model: {model}, "
-        f"effort: {effort or 'auto'}) — {len(text):,} ký tự"
-    )
-    return text, text, download_path, status
-
-
-def convert_file(
-    file_path, enable_plugins, use_ocr, model_label, force_ocr=False,
-    board_dpi_label=None, used_paths=None, chess=True, progress=None,
-    chess_lang="en", ocr_effort_label=None, merge_translate=False,
-    ocr_pages_label=None, engine="antigravity", api_key=None,
-    claude_token=None, agy_token=None,
-):
-    if not file_path:
-        return "", "", None, "ℹ️ Hãy chọn hoặc kéo-thả một tệp trước."
-
-    from ai_engine import is_engine_available
-
-    base_name = os.path.splitext(os.path.basename(file_path))[0]
-    ext = os.path.splitext(file_path)[1].lower()
-    model = _model_from_label(model_label)
-    ocr_effort = _effort_from_label(ocr_effort_label, default=None)
-    board_dpi = _dpi_from_label(board_dpi_label)
-    pages_per_call = _pages_from_label(ocr_pages_label)
-    is_image = ext in IMAGE_EXTS
-    is_pdf = ext == ".pdf"
-    engine_name = "Google Antigravity / Gemini" if engine == "antigravity" else "Claude Code"
-
-    # Ảnh: built-in chỉ ra metadata/mô tả, nên OCR trực tiếp nếu được bật.
-    if use_ocr and is_image:
-        if not is_engine_available(engine, api_key=api_key, claude_token=claude_token, agy_token=agy_token):
-            # Không có CLI hoặc API Key -> thử chuyển đổi thường.
-            preview, raw_md, download, st = _convert(file_path, enable_plugins, base_name, used_paths)
-            if not (raw_md or "").strip():
-                st = (
-                    "⚠️ **Tệp ảnh**: Cần phiên thuê bao tháng hoặc API Key để nhận diện văn bản & hình cờ.\n\n"
-                    "👉 Vui lòng mở tab **⚙️ Cài đặt Hạ tầng & API** để kết nối gói thuê bao hoặc nhập API Key!"
-                )
-            return preview, raw_md, download, st
-        try:
-            return _ocr_to_outputs(
-                file_path, base_name, model, board_dpi, used_paths, chess=chess,
-                progress=progress, chess_lang=chess_lang, effort=ocr_effort,
-                merge_translate=merge_translate, pages_per_call=pages_per_call,
-                engine=engine, api_key=api_key, claude_token=claude_token,
-                agy_token=agy_token,
-            )
-        except Exception as exc:
-            return "", "", None, f"❌ Lỗi OCR: {exc}"
-
-    # PDF + "Buộc OCR": bỏ qua lớp text có sẵn, OCR lại toàn bộ bằng AI Engine.
-    if use_ocr and is_pdf and force_ocr:
-        if not is_engine_available(engine, api_key=api_key, claude_token=claude_token, agy_token=agy_token):
-            # Fallback sang chuyển đổi chuẩn của MarkItDown kèm ghi chú
-            preview, raw_md, download, st = _convert(
-                file_path, enable_plugins, base_name, used_paths
-            )
-            if (raw_md or "").strip():
-                warning = "ℹ️ Đã chuyển đổi văn bản chuẩn MarkItDown. (Để nhận diện thế cờ & dịch tiếng Việt, hãy kết nối gói thuê bao hoặc nhập API Key tại tab **⚙️ Cài đặt Hạ tầng & API**)."
-                st = f"{warning}\n\n{st}" if st else warning
-            else:
-                st = (
-                    "⚠️ **PDF Scan (Dạng ảnh)**: Không tìm thấy lớp văn bản thô để trích xuất trực tiếp.\n\n"
-                    "👉 **Cách xử lý**: Vui lòng chuyển sang tab **⚙️ Cài đặt Hạ tầng & API** để kết nối **Gói Thuê bao tháng (0đ phí API)** hoặc nhập **Gemini API Key**!"
-                )
-            return preview, raw_md, download, st
-        try:
-            return _ocr_to_outputs(
-                file_path, base_name, model, board_dpi, used_paths, chess=chess,
-                progress=progress, chess_lang=chess_lang, effort=ocr_effort,
-                merge_translate=merge_translate, pages_per_call=pages_per_call,
-                engine=engine, api_key=api_key, claude_token=claude_token,
-                agy_token=agy_token,
-            )
-        except Exception as exc:
-            return "", "", None, f"❌ Lỗi OCR: {exc}"
-
-    # Chuyển đổi thường trước.
-    preview, raw_md, download, status = _convert(
-        file_path, enable_plugins, base_name, used_paths
-    )
-
-    # PDF scan (không có lớp text) -> OCR fallback nếu được bật.
-    if use_ocr and is_pdf and not (raw_md or "").strip():
-        if not is_engine_available(engine, api_key=api_key, claude_token=claude_token, agy_token=agy_token):
-            return (
-                preview,
-                raw_md,
-                download,
-                "⚠️ **PDF Scan (Dạng ảnh)**: Không có lớp văn bản.\n\n"
-                "👉 Vui lòng mở tab **⚙️ Cài đặt Hạ tầng & API** để kết nối gói thuê bao tháng hoặc nhập API Key miễn phí.",
-            )
-        try:
-            return _ocr_to_outputs(
-                file_path, base_name, model, board_dpi, used_paths, chess=chess,
-                progress=progress, chess_lang=chess_lang, effort=ocr_effort,
-                merge_translate=merge_translate, pages_per_call=pages_per_call,
-                engine=engine, api_key=api_key, claude_token=claude_token,
-                agy_token=agy_token,
-            )
-        except Exception as exc:
-            return "", "", None, f"❌ Lỗi OCR: {exc}"
-
-    return preview, raw_md, download, status
-
-
-
-def convert_url(url, enable_plugins):
-    url = (url or "").strip()
-    if not url:
-        return "", "", None, "ℹ️ Hãy nhập một URL (YouTube, Wikipedia, trang web, RSS...)."
-    if not re.match(r"^https?://", url, re.IGNORECASE):
-        return "", "", None, "⚠️ URL phải bắt đầu bằng http:// hoặc https://"
-    return _convert(url, enable_plugins, "ketqua_url")
-
-
-# ======================================================================
-# Lớp giao diện — bộ nhận diện "Cờ vua Dương Sinh" (navy/sun/teal).
-# Tái tạo từ design_handoff_markitdown_gui/ (Phương án A). Backend OCR/dịch
-# ở phần trên giữ nguyên — đây chỉ là lớp trình bày.
-# ======================================================================
-
-_ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
-
-
-def _svg_data_uri(rel_path):
-    """Đọc 1 file SVG trong assets/ -> data URI base64 (nhúng thẳng vào HTML)."""
-    try:
-        with open(os.path.join(_ASSETS_DIR, rel_path), "rb") as f:
-            b64 = base64.b64encode(f.read()).decode("ascii")
-        return "data:image/svg+xml;base64," + b64
-    except OSError:
-        return ""
-
-
-_PIECE_NAMES = ["wp", "wn", "wb", "wr", "wq", "wk", "bp", "bn", "bb", "br", "bq", "bk"]
-_PIECES = {n: _svg_data_uri(f"pieces/{n}.svg") for n in _PIECE_NAMES}
-_SYMBOL_WHITE = _svg_data_uri("symbol-white.svg")
-
-THEME = gr.themes.Base(
-    font=[gr.themes.GoogleFont("Roboto"), "Segoe UI", "system-ui", "sans-serif"],
-    font_mono=[gr.themes.GoogleFont("Roboto Mono"), "monospace"],
-)
-
-_FONTS_LINK = (
-    '<link rel="preconnect" href="https://fonts.googleapis.com">'
-    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-    '<link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;'
-    "0,400;0,500;0,700;0,900;1,400&family=Roboto+Condensed:wght@400;500;600;700"
-    '&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">'
-)
-
-# JS: chuyển theme sáng/tối, bắc cầu thẻ "chế độ" (HTML) -> gr.Radio ẩn, và
-# render block ```chessboard``` / dòng `fen:` trong phần xem trước thành bàn cờ.
-_SCRIPT = r"""
-<script>
-(function(){
-  window.MID_PIECES = __MID_PIECES__;
-  var MOON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-  var SUN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F6B92B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.2" y1="4.2" x2="5.6" y2="5.6"/><line x1="18.4" y1="18.4" x2="19.8" y2="19.8"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.2" y1="19.8" x2="5.6" y2="18.4"/><line x1="18.4" y1="5.6" x2="19.8" y2="4.2"/></svg>';
-
-  function setThemeBtn(){
-    var dark = document.body.getAttribute('data-mid-theme') === 'dark';
-    var want = dark ? 'sun' : 'moon';
-    document.querySelectorAll('[data-mid-theme-icon]').forEach(function(el){
-      if (el.getAttribute('data-mid-icon') !== want){ el.innerHTML = dark ? SUN : MOON; el.setAttribute('data-mid-icon', want); }
-    });
-    var label = dark ? 'Sáng' : 'Tối';
-    document.querySelectorAll('[data-mid-theme-label]').forEach(function(el){ if (el.textContent !== label) el.textContent = label; });
-  }
-  window.midToggleTheme = function(){
-    var b = document.body, dark = b.getAttribute('data-mid-theme') === 'dark';
-    var next = dark ? 'light' : 'dark';
-    b.setAttribute('data-mid-theme', next);
-    try { localStorage.setItem('mid-theme', next); } catch(e){}
-    setThemeBtn();
-  };
-  window.midSelectMode = function(idx){
-    document.querySelectorAll('[data-mid-mode]').forEach(function(el){ el.classList.toggle('active', (+el.dataset.midMode) === idx); });
-    var rs = document.querySelectorAll('#mid-mode-radio input[type=radio]');
-    // .click() đi qua trọn vẹn luồng sự kiện của Svelte (gr.Radio) -> cập nhật
-    // state + bắn .change cho backend; bỏ qua nếu ô đã được chọn sẵn.
-    if (rs[idx] && !rs[idx].checked){ rs[idx].click(); }
-  };
-  // Đồng bộ class .active của các thẻ chế độ (HTML) theo radio ẩn — cần khi
-  // giá trị radio được đặt bằng backend (vd khôi phục từ BrowserState) chứ
-  // không qua midSelectMode.
-  window.midSyncModeCards = function(){
-    var rs = document.querySelectorAll('#mid-mode-radio input[type=radio]'), idx = 0;
-    rs.forEach(function(r, i){ if (r.checked) idx = i; });
-    document.querySelectorAll('[data-mid-mode]').forEach(function(el){
-      el.classList.toggle('active', (+el.dataset.midMode) === idx); });
-  };
-
-  function boardHTML(fen, px){
-    var map = {p:'bp',n:'bn',b:'bb',r:'br',q:'bq',k:'bk',P:'wp',N:'wn',B:'wb',R:'wr',Q:'wq',K:'wk'};
-    var rows = fen.split(/\s+/)[0].split('/');
-    var sq = px / 8;
-    function cell(r, f, p){
-      var light = ((r + f) % 2) === 0;
-      var img = (p && window.MID_PIECES[p]) ? '<img src="' + window.MID_PIECES[p] + '" style="width:' + (sq*0.82) + 'px;height:' + (sq*0.82) + 'px;display:block;">' : '';
-      return '<div style="width:' + sq + 'px;height:' + sq + 'px;background:' + (light ? '#F6F2E4' : '#46B49A') + ';display:flex;align-items:center;justify-content:center;">' + img + '</div>';
-    }
-    var html = '<div class="mid-board" style="box-sizing:content-box;width:' + px + 'px;height:' + px + 'px;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);border:5px solid #2B3990;border-radius:8px;overflow:hidden;box-shadow:0 8px 22px rgba(43,57,144,.22);flex:0 0 auto;">';
-    for (var r = 0; r < rows.length; r++){
-      var f = 0;
-      for (var i = 0; i < rows[r].length; i++){
-        var ch = rows[r][i];
-        if (/\d/.test(ch)){ var n = +ch; for (var k = 0; k < n; k++){ html += cell(r, f, null); f++; } }
-        else { html += cell(r, f, map[ch]); f++; }
-      }
-    }
-    return html + '</div>';
-  }
-  window.midRenderBoards = function(){
-    var prev = document.getElementById('mid-preview');
-    if (!prev) return;
-    prev.querySelectorAll('pre code').forEach(function(code){
-      var pre = code.parentElement;
-      if (!pre || pre.dataset.midBoard) return;
-      var cls = code.className || '', txt = code.textContent || '';
-      var isBoard = cls.indexOf('chessboard') >= 0 || /^\s*fen:/i.test(txt);
-      if (!isBoard) return;
-      var m = txt.match(/fen:\s*([^\n]+)/i);
-      var fen = (m ? m[1] : txt).trim();
-      if (!fen || fen.indexOf('/') < 0) return;
-      pre.dataset.midBoard = '1';
-      var wrap = document.createElement('div');
-      wrap.className = 'mid-board-wrap';
-      wrap.innerHTML = boardHTML(fen, 256);
-      pre.parentNode.insertBefore(wrap, pre);
-      pre.style.display = 'none';
-    });
-  };
-
-  window.midDownloadedUrls = new Set();
-  window.midResetDownloads = function(){
-    window.midDownloadedUrls.clear();
-  };
-
-  window.midTriggerAutoDownloads = function(){
-    var container = document.getElementById('mid-downloads');
-    if (!container) return;
-    var list = container.querySelector('.dl-list[data-auto-download="1"]');
-    if (!list) {
-      if (!container.innerHTML.trim()) {
-        window.midDownloadedUrls.clear();
-      }
-      return;
-    }
-    var rows = list.querySelectorAll('.dl-row:not(.dl-all) a.dl-btn');
-    var queue = [];
-    rows.forEach(function(a){
-      var href = a.getAttribute('href');
-      var name = a.getAttribute('download') || '';
-      if (href && !window.midDownloadedUrls.has(href)){
-        window.midDownloadedUrls.add(href);
-        queue.push({href: href, name: name});
-      }
-    });
-
-    queue.forEach(function(item, idx){
-      setTimeout(function(){
-        var a = document.createElement('a');
-        a.href = item.href;
-        if (item.name) a.download = item.name;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(function(){
-          if (a.parentNode) a.parentNode.removeChild(a);
-        }, 1000);
-      }, idx * 350);
-    });
-  };
-
-  document.addEventListener('click', function(e){
-    if (!e.target || !e.target.closest) return;
-    var card = e.target.closest('[data-mid-mode]');
-    if (card){ window.midSelectMode(+card.dataset.midMode); return; }
-    var t = e.target.closest('[data-mid-action="toggle-theme"]');
-    if (t){ window.midToggleTheme(); return; }
-    var clr = e.target.closest('.mid-clear-btn');
-    if (clr){ window.midResetDownloads(); }
-  });
-
-  function init(){
-    if (!document.body.getAttribute('data-mid-theme')){
-      var saved = '';
-      try { saved = localStorage.getItem('mid-theme') || ''; } catch(e){}
-      document.body.setAttribute('data-mid-theme', saved === 'dark' ? 'dark' : 'light');
-    }
-    setThemeBtn();
-    window.midSyncModeCards();
-    window.midRenderBoards();
-    window.midTriggerAutoDownloads();
-  }
-  function start(){
-    init();
-    new MutationObserver(function(){
-      setThemeBtn();
-      window.midSyncModeCards();
-      window.midRenderBoards();
-      window.midTriggerAutoDownloads();
-    }).observe(document.body, {childList:true, subtree:true});
-  }
-  if (document.body) start();
-  else document.addEventListener('DOMContentLoaded', start);
-})();
-</script>
-"""
-
-HEAD = _FONTS_LINK + _SCRIPT.replace("__MID_PIECES__", json.dumps(_PIECES))
-
-CSS = r"""
-/* ---------- design tokens (2 theme) ---------- */
-body {
-  --navy:#2B3990; --navy-deep:#1E2A6B; --navy-ink:#151D49;
-  --sun:#F6B92B; --sun-deep:#D99A12; --teal:#1FA98F;
-  --c-bg:#F1F3F9; --c-panel:#FFFFFF; --c-inset:#F5F6FB; --c-dropbg:#FCFCFE;
-  --c-text:#16203A; --c-body:#3A4254; --c-subtext:#6E7486; --c-faint:#A2A7B6;
-  --c-border:#E3E5EC; --c-border-strong:#D2D6E4; --c-navysoft:#E9EBF6; --c-sunsoft:#FDF1D2;
-  --c-shadow:0 12px 32px rgba(21,29,73,0.10);
-}
-body[data-mid-theme="dark"] {
-  --c-bg:#0E1430; --c-panel:#1A2356; --c-inset:#141C49; --c-dropbg:#141C49;
-  --c-text:#F2F4FB; --c-body:#D4D9EE; --c-subtext:#A6AED2; --c-faint:#7C84AC;
-  --c-border:rgba(255,255,255,0.10); --c-border-strong:rgba(255,255,255,0.20);
-  --c-navysoft:rgba(99,120,214,0.20); --c-sunsoft:rgba(246,185,43,0.16);
-  --c-shadow:0 16px 40px rgba(0,0,0,0.34);
-}
-
-/* ---------- base / container ---------- */
-html, body, gradio-app { background:var(--c-bg) !important; }
-.gradio-container { max-width:100% !important; padding:0 !important; background:var(--c-bg) !important;
-  font-family:'Roboto','Segoe UI',system-ui,sans-serif; color:var(--c-text); }
-.gradio-container .main, .gradio-container .wrap, .gradio-container .contain { padding:0 !important; }
-footer { display:none !important; }
-@keyframes mid-spin { to { transform: rotate(360deg); } }
-@keyframes mid-pulse { 0%,100% { opacity:1; } 50% { opacity:.45; } }
-@keyframes mid-rise { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
-::-webkit-scrollbar { width:10px; height:10px; }
-::-webkit-scrollbar-thumb { background:rgba(110,116,134,.32); border-radius:999px; }
-
-/* ---------- top bar ---------- */
-#mid-topbar { position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:14px;
-  padding:13px 26px; background:var(--navy); color:#fff; box-shadow:0 2px 14px rgba(21,29,73,.28); }
-#mid-topbar .mid-logo { width:24px; height:26px; display:block; }
-#mid-topbar .mid-brand { font-weight:900; font-size:19px; letter-spacing:-0.01em; }
-#mid-topbar .mid-tagline { font-weight:300; font-size:12.5px; opacity:.85; letter-spacing:.03em;
-  border-left:1px solid rgba(255,255,255,.25); padding-left:14px; }
-#mid-topbar .mid-topbar-right { margin-left:auto; display:flex; align-items:center; gap:14px; }
-#mid-topbar .mid-badges { display:flex; gap:6px; }
-#mid-topbar .mid-badge { font-size:11px; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22);
-  border-radius:999px; padding:3px 10px; white-space:nowrap; }
-#mid-topbar .mid-badge-chess { background:rgba(246,185,43,.22); border-color:rgba(246,185,43,.5);
-  color:#FCE29A; font-weight:600; }
-#mid-topbar .mid-theme-btn { display:flex; align-items:center; gap:7px; cursor:pointer;
-  background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); color:#fff;
-  border-radius:999px; padding:6px 13px; font-family:'Roboto'; font-size:12.5px; font-weight:600; }
-#mid-topbar .mid-theme-btn [data-mid-theme-icon] { display:flex; }
-@media (max-width:780px){ #mid-topbar .mid-tagline, #mid-topbar .mid-badges { display:none; } }
-
-/* ---------- workspace 2-col grid ---------- */
-#mid-workspace { display:grid !important; grid-template-columns:412px minmax(0,1fr); gap:22px;
-  max-width:1340px; margin:0 auto !important; padding:24px 26px 60px; align-items:start; width:100%; }
-@media (max-width:1040px){ #mid-workspace { grid-template-columns:1fr; } }
-#mid-workspace > .column, .mid-col-left, .mid-col-right { min-width:0 !important; gap:16px !important; }
-
-/* ---------- cards ---------- */
-.mid-card { background:var(--c-panel) !important; border:1px solid var(--c-border) !important;
-  border-radius:18px !important; box-shadow:var(--c-shadow) !important; padding:16px !important; }
-/* chỉ làm trong suốt các lớp bố cục, KHÔNG đụng tới nút/ô nhập bên trong */
-.mid-card > .form, .mid-card > .gap, .mid-card .gap > .form,
-.mid-card .tabitem > .gap, .mid-card .tabitem > .form { background:transparent !important;
-  border:none !important; box-shadow:none !important; }
-.mid-card .gap, .mid-card .form { gap:12px !important; }
-.mid-input-card { padding:0 !important; overflow:hidden; }
-.mid-section-title { font-family:'Roboto Condensed'; font-weight:700; font-size:12px; letter-spacing:.1em;
-  text-transform:uppercase; color:var(--c-subtext); }
-
-/* ---------- input tabs (segmented) ---------- */
-.mid-input-tabs .tab-nav, .mid-input-tabs > div[role="tablist"] { background:var(--c-inset) !important;
-  border:none !important; border-bottom:1px solid var(--c-border) !important; padding:6px !important;
-  gap:4px !important; display:flex !important; }
-.mid-input-tabs .tab-nav button { flex:1; border:none !important; background:transparent !important;
-  color:var(--c-subtext) !important; font-weight:600; font-size:13px; padding:9px !important;
-  border-radius:9px !important; }
-.mid-input-tabs .tab-nav button.selected { background:var(--c-panel) !important; color:var(--navy) !important;
-  box-shadow:0 2px 6px rgba(21,29,73,.10); }
-.mid-input-tabs .tabitem { padding:16px !important; border:none !important; }
-
-/* ---------- drop zone (gr.File) ---------- */
-.mid-drop-caption { font-size:12px; color:var(--c-subtext); line-height:1.5; margin:0 0 9px; }
-.mid-drop-caption b { color:var(--c-text); font-weight:700; }
-#mid-file { border:2px dashed var(--c-border-strong) !important; background:var(--c-dropbg) !important;
-  border-radius:14px !important; padding:6px !important; min-height:120px; }
-#mid-file .block, #mid-file .wrap, #mid-file .center, #mid-file .file-preview,
-#mid-file [class*="upload"], #mid-file [data-testid="block-label"] { border:none !important;
-  background:transparent !important; box-shadow:none !important; color:var(--c-subtext) !important; }
-#mid-file svg { color:var(--navy) !important; stroke:var(--navy) !important; }
-.mid-pick-btn button { width:100% !important; background:var(--c-inset) !important;
-  border:1px solid var(--c-border) !important; color:var(--c-subtext) !important; border-radius:11px !important;
-  font-size:12.5px !important; font-weight:600 !important; box-shadow:none !important; }
-.mid-pick-btn button:hover { background:var(--c-navysoft) !important; }
-.mid-picked-view { font-size:11.5px; color:var(--c-subtext); }
-.mid-picked-view p, .mid-picked-view li { color:var(--c-subtext) !important; font-size:11.5px; }
-
-/* URL tab */
-.mid-url-box textarea, .mid-url-box input { border:1px solid var(--c-border-strong) !important;
-  background:var(--c-dropbg) !important; color:var(--c-text) !important; border-radius:12px !important;
-  font-size:13.5px !important; }
-
-/* ---------- mode cards ---------- */
-.mid-hidden { position:absolute !important; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);
-  opacity:0; pointer-events:none; margin:0 !important; }
-.mid-modes { display:flex; flex-direction:column; gap:9px; margin-top:11px; }
-.mid-mode { display:flex; align-items:center; gap:12px; padding:12px 13px; border-radius:12px; cursor:pointer;
-  background:var(--c-inset); border:1px solid var(--c-border); transition:all .16s cubic-bezier(.22,1,.36,1); }
-.mid-mode.active { background:var(--c-sunsoft); border:1.5px solid var(--sun); box-shadow:0 4px 14px rgba(246,185,43,.18); }
-.mid-mode .mid-mode-icon { width:30px; height:30px; flex:0 0 auto; display:flex; align-items:center; justify-content:center; }
-.mid-mode .mid-mode-title { font-weight:700; font-size:14px; color:var(--c-text); }
-.mid-mode .mid-mode-desc { font-size:11.5px; color:var(--c-subtext); margin-top:1px; }
-.mid-mode .mid-mode-text { flex:1; min-width:0; }
-.mid-mode .mid-check { width:18px; height:18px; flex:0 0 auto; border-radius:999px;
-  border:2px solid var(--c-border-strong); background-position:center; background-repeat:no-repeat; }
-.mid-mode.active .mid-check { width:20px; height:20px; border:none; background-color:var(--sun);
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%232B2207' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E"); }
-
-/* ---------- quality / preset ---------- */
-.mid-quality-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:11px; }
-#mid-preset-hint { font-size:11.5px; color:var(--c-subtext); }
-#mid-preset .wrap { display:flex !important; gap:4px; background:var(--c-inset); border:1px solid var(--c-border);
-  border-radius:12px; padding:4px; }
-#mid-preset label { flex:1; justify-content:center; display:flex; align-items:center; border:none !important;
-  background:transparent !important; border-radius:9px !important; padding:10px 4px !important; font-weight:700;
-  font-size:13px; color:var(--c-subtext) !important; cursor:pointer; box-shadow:none !important; margin:0 !important;
-  white-space:nowrap; }
-#mid-preset label.selected, #mid-preset label:has(input:checked) { background:var(--navy) !important;
-  color:#fff !important; box-shadow:0 4px 12px rgba(43,57,144,.30) !important; }
-#mid-preset label.selected span, #mid-preset label:has(input:checked) span { color:#fff !important; }
-#mid-preset input { display:none !important; }
-
-/* convert button */
-#mid-convert { margin-top:13px !important; }
-#mid-convert button, #mid-convert-url button { width:100%; border:none !important; border-radius:12px !important;
-  padding:14px !important; font-family:'Roboto'; font-weight:700 !important; font-size:15px !important;
-  background:var(--navy) !important; background-image:none !important; color:#fff !important;
-  box-shadow:0 10px 26px rgba(43,57,144,.28); }
-#mid-convert button:hover, #mid-convert-url button:hover { background:var(--navy-deep) !important; }
-#mid-stop { margin-top:13px !important; }
-#mid-stop button { width:100%; border:none !important; border-radius:12px !important;
-  padding:14px !important; font-family:'Roboto'; font-weight:700 !important; font-size:15px !important;
-  background:#D64545 !important; background-image:none !important; color:#fff !important;
-  box-shadow:0 10px 26px rgba(214,69,69,.28); }
-#mid-stop button:hover { background:#B83434 !important; }
-
-/* advanced accordion */
-.mid-adv { margin-top:11px !important; background:transparent !important; border:1px solid var(--c-border) !important;
-  border-radius:11px !important; }
-.mid-adv > button, .mid-adv .label-wrap { color:var(--c-subtext) !important; font-weight:600 !important;
-  font-size:13px !important; }
-.mid-adv .label-wrap { padding:11px 13px !important; }
-
-/* toggles as switches */
-.mid-toggle { padding:0 !important; }
-.mid-toggle label { display:flex !important; align-items:center !important; gap:11px; font-size:13px !important;
-  font-weight:600 !important; color:var(--c-text) !important; cursor:pointer; }
-.mid-toggle input[type=checkbox] { appearance:none; -webkit-appearance:none; width:38px !important;
-  height:22px !important; min-width:38px; border-radius:999px !important; background:var(--c-border-strong) !important;
-  position:relative; cursor:pointer; flex:0 0 auto; transition:background .18s ease; border:none !important; margin:0 !important; }
-.mid-toggle input[type=checkbox]::before { content:""; position:absolute; top:2px; left:2px; width:18px; height:18px;
-  border-radius:999px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:left .18s ease; }
-.mid-toggle input[type=checkbox]:checked { background:var(--navy) !important; }
-.mid-toggle input[type=checkbox]:checked::before { left:18px; }
-.mid-toggle .info, .mid-toggle [data-testid="block-info"] { font-size:11px !important; color:var(--c-subtext) !important;
-  margin:1px 0 0 49px !important; line-height:1.4; }
-
-/* selects: 3 hàng × 2 cột (dùng layout sẵn của gr.Row) */
-.mid-selects { gap:11px !important; }
-.mid-select { min-width:0 !important; }
-.mid-select span[data-testid="block-info"] { display:none !important; }
-.mid-select label > span:first-child, .mid-select .gr-form > span,
-.mid-select [data-testid="block-label"] { font-size:11px !important; font-weight:600 !important;
-  color:var(--c-subtext) !important; margin-bottom:5px !important; }
-.mid-select .wrap, .mid-select .wrap-inner, .mid-select .secondary-wrap,
-.mid-select input { background:var(--c-inset) !important; color:var(--c-text) !important;
-  font-size:12.5px !important; }
-.mid-select .container > .wrap, .mid-select .wrap { border:1px solid var(--c-border) !important;
-  border-radius:9px !important; }
-
-/* hidden plumbing controls */
-.mid-plumbing { display:none !important; }
-.mid-autosave-target .wrap, .mid-autosave-dir textarea, .mid-autosave-dir input { background:var(--c-inset) !important;
-  border:1px solid var(--c-border) !important; color:var(--c-text) !important; border-radius:9px !important; }
-
-/* ---------- right preview card ---------- */
-.mid-preview-card { padding:0 !important; overflow:hidden; min-height:640px; }
-.mid-preview-card > .gap, .mid-preview-card > .form { gap:0 !important; }
-#mid-status { padding:10px 18px !important; border-bottom:1px solid var(--c-border); background:var(--c-inset); }
-#mid-status p { margin:0; font-size:12.5px; color:var(--c-body); }
-.mid-preview-card .tabs > .tab-nav { padding:10px 18px 0 !important; border-bottom:1px solid var(--c-border) !important;
-  background:var(--c-inset); gap:6px; }
-.mid-preview-card .tab-nav button { border:none !important; background:none !important; color:var(--c-subtext) !important;
-  font-size:13px; font-weight:500; padding:7px 13px !important; border-radius:8px 8px 0 0 !important; }
-.mid-preview-card .tab-nav button.selected { background:var(--navy) !important; color:#fff !important; font-weight:700; }
-.mid-preview-card .tabitem { padding:0 !important; }
-#mid-preview { padding:30px 36px !important; color:var(--c-body); animation:mid-rise .3s ease; min-height:480px; }
-#mid-preview:empty::before { content:"Kết quả Markdown sẽ hiện ở đây — chọn tệp hoặc dán URL bên trái, chọn chế độ rồi bấm Chuyển đổi.";
-  display:block; color:var(--c-faint); font-size:14px; text-align:center; padding:80px 20px; }
-#mid-preview h1 { font-weight:900; font-size:28px; line-height:1.15; color:var(--c-text); margin:0 0 14px; }
-#mid-preview h2 { font-weight:800; font-size:19px; color:var(--c-text); margin:18px 0 12px; }
-#mid-preview p, #mid-preview li { font-size:15px; line-height:1.7; color:var(--c-body); }
-#mid-preview table { width:100%; border-collapse:collapse; font-size:13.5px; }
-#mid-preview th { text-align:left; padding:9px 12px; border-bottom:2px solid var(--c-border-strong); color:var(--c-text); font-weight:700; }
-#mid-preview td { padding:9px 12px; border-bottom:1px solid var(--c-border); color:var(--c-body); }
-#mid-preview pre, #mid-preview code { font-family:'Roboto Mono',monospace; }
-#mid-preview pre { background:var(--c-inset); border:1px solid var(--c-border); border-radius:10px; padding:13px 15px; }
-.mid-board-wrap { margin:0 0 18px; }
-#mid-raw { padding:0 !important; }
-#mid-raw .cm-editor, #mid-raw .cm-scroller { background:var(--c-panel) !important; font-family:'Roboto Mono',monospace !important;
-  font-size:12.5px !important; }
-
-/* ---------- downloads footer ---------- */
-#mid-downloads:empty { display:none; }
-.dl-list { border-top:1px solid var(--c-border); background:var(--c-inset); padding:14px 18px;
-  display:flex; flex-direction:column; gap:7px; }
-.dl-title { font-family:'Roboto Condensed'; font-weight:700; font-size:12px; letter-spacing:.08em;
-  text-transform:uppercase; color:var(--c-subtext); margin-bottom:3px; }
-.dl-row { display:flex; align-items:center; gap:10px; padding:9px 12px; background:var(--c-panel);
-  border:1px solid var(--c-border); border-radius:10px; }
-.dl-fileicon { display:flex; flex:0 0 auto; }
-.dl-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  font-weight:600; font-size:13px; color:var(--c-text); }
-.dl-btn { flex:0 0 auto; display:flex; align-items:center; gap:5px; background:var(--navy); color:#fff !important;
-  text-decoration:none !important; border-radius:999px; padding:6px 14px; font-size:11.5px; font-weight:700; }
-.dl-btn:hover { background:var(--navy-deep); }
-.dl-row.dl-all { background:var(--navy); border-color:var(--navy); }
-.dl-row.dl-all .dl-name { color:#fff; }
-.dl-row.dl-all .dl-btn { background:var(--sun); color:var(--navy-ink) !important; }
-.dl-row.dl-all .dl-btn:hover { background:var(--sun-deep); }
-.dl-row.dl-all .dl-btn svg { stroke:var(--navy-ink); }
-.mid-clear-btn button { background:var(--c-inset) !important; border:1px solid var(--c-border) !important;
-  color:var(--c-subtext) !important; border-radius:11px !important; font-size:12.5px !important; }
-"""
-
-# Doc-mode icon (lucide file-text) cho thẻ "Tài liệu thường".
-_DOC_ICON_SVG = (
-    '<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--c-subtext)">'
-    '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
-    '<polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>'
-    '<line x1="16" y1="17" x2="8" y2="17"/></svg>'
-)
-
-TOPBAR_HTML = f"""
-<div id="mid-topbar">
-  <img class="mid-logo" src="{_SYMBOL_WHITE}" alt="">
-  <span class="mid-brand">MarkItDown</span>
-  <span class="mid-tagline">Cờ vua Dương Sinh — tài liệu &amp; sách cờ → Markdown</span>
-  <div class="mid-topbar-right">
-    <div class="mid-badges">
-      <span class="mid-badge">PDF</span>
-      <span class="mid-badge">Word · Excel</span>
-      <span class="mid-badge">Ảnh · URL</span>
-      <span class="mid-badge mid-badge-chess">Sách cờ vua</span>
-    </div>
-    <button class="mid-theme-btn" data-mid-action="toggle-theme" type="button">
-      <span data-mid-theme-icon></span><span data-mid-theme-label>Tối</span>
-    </button>
-  </div>
-</div>
-"""
-
-MODE_CARDS_HTML = f"""
-<div class="mid-modes">
-  <div class="mid-mode active" data-mid-mode="0">
-    <img class="mid-mode-icon" src="{_PIECES['wn']}" alt="">
-    <div class="mid-mode-text">
-      <div class="mid-mode-title">Sách cờ vua — ký hiệu Anh</div>
-      <div class="mid-mode-desc">Nhận diện bàn cờ → FEN · K/Q/R/B/N → V/H/X/T/M</div>
-    </div>
-    <span class="mid-check"></span>
-  </div>
-  <div class="mid-mode" data-mid-mode="1">
-    <img class="mid-mode-icon" src="{_PIECES['bn']}" alt="">
-    <div class="mid-mode-text">
-      <div class="mid-mode-title">Sách cờ vua — ký hiệu Nga</div>
-      <div class="mid-mode-desc">Кр/Ф/Л/С/К → V/H/X/T/M · xử lý figurine</div>
-    </div>
-    <span class="mid-check"></span>
-  </div>
-  <div class="mid-mode" data-mid-mode="2">
-    <img class="mid-mode-icon" src="{_PIECES['wb']}" alt="">
-    <div class="mid-mode-text">
-      <div class="mid-mode-title">Sách cờ vua — ký hiệu Tây Ban Nha</div>
-      <div class="mid-mode-desc">R/D/T/A/C → V/H/X/T/M · ký hiệu Tây Ban Nha</div>
-    </div>
-    <span class="mid-check"></span>
-  </div>
-  <div class="mid-mode" data-mid-mode="3">
-    <span class="mid-mode-icon">{_DOC_ICON_SVG}</span>
-    <div class="mid-mode-text">
-      <div class="mid-mode-title">Tài liệu thường</div>
-      <div class="mid-mode-desc">Chuyển đổi gốc của MarkItDown + dịch thông thường</div>
-    </div>
-    <span class="mid-check"></span>
-  </div>
-</div>
-"""
-
-# Preset -> gợi ý ngắn hiển thị cạnh "MỨC CHẤT LƯỢNG".
-PRESET_SAVER = "Tiết kiệm"
-PRESET_BALANCED = "Cân bằng"
-PRESET_ACCURATE = "Chính xác"
-_PRESET_HINTS = {
-    PRESET_SAVER: "haiku · effort thấp · gộp OCR+dịch",
-    PRESET_BALANCED: "sonnet · auto · dịch riêng",
-    PRESET_ACCURATE: "opus · effort cao · 400 DPI",
-}
 
 _STATUS_HINT = "👋 Chọn tệp hoặc dán URL rồi bấm **Chuyển đổi**."
 
@@ -989,39 +78,6 @@ def _with_download_update(result, auto_download=False):
     preview_md, raw_md, path, status_md = result
     return preview_md, raw_md, _download_panel([path] if path else [], auto_download=auto_download), status_md
 
-
-def _translate_to_vn(
-    raw_md, orig_path, model, done_paths, chess=True, progress=None,
-    chess_lang="en", effort="low", engine=ENGINE_ANTIGRAVITY, api_key=None,
-    claude_token=None, agy_token=None,
-):
-    """Dịch raw_md sang tiếng Việt, ghi tệp `<tên gốc>_vn.md`.
-
-    chess: True -> dịch theo quy tắc cờ vua; False -> dịch tài liệu thường.
-    chess_lang: 'en' (ký hiệu Anh) hoặc 'ru' (ký hiệu Nga) khi chess=True.
-    engine: 'antigravity' (mặc định) hoặc 'claude'.
-    Trả về (đường dẫn tệp _vn hoặc None, dòng status).
-    """
-    import claude_translate
-
-    engine_name = "Google Antigravity / Gemini" if engine == ENGINE_ANTIGRAVITY else "Claude Code"
-    if not is_engine_available(engine, api_key=api_key, claude_token=claude_token, agy_token=agy_token):
-        cmd_name = "lệnh 'agy' hoặc Gemini API Key" if engine == ENGINE_ANTIGRAVITY else "lệnh 'claude' hoặc Token thuê bao"
-        return None, f"⚠️ Bỏ qua dịch: cần {engine_name} ({cmd_name})."
-    try:
-        vn_text = claude_translate.translate_markdown_vn(
-            raw_md, model=model, chess=chess, progress=progress,
-            chess_lang=chess_lang, effort=effort, engine=engine, api_key=api_key,
-            claude_token=claude_token, agy_token=agy_token,
-        )
-        vn_name = os.path.splitext(os.path.basename(orig_path))[0] + "_vn"
-        vn_path = _write_md(vn_text, vn_name, done_paths)
-        return vn_path, (
-            f"🇻🇳 Đã dịch bằng {engine_name} (model: {model}, effort: {effort}) "
-            f"— {len(vn_text):,} ký tự"
-        )
-    except Exception as exc:
-        return None, f"⚠️ Lỗi dịch sang tiếng Việt: {exc}"
 
 
 def _stream_job(func, kwargs, label, unit):
@@ -1137,6 +193,10 @@ def on_convert_files(
             )
             return
 
+        dropbox_cfg = dict(
+            folder=dropbox_folder, token=dropbox_token, refresh_token=dropbox_refresh_token,
+            app_key=dropbox_app_key, app_secret=dropbox_app_secret,
+        )
         chess = _is_chess_mode(mode_label)
         chess_lang = _chess_lang_from_mode(mode_label)
         # Gộp OCR+dịch chỉ có nghĩa khi người dùng cũng bật dịch tiếng Việt.
@@ -1186,7 +246,7 @@ def on_convert_files(
                     try:
                         st_line = next(job)
                     except StopIteration as stop:
-                        preview, raw_md, path, st = stop.value
+                        preview, raw_md, path, st, translated = stop.value
                         break
                     # Yield tiến độ chỉ cập nhật status (gr.skip các ô còn lại
                     # để giảm payload gửi về trình duyệt).
@@ -1197,28 +257,18 @@ def on_convert_files(
                 save_dir, save_note = _resolve_save_dir(
                     fp, autosave_target, autosave_dir, sources_are_real
                 )
-                if path and autosave_on:
-                    saved, err = _autosave(path, save_dir)
-                    st += f"\n  💾 [VPS] đã lưu: `{saved}`{save_note}" if saved else f"\n  {err}"
-                if path and dropbox_sync_on:
-                    dbx_path, dbx_err = infrastructure.upload_to_dropbox(
-                        path, target_folder=dropbox_folder,
-                        token=dropbox_token, refresh_token=dropbox_refresh_token,
-                        app_key=dropbox_app_key, app_secret=dropbox_app_secret,
+                if path:
+                    st += _publish_output(
+                        path, save_dir, save_note=save_note, dropbox_cfg=dropbox_cfg,
+                        autosave_on=autosave_on, dropbox_sync_on=dropbox_sync_on,
+                        auto_download_on=auto_download_on,
                     )
-                    if dbx_path:
-                        st += f"\n  ☁️ [Dropbox] đã lưu: `{dbx_path}`"
-                    elif dbx_err:
-                        st += f"\n  ⚠️ [Dropbox] {dbx_err}"
-                if path and auto_download_on:
-                    st += f"\n  ⚡ [Máy tính] Đang tải `{os.path.basename(path)}` về máy..."
                 if path:
                     n_ok += 1
                     done_paths.append(path)
 
                 # Dịch sang tiếng Việt -> tạo thêm tệp _vn.md (nếu được bật).
-                already_translated = bool(merge) and "gộp 1 bước" in (st or "")
-                if translate_vn and not already_translated and path and (raw_md or "").strip():
+                if translate_vn and not translated and path and (raw_md or "").strip():
                     yield (
                         "\n\n---\n\n".join(previews),
                         "\n\n".join(raws),
@@ -1256,21 +306,11 @@ def on_convert_files(
                         )
                     st += f"\n  {vn_st}"
                     if vn_path:
-                        if autosave_on:
-                            saved, err = _autosave(vn_path, save_dir)
-                            st += f" · 💾 [VPS] đã lưu: `{saved}`" if saved else f"\n  {err}"
-                        if dropbox_sync_on:
-                            dbx_path, dbx_err = infrastructure.upload_to_dropbox(
-                                vn_path, target_folder=dropbox_folder,
-                                token=dropbox_token, refresh_token=dropbox_refresh_token,
-                                app_key=dropbox_app_key, app_secret=dropbox_app_secret,
-                            )
-                            if dbx_path:
-                                st += f" · ☁️ [Dropbox] `{dbx_path}`"
-                            elif dbx_err:
-                                st += f"\n  ⚠️ [Dropbox] {dbx_err}"
-                        if auto_download_on:
-                            st += f" · ⚡ [Máy tính] Đang tải `{os.path.basename(vn_path)}`"
+                        st += _publish_output(
+                            vn_path, save_dir, dropbox_cfg=dropbox_cfg, inline=True,
+                            autosave_on=autosave_on, dropbox_sync_on=dropbox_sync_on,
+                            auto_download_on=auto_download_on,
+                        )
                         done_paths.append(vn_path)
 
                 # Sách cờ vua (mặc định): gom FEN các thế cờ -> tệp <tên gốc>_fen.txt
@@ -1279,21 +319,11 @@ def on_convert_files(
                     fen_path, n_fen = _write_fen_file(raw_md, fen_base, done_paths)
                     if fen_path:
                         st += f"\n  ♟️ Đã gom {n_fen} thế cờ → `{os.path.basename(fen_path)}`"
-                        if autosave_on:
-                            saved, err = _autosave(fen_path, save_dir)
-                            st += f" · 💾 [VPS] đã lưu: `{saved}`" if saved else f"\n  {err}"
-                        if dropbox_sync_on:
-                            dbx_path, dbx_err = infrastructure.upload_to_dropbox(
-                                fen_path, target_folder=dropbox_folder,
-                                token=dropbox_token, refresh_token=dropbox_refresh_token,
-                                app_key=dropbox_app_key, app_secret=dropbox_app_secret,
-                            )
-                            if dbx_path:
-                                st += f" · ☁️ [Dropbox] `{dbx_path}`"
-                            elif dbx_err:
-                                st += f"\n  ⚠️ [Dropbox] {dbx_err}"
-                        if auto_download_on:
-                            st += f" · ⚡ [Máy tính] Đang tải `{os.path.basename(fen_path)}`"
+                        st += _publish_output(
+                            fen_path, save_dir, dropbox_cfg=dropbox_cfg, inline=True,
+                            autosave_on=autosave_on, dropbox_sync_on=dropbox_sync_on,
+                            auto_download_on=auto_download_on,
+                        )
                         done_paths.append(fen_path)
                 lines.append(f"**{name}** — {st}")
                 if preview:
@@ -1345,55 +375,6 @@ def on_clear():
     return "", "", "", _STATUS_HINT, [], ""
 
 
-# Presets ánh xạ theo từng Engine
-_PRESET_OPTS_AGY = {
-    PRESET_SAVER: dict(merge=True, ocr_model="gemini-4-hydrogen", ocr_effort="low",
-                       tr_model="gemini-4-hydrogen", tr_effort="low", dpi="250", pages="2"),
-    PRESET_BALANCED: dict(merge=True, ocr_model="gemini-3.8-flash", ocr_effort="auto",
-                          tr_model="gemini-3.8-flash", tr_effort="low", dpi="250", pages="1"),
-    PRESET_ACCURATE: dict(merge=False, ocr_model="gemini-4-argon", ocr_effort="high",
-                          tr_model="gemini-4-argon", tr_effort="medium", dpi="400", pages="1"),
-}
-
-_PRESET_OPTS_CLAUDE = {
-    PRESET_SAVER: dict(merge=True, ocr_model="haiku", ocr_effort="low",
-                       tr_model="haiku", tr_effort="low", dpi="250", pages="2"),
-    PRESET_BALANCED: dict(merge=True, ocr_model="sonnet", ocr_effort="auto",
-                          tr_model="haiku", tr_effort="low", dpi="250", pages="1"),
-    PRESET_ACCURATE: dict(merge=False, ocr_model="opus", ocr_effort="high",
-                          tr_model="sonnet", tr_effort="medium", dpi="400", pages="1"),
-}
-
-
-def _apply_preset(preset, mode_label, engine=ENGINE_ANTIGRAVITY):
-    """Chọn preset/đổi chế độ/đổi engine -> tính lại toàn bộ tùy chọn nâng cao."""
-    table = _PRESET_OPTS_AGY if engine == ENGINE_ANTIGRAVITY else _PRESET_OPTS_CLAUDE
-    opt = table.get(preset, table[PRESET_BALANCED])
-    chess = _is_chess_mode(mode_label)
-    ocr_choices = ANTIGRAVITY_OCR_MODELS if engine == ENGINE_ANTIGRAVITY else CLAUDE_OCR_MODELS
-    tr_choices = ANTIGRAVITY_TRANSLATE_MODELS if engine == ENGINE_ANTIGRAVITY else CLAUDE_TRANSLATE_MODELS
-
-    hint = (
-        f"{opt['ocr_model']} · effort {opt['ocr_effort']} · {'gộp OCR+dịch' if opt['merge'] else 'dịch riêng'}"
-    )
-
-    return (
-        gr.update(value=chess),            # force_ocr
-        gr.update(value=True),             # translate_vn
-        gr.update(value=opt["merge"]),     # merge_ocr_translate
-        gr.update(value=True),             # autosave_on
-        gr.update(value=True),             # auto_download_on
-        gr.update(value=True),             # dropbox_sync_on
-        gr.update(choices=ocr_choices, value=opt["ocr_model"]),
-        gr.update(value=opt["ocr_effort"]),
-        gr.update(choices=tr_choices, value=opt["tr_model"]),
-        gr.update(value=opt["tr_effort"]),
-        gr.update(value=opt["dpi"]),
-        gr.update(value=opt["pages"]),
-        gr.update(value=hint),             # preset_hint
-    )
-
-
 def _convert_btn_label(n):
     return f"Chuyển đổi {n} tệp" if n else "Chuyển đổi"
 
@@ -1401,49 +382,6 @@ def _convert_btn_label(n):
 def _set_running(running):
     """Đang chạy -> ẩn nút Chuyển đổi, hiện nút Dừng (và ngược lại khi xong)."""
     return gr.update(visible=not running), gr.update(visible=running)
-
-
-def _load_prefs(p):
-    """BrowserState -> đặt lại preset/chế độ/thư mục lưu/engine/api_key/claude_token/agy_token/auto_download/dropbox khi tải trang."""
-    p = p or {}
-    default_eng = get_default_engine()
-    return (
-        gr.update(value=p.get("preset", PRESET_BALANCED)),
-        gr.update(value=p.get("mode", MODE_CHESS)),
-        gr.update(value=p.get("dir") or os.path.join(os.path.expanduser("~"), "Downloads")),
-        gr.update(value=p.get("engine", default_eng)),
-        gr.update(value=p.get("api_key", "")),
-        gr.update(value=p.get("claude_token", "")),
-        gr.update(value=p.get("agy_token", "")),
-        gr.update(value=p.get("auto_download", True)),
-        gr.update(value=p.get("dropbox_token", "")),
-        gr.update(value=p.get("dropbox_app_key", "")),
-        gr.update(value=p.get("dropbox_app_secret", "")),
-        gr.update(value=p.get("dropbox_folder", "/MarkItDown")),
-        gr.update(value=p.get("dropbox_sync", True)),
-    )
-
-
-def _save_prefs(
-    preset_v, mode_v, dir_v, engine_v, api_key_v="", claude_token_v="", agy_token_v="", auto_download_v=True,
-    dropbox_token_v="", dropbox_app_key_v="", dropbox_app_secret_v="", dropbox_folder_v="/MarkItDown", dropbox_sync_v=True,
-):
-    """Gói lựa chọn hiện tại để lưu vào BrowserState (localStorage)."""
-    return {
-        "preset": preset_v,
-        "mode": mode_v,
-        "dir": dir_v,
-        "engine": engine_v,
-        "api_key": api_key_v,
-        "claude_token": claude_token_v,
-        "agy_token": agy_token_v,
-        "auto_download": auto_download_v,
-        "dropbox_token": dropbox_token_v,
-        "dropbox_app_key": dropbox_app_key_v,
-        "dropbox_app_secret": dropbox_app_secret_v,
-        "dropbox_folder": dropbox_folder_v,
-        "dropbox_sync": dropbox_sync_v,
-    }
 
 
 def _on_files_change(files):
@@ -2100,5 +1038,6 @@ if __name__ == "__main__":
         head=HEAD,
         allowed_paths=[_OUTPUT_DIR, _ASSETS_DIR],
     )
+
 
 

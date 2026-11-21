@@ -212,14 +212,18 @@ không truyền `share=True`, không đặt xác thực.
 
 ## 9. Đường dẫn tham chiếu nhanh
 
+> Từ 2026-11-21 (G0.3) tệp đã tách; tìm theo tên hàm trong các tệp dưới đây.
+
 | Muốn xem… | Mở |
 |---|---|
-| Luồng bấm nút | **`markitdown_gui.py`** `on_convert_files` (1101) |
-| Quyết định OCR hay thường | `convert_file` (368) |
-| Chạy nền + giữ kết nối | `_stream_job` (1026) |
-| Preset | `_PRESET_OPTS_AGY` (1348), `_PRESET_OPTS_CLAUDE` (1357), `_apply_preset` (1367) |
-| Nhớ tùy chọn | `_load_prefs` (1405), `_save_prefs` (1426), `prefs` (1812) |
-| JS (bàn cờ, theme, tự tải) | `_SCRIPT` (516) |
-| Đổi màu/thương hiệu | `CSS` (676), `TOPBAR_HTML` (917), `assets/` |
-| Khởi chạy | dòng 1971 |
+| Luồng bấm nút | `markitdown_gui.py` `on_convert_files` |
+| Quyết định OCR hay thường | `pipeline.py` `convert_file` (trả `ConvertResult`, có cờ `translated`) |
+| Đưa kết quả ra thư mục tự lưu / Dropbox / tải về | `pipeline.py` `_publish_output` |
+| Chạy nền + giữ kết nối | `markitdown_gui.py` `_stream_job` |
+| Preset | `presets.py` `_PRESET_OPTS_AGY`, `_PRESET_OPTS_CLAUDE`, `_apply_preset` |
+| Nhớ tùy chọn | `presets.py` `_load_prefs`, `_save_prefs`; `prefs` trong `build_ui` |
+| JS (bàn cờ, theme, tự tải) | `assets/ui/app.js` (nạp bởi `ui_theme.HEAD`) |
+| Đổi màu/thương hiệu | `assets/ui/app.css` (`ui_theme.CSS`), `ui_theme.TOPBAR_HTML` |
+| Danh sách tải về (HTML) | `ui_render.py` `_download_panel` |
+| Khởi chạy | `markitdown_gui.py` khối `if __name__ == "__main__"` |
 | Thiết kế gốc | `design_handoff_markitdown_gui/README.md` |

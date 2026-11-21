@@ -5,7 +5,7 @@
 
 ## 1. Dự án là gì (30 giây)
 
-Bản fork của `microsoft/markitdown` cho **Cờ vua Dương Sinh**. Phần **của fork** là 8 tệp Python ở thư mục gốc (5.227 dòng)
+Bản fork của `microsoft/markitdown` cho **Cờ vua Dương Sinh**. Phần **của fork** là các tệp Python ở thư mục gốc (xem bảng mục 2; từ 2026-11-21 `markitdown_gui.py` đã tách thành `pipeline.py`, `ui_theme.py`, `presets.py`, `ui_render.py`)
 tạo thành một **ứng dụng web Gradio** chuyển sách cờ vua scan → Markdown: OCR bằng AI (CLI `agy` hoặc `claude`), nhận
 diện bàn cờ → FEN bằng ONNX cục bộ, dịch sang tiếng Việt (ký hiệu Anh/Nga/Tây Ban Nha → V/H/X/T/M), đồng bộ Dropbox.
 Thư mục `packages/` là **mã upstream** (lõi thư viện, plugin OCR, MCP, plugin mẫu) — **không sửa**.
@@ -14,7 +14,12 @@ Thư mục `packages/` là **mã upstream** (lõi thư viện, plugin OCR, MCP, 
 
 | Việc | Tệp | Tài liệu chi tiết |
 |---|---|---|
-| Giao diện + điều phối | `markitdown_gui.py` | `docs/tinh-nang/06-giao-dien-gradio.md` |
+| Giao diện: `build_ui`, handler, khởi chạy | `markitdown_gui.py` | `docs/tinh-nang/06-giao-dien-gradio.md` |
+| Lõi chuyển đổi (không phụ thuộc Gradio): ghi tệp, `convert_file`, `_publish_output`, dịch | `pipeline.py` | `06-…` |
+| Theme/CSS/JS (`assets/ui/app.css`, `app.js`), thẻ chế độ | `ui_theme.py` | `06-…` |
+| Preset chất lượng, nhớ tùy chọn (`BrowserState`) | `presets.py` | `06-…` |
+| HTML danh sách tải về | `ui_render.py` | `06-…` |
+| Engine giả để kiểm thử (`MID_FAKE_ENGINE=1`) | `fake_engine.py` | `04-…` |
 | OCR PDF/ảnh, prompt | `claude_ocr.py` | `docs/tinh-nang/01-ocr-pdf-anh.md` |
 | Dịch, bảo vệ khối bàn cờ | `claude_translate.py` | `docs/tinh-nang/02-dich-tieng-viet.md` |
 | Nhận diện bàn cờ (ONNX) | `chessboard_fen.py` | `docs/tinh-nang/03-nhan-dien-ban-co-fen.md` |
@@ -33,6 +38,8 @@ Dùng **`.venv\Scripts\python.exe`** (Python 3.12). `python` trên PATH của m�
 ```bat
 .venv\Scripts\python.exe markitdown_gui.py                    :: chạy web, http://127.0.0.1:7860
 .venv\Scripts\python.exe _test_translate_roundtrip.py         :: test bảo vệ FEN khi dịch (không gọi AI)
+.venv\Scripts\python.exe -m unittest discover tests_gui -v   :: test của fork (dùng engine giả, không gọi AI)
+set MID_FAKE_ENGINE=1 && .venv\Scripts\python.exe markitdown_gui.py :: chạy web với engine giả (không tốn hạn mức)
 .venv\Scripts\python.exe -m unittest _test_dropbox_sync -v    :: test Dropbox (có gọi mạng)
 cd packages\markitdown && hatch test                          :: test thư viện upstream
 ```
@@ -57,7 +64,7 @@ Chạy test của fork **từ thư mục gốc repo** (chúng `import` các tệ
 |---|---|
 | Placeholder `⟦CHESSBOARD_n⟧` | `claude_translate` dùng để bảo vệ FEN/code khi dịch |
 | Marker `<<<<<--- HET_TRANG --->>>>>` | `claude_ocr` tách nhiều trang trong một lần gọi |
-| Chuỗi `"gộp 1 bước"` trong trạng thái OCR | `on_convert_files` dùng nó để biết đã dịch chưa |
+| Cờ `ConvertResult.translated` (`pipeline.py`) | `on_convert_files` dùng để biết đã dịch chưa (thay cho việc dò chuỗi `"gộp 1 bước"`, B9; chuỗi đó nay chỉ để hiển thị) |
 | Thứ tự thẻ chế độ ↔ `choices` của radio `mode` | JS `midSelectMode(idx)` bấm radio theo chỉ số |
 | Thứ tự lớp `PIECE_TYPES` | Phải khớp mô hình ONNX gốc (`ocrchessboard`) |
 | Định dạng khối ```` ```chessboard ```` một dòng `fen:` | Plugin Chessboard Viewer của Obsidian |

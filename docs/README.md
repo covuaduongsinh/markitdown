@@ -3,6 +3,9 @@
 > Mô tả mã nguồn tại commit `2c1df67b44` (2026-09-27). Bộ tài liệu này được lập ngày 2026-09-30.
 > Mọi tài liệu tính năng theo mẫu hai tầng: **Phần A — Chức năng** (cho mọi người) và **Phần B — Kỹ thuật** (cho người bảo trì),
 > kết bằng "Điểm cần lưu ý và hạn chế" và "Đường dẫn tham chiếu nhanh".
+>
+> **Cập nhật 2026-11-21 (G0.3):** `markitdown_gui.py` đã tách thành `markitdown_gui.py` + `pipeline.py` + `ui_theme.py` + `presets.py` + `ui_render.py`
+> (+ `assets/ui/app.css|js`). Các trích dẫn `markitdown_gui.py:NNN` trong tài liệu là của tệp **trước khi tách** — tìm theo tên hàm/hằng.
 
 ## Đọc theo mục đích
 

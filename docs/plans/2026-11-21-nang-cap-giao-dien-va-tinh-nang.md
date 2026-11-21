@@ -92,7 +92,7 @@ flowchart LR
   - *Đạt khi:* `pip show gradio` ở `.venv` = bản ghim; `markitdown_gui` import và dựng `build_ui()` không lỗi.
 - [x] **G0.2 Engine giả.** `ai_engine.py`: hằng `ENGINE_FAKE = "fake"`, chỉ xuất hiện trong `ENGINE_LABELS` và chỉ `is_engine_available` = `True` khi `MID_FAKE_ENGINE=1`. Nhánh `fake` trong `claude_ocr._run_engine_ocr` và `claude_translate._call_engine_translate`: trả Markdown tiếng Việt có dấu kèm một khối ```` ```chessboard ```` hợp lệ; ngủ `MID_FAKE_DELAY` giây (mặc định 0.3); ném lỗi cho các trang liệt kê ở `MID_FAKE_FAIL_PAGES` (để thử chạy lại trang lỗi). Tôn trọng marker `<<<<<--- HET_TRANG --->>>>>` khi gộp nhiều trang.
   - *Đạt khi:* chạy app với `MID_FAKE_ENGINE=1`, chuyển một PDF mẫu 6 trang (tạo bằng Pillow trong thư mục test) ra `.md`, `_vn.md`, `_fen.txt` mà **không** có tiến trình `agy`/`claude` nào được gọi.
-- [ ] **G0.3 Tách tệp, không đổi hành vi.**
+- [x] **G0.3 Tách tệp, không đổi hành vi.**
   - `assets/ui/app.css`, `assets/ui/app.js` ← nội dung `CSS`, `_SCRIPT`; module `ui_theme.py` đọc tệp lúc khởi động và giữ `THEME`, `HEAD`, `TOPBAR_HTML`, `MODE_CARDS_HTML`, biểu tượng SVG.
   - `pipeline.py` ← `_safe_filename`, `_write_md`, `_write_fen_file`, `_zip_all`, `_autosave`, `_resolve_save_dir`, `_convert`, `_ocr_to_outputs`, `convert_file`, `convert_url`, `_translate_to_vn`, các hàm `_*_from_label`, hằng `MODE_*`.
   - Rút khối lặp ba lần thành `_publish_output(path, save_dir, …) -> str` (T2 sổ nợ).

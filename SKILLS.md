@@ -1,6 +1,7 @@
 # SKILLS — Danh mục năng lực của phần mềm và các bài làm mẫu (playbook)
 
-> Mô tả mã nguồn tại commit `2c1df67b44` (2026-09-27).
+> Mô tả mã nguồn tại commit `2c1df67b44` (2026-09-27). Số dòng `markitdown_gui.py:NNN` là của tệp **trước** khi tách (2026-11-21): hàm
+> nay nằm ở `pipeline.py` (`_convert`, `convert_file`, `_autosave`…), `presets.py`, `ui_render.py`, `ui_theme.py` — tìm theo tên hàm.
 > Hai nửa: **(A)** phần mềm *làm được gì* (để rà soát đủ/thiếu và tìm nơi cắm tính năng mới); **(B)** *cách làm* các việc lặp lại
 > cho người/AI bảo trì. Chi tiết thuật toán ở `docs/tinh-nang/`.
 
