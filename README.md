@@ -1,5 +1,28 @@
 # MarkItDown
 
+> ## 🇻🇳 Bản fork Cờ vua Dương Sinh
+>
+> Repo này là fork của `microsoft/markitdown`. Ngoài thư viện gốc (phần bên dưới, giữ nguyên từ upstream), fork có **một ứng dụng web
+> Gradio** chuyên chuyển **sách cờ vua scan → Markdown**: OCR bằng AI (Google Antigravity `agy` hoặc Claude Code `claude`, dùng gói
+> thuê bao, không cần khoá API), nhận diện bàn cờ → FEN bằng ONNX, dịch sang tiếng Việt (ký hiệu Anh/Nga/Tây Ban Nha → V/H/X/T/M) và
+> đồng bộ Dropbox.
+>
+> | Tôi muốn… | Đọc |
+> |---|---|
+> | Chạy ứng dụng | [`GUI_README.md`](GUI_README.md) — hoặc nhấp đúp `run_gui.bat` (Windows), mở `http://127.0.0.1:7860` |
+> | Hiểu kiến trúc và từng tính năng | [`docs/README.md`](docs/README.md) (mục lục), [`docs/TONG-QUAN-KIEN-TRUC.md`](docs/TONG-QUAN-KIEN-TRUC.md) |
+> | Cấu hình, phiên bản, biến môi trường | [`TECH.md`](TECH.md) |
+> | Sửa mã / làm việc cùng trợ lý AI | [`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md), [`SKILLS.md`](SKILLS.md) |
+> | Nhân bản hoặc thêm module mới | [`docs/NHAN-BAN-VA-MO-RONG.md`](docs/NHAN-BAN-VA-MO-RONG.md) |
+> | Biết rủi ro và nợ kỹ thuật | [`docs/RA-SOAT-RUI-RO.md`](docs/RA-SOAT-RUI-RO.md) |
+> | Lịch sử, quyết định, việc dang dở | [`docs/LICH-SU-PHAT-TRIEN.md`](docs/LICH-SU-PHAT-TRIEN.md), [`MEMORY.md`](MEMORY.md) |
+> | Kết nối Dropbox | [`docs/DROPBOX_GUIDE.md`](docs/DROPBOX_GUIDE.md) |
+>
+> Phần do fork tự viết là 7 tệp Python ở thư mục gốc (`markitdown_gui.py`, `claude_ocr.py`, `claude_translate.py`, `chessboard_fen.py`,
+> `ai_engine.py`, `infrastructure.py`, `pick_files.py`); thư mục `packages/` là mã upstream — **không sửa** để còn merge được.
+
+---
+
 [![PyPI](https://img.shields.io/pypi/v/markitdown.svg)](https://pypi.org/project/markitdown/)
 ![PyPI - Downloads](https://img.shields.io/pypi/dd/markitdown)
 
