@@ -538,8 +538,12 @@ def _run_claude_ocr(prompt, img_dir, model, effort, timeout, claude_token=None):
 
 def _run_engine_ocr(prompt, img_dir, model, effort, timeout, engine="antigravity", api_key=None, claude_token=None, agy_token=None):
     """Điều phối chạy OCR qua Antigravity / Gemini API (mặc định) hoặc Claude Code."""
-    from ai_engine import ENGINE_ANTIGRAVITY, ENGINE_CLAUDE, run_agy_prompt, AIEngineError
+    from ai_engine import ENGINE_ANTIGRAVITY, ENGINE_CLAUDE, ENGINE_FAKE, run_agy_prompt, AIEngineError
 
+    if engine == ENGINE_FAKE:
+        from fake_engine import fake_ocr
+
+        return fake_ocr(prompt)
     if engine == ENGINE_ANTIGRAVITY:
         try:
             return run_agy_prompt(

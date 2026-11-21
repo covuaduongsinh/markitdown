@@ -21,12 +21,16 @@ import urllib.request
 
 ENGINE_ANTIGRAVITY = "antigravity"
 ENGINE_CLAUDE = "claude"
+# Engine giả cho kiểm thử (không gọi AI thật). Chỉ xuất hiện khi MID_FAKE_ENGINE=1 — xem fake_engine.py.
+ENGINE_FAKE = "fake"
 
 # Nhãn hiển thị trên giao diện người dùng
 ENGINE_LABELS = [
     ("⚡ Google Antigravity / Gemini (Phương án 1 - Khuyên dùng)", ENGINE_ANTIGRAVITY),
     ("🟣 Claude Code (Phương án 2)", ENGINE_CLAUDE),
 ]
+if os.environ.get("MID_FAKE_ENGINE", "").strip() in ("1", "true", "True", "yes"):
+    ENGINE_LABELS.append(("🧪 Engine giả (chỉ để kiểm thử)", ENGINE_FAKE))
 
 # Danh sách model cho từng Engine
 ANTIGRAVITY_OCR_MODELS = [
@@ -132,6 +136,10 @@ def is_engine_available(
     **kwargs,
 ) -> bool:
     """Kiểm tra xem engine hoặc API Key tương ứng có sẵn để sử dụng không."""
+    if engine == ENGINE_FAKE:
+        from fake_engine import is_enabled
+
+        return is_enabled()
     if engine == ENGINE_ANTIGRAVITY:
         if find_agy() is not None:
             return True
@@ -156,7 +164,9 @@ def is_engine_available(
 
 
 def get_default_engine(api_key: str = None, claude_token: str = None, agy_token: str = None, **kwargs) -> str:
-    """Trả về engine mặc định ưu tiên."""
+    """Trả về engine mặc định ưu tiên (engine giả được ưu tiên nhất khi MID_FAKE_ENGINE=1)."""
+    if is_engine_available(ENGINE_FAKE):
+        return ENGINE_FAKE
     if is_engine_available(ENGINE_ANTIGRAVITY, api_key=api_key, agy_token=agy_token):
         return ENGINE_ANTIGRAVITY
     if is_engine_available(ENGINE_CLAUDE, claude_token=claude_token):

@@ -333,6 +333,10 @@ def _call_agy(chunk, model="gemini-3.8-flash", timeout=600, instruction=None, ef
 
 def _call_engine_translate(chunk, model, timeout=600, instruction=None, effort="low", engine="antigravity", api_key=None, claude_token=None, agy_token=None):
     """Điều phối dịch thuật qua Antigravity / Gemini API (mặc định) hoặc Claude Code."""
+    if engine == "fake":
+        from fake_engine import fake_translate
+
+        return fake_translate(chunk)
     if engine == "antigravity":
         return _call_agy(chunk, model=model, timeout=timeout, instruction=instruction, effort=effort, api_key=api_key, agy_token=agy_token)
     return _call_claude(chunk, model=model, timeout=timeout, instruction=instruction, effort=effort, claude_token=claude_token)

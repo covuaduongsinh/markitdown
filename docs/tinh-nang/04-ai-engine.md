@@ -37,6 +37,7 @@ Nếu không có động cơ nào, ứng dụng **vẫn chạy** và chuyển đ
 |---|---|
 | `ENGINE_ANTIGRAVITY` | `"antigravity"` |
 | `ENGINE_CLAUDE` | `"claude"` |
+| `ENGINE_FAKE` | `"fake"` — engine giả để kiểm thử, chỉ có khi `MID_FAKE_ENGINE=1` (xem `fake_engine.py`) |
 | `ENGINE_LABELS` | nhãn hiển thị → giá trị, dùng cho `gr.Radio` |
 
 | Danh sách | Model (giá trị) |
@@ -70,6 +71,12 @@ Claude:      true nếu   find_claude()
                      hoặc claude_token không rỗng
                      hoặc tệp ~/.claude.json tồn tại và không rỗng
 ```
+
+Engine giả (`ENGINE_FAKE`): `is_engine_available` trả `True` khi và chỉ khi `MID_FAKE_ENGINE=1`; khi đó nó được thêm vào
+`ENGINE_LABELS` và `get_default_engine` chọn nó trước tiên. Nhánh `fake` nằm trong hai hàm điều phối
+`claude_ocr._run_engine_ocr` và `claude_translate._call_engine_translate` (không đi qua `run_agy_prompt`).
+Marker `HET_TRANG`, khối ```` ```chessboard ````, placeholder khi dịch chạy như thật; `MID_FAKE_FAIL_PAGES=3,5` ném
+`ClaudeOCRError` cho nhóm chứa trang 3/5.
 
 `get_default_engine` (dòng 158): Antigravity nếu sẵn sàng, không thì Claude nếu sẵn sàng, không thì vẫn trả
 Antigravity.
