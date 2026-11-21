@@ -1,6 +1,6 @@
 # MEMORY — Bộ nhớ dự án (sự thật bền vững cho các phiên sau)
 
-> Mô tả mã nguồn tại commit `2c1df67b44` (2026-09-27); cập nhật lần cuối 2026-09-30.
+> Mô tả mã nguồn tại commit `2c1df67b44` (2026-09-27); cập nhật lần cuối 2026-11-21.
 > Đây là tệp **được commit cùng repo**, khác với bộ nhớ riêng của công cụ AI (nằm ngoài repo). Mục đích: để người hoặc AI mở phiên mới không
 > phải khám phá lại. Chỉ ghi điều **không suy ra được từ mã/git**. Nhật ký từng phiên: `docs/LICH-SU-PHAT-TRIEN.md` mục 4.
 > Quy tắc: mỗi dòng một sự kiện, kèm ngày; sự kiện sai thì **sửa hoặc xóa**, đừng để mâu thuẫn.
@@ -19,6 +19,7 @@
 - Tính năng mới nhất: Dropbox sync (`2c1df67`, 2026-09-27). Kế hoạch trước đó: Trung tâm cài đặt hạ tầng (2026-09-17).
 - Bộ tài liệu 2026-09-30: xem `docs/README.md`. S10 đã sửa 2026-10-13 (xem bên dưới); các mục khác trong `docs/RA-SOAT-RUI-RO.md` chưa sửa.
 - Cây làm việc sạch; bộ tài liệu và kế hoạch đồng bộ đã được commit vào `main` ngày 2026-11-21.
+- **2026-11-21: Giai đoạn 0 của kế hoạch nâng cấp giao diện đã xong trên nhánh `feat/nang-cap-giao-dien`** (chưa push/merge; `main` và production vẫn ở `d72cc40`). Gradio ghim 6.32.0 (`requirements-gui.txt`), engine giả `MID_FAKE_ENGINE=1`, `markitdown_gui.py` tách thành `pipeline.py`/`ui_theme.py`/`presets.py`/`ui_render.py` + `assets/ui/app.{css,js}`, đăng nhập web `MID_AUTH_USER`/`MID_AUTH_PASS` (mặc định tắt), `tests_gui/` 29 test. Kế hoạch: `docs/plans/2026-11-21-nang-cap-giao-dien-va-tinh-nang.md` (bảng Tiến độ ở cuối). Giai đoạn kế: G1 (giao diện) hoặc G2 (công việc nền) — G2.9 (volume `/data`) chỉ làm khi chủ dự án duyệt nhánh.
 - 2026-11-21: Đồng bộ upstream `microsoft/markitdown` từ commit `945314a` lên `ed17895` (v0.1.9, 23 commit mới). Upstream nâng cấp DocIntel, sửa ExifTool Windows, nâng phụ thuộc và tái cấu trúc test suite. Test fork và upstream import đều đạt 100%.
 - 2026-10-13: thêm `claude_login_bridge.py` (nút "Đăng nhập Claude Code" trên web, dùng `claude setup-token`)
   và sửa `_claude_env`/`infrastructure.py` dùng đúng biến `CLAUDE_CODE_OAUTH_TOKEN` thay vì 3 biến sai cũ
@@ -43,6 +44,9 @@
 | 2026-10-13 | Container production (Dokploy) chạy trước đây không mount volume nào | Đã cấu hình bind mount `/root/.gemini` -> `/root/.gemini` trong Dokploy DB (2026-11-21) để giữ phiên đăng nhập Google Antigravity bền vững qua mọi lần deploy |
 | 2026-11-21 | CLI `agy 1.5.14` đã loại bỏ các model cũ (`gemini-3.7-flash`, v.v.), chuyển sang thế hệ mới (`gemini-3.8-flash`, `gemini-4-neon`, `gemini-4-hydrogen`, `gemini-4-argon`, `claude-sonnet-5-5`, `claude-opus-5-5`) | Mặc định chuyển sang `gemini-3.8-flash` cho cả OCR và Dịch |
 | 2026-11-21 | Upstream `microsoft/markitdown` bump lên v0.1.9, mở rộng Python 3.10-3.14, nâng cấp DocIntel API key & query fields | Toàn bộ 8 tệp fork giữ nguyên tương thích; test roundtrip FEN và smoke import đạt 100% |
+| 2026-11-21 | Trong công cụ Bash của Claude Code, heredoc chứa `\n`, dấu nháy lẫn lộn hoặc dòng trống dễ bị mangle/vỡ | Tạo tệp có chuỗi escape bằng công cụ Write/Edit, không bằng `cat <<EOF` |
+| 2026-11-21 | `.venv` dùng `uv` (không có `pip`); đặt cp1252 làm script in tiếng Việt lỗi nếu quên `PYTHONUTF8=1` | Cài gói bằng `uv pip install --python .venv/Scripts/python.exe -r requirements-gui.txt` |
+| 2026-11-21 | Chặn `subprocess.Popen` **trước** khi `import gradio` làm hỏng `asyncio` (`TypeError: function() argument 'code'…`) | Import app trước, rồi mới `mock.patch` `subprocess` (xem `tests_gui/test_fake_engine_flow.py`) |
 
 ## 4. Quyết định đã chốt (đừng đảo lại nếu không có lý do mới)
 
@@ -61,10 +65,12 @@
       trường `CLAUDE_CODE_OAUTH_TOKEN` trong cấu hình Dokploy (xem `docs/tinh-nang/12-dang-nhap-claude-code.md`).
 - [ ] Thử thật trên VPS luồng "Đăng nhập Claude Code" (`claude_login_bridge.py`) — định dạng output thật
       của `claude setup-token` chưa được quan sát, chỉ dựa trên tài liệu chính thức + CLI giả lập.
-- [ ] Quyết định xóa hay giữ gói `dropbox` và `markitdown-ocr` khỏi Dockerfile (O5).
+- [ ] Quyết định xóa hay giữ gói `markitdown-ocr` khỏi Dockerfile (O5). (Gói `dropbox` đã bỏ ở G0.1, 2026-11-21.)
 - [ ] Quyết định `DROPBOX_TARGET_FOLDER`: cài đặt hay xóa khỏi tài liệu (B12).
 - [ ] Chưa có số liệu chất lượng thật cho OCR/FEN ("94%" trong `chessboard_fen.py` là số của dự án gốc).
 - [ ] Các mục "❓ Suy ra" trong sổ rà soát cần thử với dịch vụ thật (B1, B4, S4…). S10 đã xử lý 2026-10-13.
+
+- [ ] Chủ dự án duyệt nhánh `feat/nang-cap-giao-dien` trước khi merge `main` (push `main` = Dokploy tự deploy). Đặt `MID_AUTH_USER`/`MID_AUTH_PASS` trên Dokploy khi muốn bật đăng nhập (S1). Chưa kiểm chứng đăng nhập sau proxy Traefik/HTTPS.
 
 ## 6. Cách cập nhật tệp này
 

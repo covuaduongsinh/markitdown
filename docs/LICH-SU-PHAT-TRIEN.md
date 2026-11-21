@@ -173,6 +173,23 @@ input/output).
 - Container mới khởi động thành công với bind mount `/root/.gemini`, test trực tiếp lệnh `agy -p "1+1=?" --model gemini-3.8-flash --effort low` bên trong container trả về `2` chính xác. Web `https://markitdown.dsc.edu.vn` phản hồi HTTP 200.
 - Chi tiết kế hoạch tại [`plans/2026-11-21-cap-nhat-model-antigravity-va-mount-volume-vps.md`](plans/2026-11-21-cap-nhat-model-antigravity-va-mount-volume-vps.md).
 
+### 2026-11-21: Nâng cấp giao diện và tính năng — Giai đoạn 0 (chốt nền)
+
+**Yêu cầu của chủ dự án:** thực hiện Giai đoạn 0 của `plans/2026-11-21-nang-cap-giao-dien-va-tinh-nang.md` (prompt: `…-prompt-trien-khai.md`).
+
+**Đã làm** (nhánh `feat/nang-cap-giao-dien`, không push, không đụng production):
+- G0.1 `3930dd8`: `requirements-gui.txt` ghim `gradio==6.32.0` (bản production) + các gói GUI theo `.venv`; `Dockerfile` cài từ tệp đó, bỏ `dropbox`; `.venv` nâng 6.17.3 → 6.32.0 (`gradio_client` 2.7.2).
+- G0.2 `f491108`: engine giả `fake_engine.py` (`MID_FAKE_ENGINE=1`, `MID_FAKE_DELAY`, `MID_FAKE_FAIL_PAGES`) cắm vào `_run_engine_ocr`, `_call_engine_translate`, `is_engine_available`; không có khi thiếu biến.
+- G0.3 `af6ee35`: tách `markitdown_gui.py` (2.104 → 1.043 dòng) thành `pipeline.py` (lõi, 477), `ui_theme.py`, `presets.py`, `ui_render.py`, `assets/ui/app.{css,js}`; gom ba khối lặp thành `_publish_output`; thay việc dò chuỗi `"gộp 1 bước"` (B9) bằng `ConvertResult.translated`.
+- G0.4 `d0d819e`: `MID_AUTH_USER`+`MID_AUTH_PASS` → `launch(auth=…)`; chỉ đặt một biến thì từ chối khởi động.
+- G0.5 `23d6812`: `tests_gui/` 29 test dùng engine giả.
+
+**Quyết định + lý do:** chỉ đặt một trong hai biến auth → thoát lỗi (fail closed) thay vì chạy không khóa; engine giả là engine mặc định khi bật để kiểm thử không cần thao tác chọn; `_publish_output` giữ y nguyên chuỗi trạng thái cũ (kiểu chính/inline) để không đổi hành vi.
+
+**Cách kiểm chứng:** `HEAD`, `CSS`, `TOPBAR_HTML`, `MODE_CARDS_HTML` sau khi tách **bằng từng byte** với trước khi tách; luồng PDF 6 trang × 3 chế độ cho cùng số ký tự trước/sau tách (2.006/2.036/1.492); chạy app thật ở cổng riêng: có auth → `/config` 401, sai mật khẩu 400, đúng 200; không auth → 200; một biến → thoát mã 1; không có tiến trình `agy`/`claude` nào bị gọi (chặn `subprocess` trong test). `_test_translate_roundtrip.py` và `unittest discover tests_gui` đạt.
+
+**Chưa làm / chưa kiểm chứng:** `markitdown_gui.py` còn >900 dòng (xem bảng Tiến độ); chưa mở bằng trình duyệt (G0 không đổi giao diện, nhưng nâng Gradio có thể đổi vẻ ngoài dev — kiểm ở G1); đăng nhập chưa thử sau Traefik/HTTPS; chưa push/merge/deploy. Phát hiện thêm P1–P5 ở cuối kế hoạch.
+
 ## 5. Cách nối tiếp lịch sử này
 
 Khi làm một thay đổi có ý nghĩa, thêm một mục vào mục 4 với: ngày, yêu cầu, những gì đã làm, quyết định + lý do,

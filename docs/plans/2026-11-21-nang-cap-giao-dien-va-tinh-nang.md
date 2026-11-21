@@ -194,8 +194,18 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
 
 | Giai đoạn | Trạng thái | Commit | Ghi chú |
 |---|---|---|---|
-| G0 | ☐ chưa làm | | |
+| G0 | ✅ xong (2026-11-21), chưa push/merge | G0.1 `3930dd8` · G0.2 `f491108` · G0.3 `af6ee35` · G0.4 `d0d819e` · G0.5 `23d6812` | Nhánh `feat/nang-cap-giao-dien`. Ngoại lệ so với "Đạt khi" G0.3: `markitdown_gui.py` còn **1.043 dòng** (không phải <900) vì `build_ui` riêng đã 635 dòng — sẽ co lại ở G1.6 (trang Cài đặt). Kiểm tra trình duyệt chưa làm (G0 không đổi giao diện) |
 | G1 | ☐ chưa làm | | |
 | G2 | ☐ chưa làm | | |
 | G3 | ☐ chưa làm | | |
 | G4 | ☐ chưa làm | | |
+
+## 7. Phát hiện thêm (ngoài phạm vi, ghi lại để quyết định sau)
+
+| # | Phát hiện (2026-11-21, khi làm G0) | Gợi ý |
+|---|---|---|
+| P1 | `build_ui` truyền `dropbox_token_in` **hai lần** liền nhau ở `inputs` của `on_convert_files`/`on_convert_url` (vị trí `dropbox_token` và `dropbox_refresh_token`) — nhiều khả năng đáng ra là ô refresh token | Kiểm trong G1.6 khi dựng lại trang Cài đặt; **chưa kiểm chứng** là lỗi thật |
+| P2 | Dòng trạng thái ghi \"bằng Claude Code\" cho mọi engine không phải Antigravity (kể cả engine giả) vì `engine_name` được suy ra bằng `== \"antigravity\"` ở 3 nơi | Gom vào `engine_display_name()` (đã có ở G4.3) |
+| P3 | `_with_download_update` trong `markitdown_gui.py` không còn nơi gọi (mã chết) | Xóa khi dọn ở G1 |
+| P4 | `_test_dropbox_sync.test_test_dropbox_connection_invalid_token` gửi một token sai tới `api.dropboxapi.com` (bị từ chối, không ghi gì lên tài khoản) | Giữ; nhưng đừng chạy trong CI không có mạng |
+| P5 | Các tài liệu cũ trích `markitdown_gui.py:NNN` là số dòng của tệp **trước khi tách**; đã thêm ghi chú ở `docs/README.md`, `TONG-QUAN-KIEN-TRUC.md`, `SKILLS.md`, nhưng chưa sửa từng trích dẫn | Sửa dần khi đụng tới từng tài liệu ở G1–G2 |
