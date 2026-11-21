@@ -58,7 +58,10 @@ CLI `agy 1.5.14` đã chính thức loại bỏ các model cũ (`gemini-3.6-flas
    - Mount tương tự cho `/root/.claude.json` hoặc `/root/.claude` nếu có nhu cầu dùng song song Claude Code CLI.
 
 ### Giai đoạn 3: Triển khai & Xác minh Thực tế trên VPS
-1. Commit các thay đổi code lên GitHub (`origin main`).
-2. Trigger Dokploy redeploy ứng dụng `markitdown-web`.
-3. Kiểm tra log khởi động container và chạy test OCR thử nghiệm một trang sách cờ vua trên production `https://markitdown.dsc.edu.vn`.
-4. Cập nhật tài liệu `MEMORY.md` và `docs/LICH-SU-PHAT-TRIEN.md`.
+1. [x] Commit các thay đổi code lên GitHub (`origin main`) - Commit `d72cc40`.
+2. [x] Trigger Dokploy redeploy ứng dụng `markitdown-web` thành công.
+3. [x] Kiểm tra log khởi động container và xác minh mount volume bên trong container:
+   - Mount: `[{"Type":"bind","Source":"/root/.gemini","Destination":"/root/.gemini"}]`
+   - Test trong container: `agy -p '1+1=?' --model gemini-3.8-flash --effort low` -> Trả về `1 + 1 = 2` thành công không cần login lại.
+   - Giao diện web `https://markitdown.dsc.edu.vn` hoạt động bình thường (`HTTP 200`).
+4. [x] Cập nhật tài liệu `MEMORY.md` và `docs/LICH-SU-PHAT-TRIEN.md`.

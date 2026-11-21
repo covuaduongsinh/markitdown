@@ -15,7 +15,7 @@
 
 ## 2. Trạng thái dự án
 
-- Web production: `https://markitdown.dsc.edu.vn` (Docker → Dokploy, VPS). Đang chạy commit `269b3c4` (đã đồng bộ upstream v0.1.9). (2026-11-21)
+- Web production: `https://markitdown.dsc.edu.vn` (Docker → Dokploy, VPS). Đang chạy commit `d72cc40` (mặc định `gemini-3.8-flash`, đã mount `/root/.gemini`). (2026-11-21)
 - Tính năng mới nhất: Dropbox sync (`2c1df67`, 2026-09-27). Kế hoạch trước đó: Trung tâm cài đặt hạ tầng (2026-09-17).
 - Bộ tài liệu 2026-09-30: xem `docs/README.md`. S10 đã sửa 2026-10-13 (xem bên dưới); các mục khác trong `docs/RA-SOAT-RUI-RO.md` chưa sửa.
 - Cây làm việc sạch; bộ tài liệu và kế hoạch đồng bộ đã được commit vào `main` ngày 2026-11-21.
@@ -40,7 +40,8 @@
 | (trích từ mã) | Chú thích `_claude_fast_flags`: `effortLevel: xhigh` trong cài đặt người dùng khiến Claude "nghĩ" hàng chục nghìn token mỗi trang | Luôn truyền `--effort` cho `claude -p` |
 | 2026-10-13 | Tài liệu chính thức Claude Code CLI: `ANTHROPIC_API_KEY` có độ ưu tiên xác thực **cao hơn** `CLAUDE_CODE_OAUTH_TOKEN`; mã cũ set cả hai bằng cùng một cookie `sessionKey` → CLI luôn thử xác thực sai kiểu qua API key giả | Không bao giờ set `ANTHROPIC_API_KEY` bằng giá trị không phải API key thật, kể cả "chỉ để thử" |
 | 2026-10-13 | `claude setup-token` sinh OAuth token sống ~1 năm cho CI/server không trình duyệt; khi không reach được localhost callback (SSH/container), CLI tự chuyển sang hiện mã để dán ngược lại terminal | Dùng cơ chế này thay cookie `sessionKey` (hết hạn nhanh) cho mọi app chạy Claude Code trên server headless |
-| 2026-10-13 | Container production (Dokploy) chạy **không mount volume nào** (`docker inspect` → `Mounts: []`) | Mọi state ghi trong container (kể cả `~/.claude.json`) mất khi redeploy; chỉ biến môi trường cấu hình trong Dokploy mới bền vững |
+| 2026-10-13 | Container production (Dokploy) chạy trước đây không mount volume nào | Đã cấu hình bind mount `/root/.gemini` -> `/root/.gemini` trong Dokploy DB (2026-11-21) để giữ phiên đăng nhập Google Antigravity bền vững qua mọi lần deploy |
+| 2026-11-21 | CLI `agy 1.5.14` đã loại bỏ các model cũ (`gemini-3.7-flash`, v.v.), chuyển sang thế hệ mới (`gemini-3.8-flash`, `gemini-4-neon`, `gemini-4-hydrogen`, `gemini-4-argon`, `claude-sonnet-5-5`, `claude-opus-5-5`) | Mặc định chuyển sang `gemini-3.8-flash` cho cả OCR và Dịch |
 | 2026-11-21 | Upstream `microsoft/markitdown` bump lên v0.1.9, mở rộng Python 3.10-3.14, nâng cấp DocIntel API key & query fields | Toàn bộ 8 tệp fork giữ nguyên tương thích; test roundtrip FEN và smoke import đạt 100% |
 
 ## 4. Quyết định đã chốt (đừng đảo lại nếu không có lý do mới)

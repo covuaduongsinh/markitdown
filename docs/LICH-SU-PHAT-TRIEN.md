@@ -160,6 +160,19 @@ input/output).
 
 - Đã deploy thành công lên VPS Dokploy (`217.15.160.118`), dịch vụ Docker Swarm `app-copy-primary-feed-r4ikwl` chuyển sang container mới, tên miền `https://markitdown.dsc.edu.vn` phản hồi `HTTP 200 OK`. Kế hoạch triển khai chi tiết tại [`plans/2026-11-21-trien-khai-cap-nhat-vps-dokploy.md`](plans/2026-11-21-trien-khai-cap-nhat-vps-dokploy.md).
 
+### 2026-11-21: Cập nhật model Antigravity (Gemini 3.8/4) & Cấu hình Mount Volume bền vững trên VPS
+
+**Yêu cầu của chủ dự án:** Người dùng gặp lỗi OCR thất bại ở toàn bộ các trang trên web production, nghi vấn model AI thay đổi. Rà soát, lên kế hoạch và khắc phục hoàn thiện.
+
+**Đã làm:**
+- Rà soát `agy 1.5.14` trên VPS phát hiện model `gemini-3.7-flash` đã bị khai tử; CLI báo lỗi `model gemini-3.7-flash is not recognized`. Các model mới: `gemini-3.8-flash`, `gemini-4-neon`, `gemini-4-hydrogen`, `gemini-4-argon`, `claude-sonnet-5-5`, `claude-opus-5-5`.
+- Đồng thời phát hiện container Docker trên Dokploy bị thiếu bind mount thư mục `/root/.gemini` chứa token OAuth từ VPS host.
+- Cập nhật danh sách model trong `ai_engine.py`, `claude_ocr.py`, `claude_translate.py`, `markitdown_gui.py`, đổi model mặc định thành `gemini-3.8-flash`.
+- Thêm bind mount record vào cơ sở dữ liệu Dokploy (`mount` table: `/root/.gemini` -> `/root/.gemini`).
+- Commit (`d72cc40`), kích hoạt Dokploy build và deploy service `app-copy-primary-feed-r4ikwl` mới.
+- Container mới khởi động thành công với bind mount `/root/.gemini`, test trực tiếp lệnh `agy -p "1+1=?" --model gemini-3.8-flash --effort low` bên trong container trả về `2` chính xác. Web `https://markitdown.dsc.edu.vn` phản hồi HTTP 200.
+- Chi tiết kế hoạch tại [`plans/2026-11-21-cap-nhat-model-antigravity-va-mount-volume-vps.md`](plans/2026-11-21-cap-nhat-model-antigravity-va-mount-volume-vps.md).
+
 ## 5. Cách nối tiếp lịch sử này
 
 Khi làm một thay đổi có ý nghĩa, thêm một mục vào mục 4 với: ngày, yêu cầu, những gì đã làm, quyết định + lý do,
