@@ -74,6 +74,7 @@ Quét bằng script trên các tệp chạy thật; cột "Đọc ở" là `tệ
 | `CLAUDE_CODE_SESSION_ACCESS_TOKEN`, `ANTHROPIC_SESSION_KEY` | token phiên Claude | `claude_ocr.py:419`, `infrastructure.py:267` |
 | `DROPBOX_ACCESS_TOKEN`, `DROPBOX_REFRESH_TOKEN`, `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET` | xác thực Dropbox | `infrastructure.py:368–371` |
 | `OCRCHESS_MODELS_DIR` | thư mục mô hình ONNX | `chessboard_fen.py:38` |
+| `MID_AUTH_USER`, `MID_AUTH_PASS` | bật đăng nhập web khi **cả hai** có giá trị (`launch(auth=…)`); chỉ đặt một → app từ chối khởi động; không đặt → không khóa | `markitdown_gui.py` `_auth_from_env` |
 | `MID_FAKE_ENGINE` | `1` = bật **engine giả** (`fake_engine.py`): không gọi `agy`/`claude`/mạng; hiện thêm lựa chọn "Engine giả" và thành engine mặc định. Chỉ dùng để kiểm thử | `ai_engine.py`, `fake_engine.py` |
 | `MID_FAKE_DELAY` | giây ngủ mỗi lần "gọi AI" của engine giả (mặc định `0.3`) | `fake_engine.py` |
 | `MID_FAKE_FAIL_PAGES` | số trang (vd `3,5`) mà OCR giả sẽ báo lỗi, để thử luồng làm lại trang lỗi | `fake_engine.py` |

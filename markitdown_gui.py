@@ -1025,10 +1025,33 @@ def build_ui():
     return demo
 
 
+def _auth_from_env(env=None):
+    """Đọc MID_AUTH_USER / MID_AUTH_PASS -> (user, pass) hoặc None (không bật đăng nhập).
+
+    Cả hai biến cùng có giá trị mới bật. Chỉ đặt một trong hai là cấu hình sai: ném ValueError
+    thay vì lặng lẽ chạy không khóa (an toàn hơn cho một ứng dụng mở ra Internet).
+    """
+    env = os.environ if env is None else env
+    user = (env.get("MID_AUTH_USER") or "").strip()
+    pw = env.get("MID_AUTH_PASS") or ""
+    if not user and not pw:
+        return None
+    if not user or not pw:
+        raise ValueError(
+            "Chỉ đặt một trong hai biến MID_AUTH_USER / MID_AUTH_PASS. "
+            "Hãy đặt cả hai để bật đăng nhập, hoặc bỏ cả hai để tắt."
+        )
+    return (user, pw)
+
+
 if __name__ == "__main__":
     server_name = os.environ.get("GRADIO_SERVER_NAME", "127.0.0.1" if sys.platform == "win32" and not os.environ.get("DOCKER") else "0.0.0.0")
     server_port = int(os.environ.get("PORT", os.environ.get("GRADIO_SERVER_PORT", "7860")))
     inbrowser = os.environ.get("GRADIO_INBROWSER", "true" if sys.platform == "win32" and not os.environ.get("DOCKER") else "false").lower() in ("1", "true", "yes")
+    try:
+        auth = _auth_from_env()
+    except ValueError as exc:
+        sys.exit(f"❌ {exc}")
     build_ui().launch(
         server_name=server_name,
         server_port=server_port,
@@ -1037,7 +1060,6 @@ if __name__ == "__main__":
         css=CSS,
         head=HEAD,
         allowed_paths=[_OUTPUT_DIR, _ASSETS_DIR],
+        auth=auth,
+        auth_message="Đăng nhập để dùng MarkItDown — Cờ vua Dương Sinh." if auth else None,
     )
-
-
-

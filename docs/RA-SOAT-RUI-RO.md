@@ -18,7 +18,7 @@
 
 | ID | Mức | Độ chắc | Vấn đề | Nơi | Chi tiết |
 |---|:-:|:-:|---|---|---|
-| S1 | 🔴 | ✅ | **Web không có xác thực** (`launch()` không truyền `auth`). Ai vào được URL đều dùng được phiên AI thuê bao đã cấu hình | `markitdown_gui.py:1975` | [06](tinh-nang/06-giao-dien-gradio.md) |
+| S1 | 🔴 | ✅ | **Web không có xác thực** (`launch()` không truyền `auth`). Ai vào được URL đều dùng được phiên AI thuê bao đã cấu hình — **mã đã sẵn sàng (G0.4)**: đặt `MID_AUTH_USER` + `MID_AUTH_PASS` để bật; mặc định vẫn tắt nên rủi ro còn cho tới khi chủ dự án đặt biến trên Dokploy | `markitdown_gui.py:1975` | [06](tinh-nang/06-giao-dien-gradio.md) |
 | S2 | 🔴 | ✅ | **Token người dùng dán được ghi ra đĩa máy chủ và dùng chung**: `~/.gemini/antigravity-cli/antigravity-oauth-token` thuộc người dùng hệ điều hành, không thuộc người dùng web; người sau ghi đè người trước | `infrastructure.py:142` | [05](tinh-nang/05-ha-tang-va-ket-noi.md) |
 | S3 | 🟠 | ✅ | **Khóa/token lưu thô trong `localStorage`** (Gemini key, token Claude/Antigravity, Dropbox token, App Secret) và đi qua websocket của Gradio | `markitdown_gui.py:1812` | [06](tinh-nang/06-giao-dien-gradio.md), [07](tinh-nang/07-dong-bo-dropbox.md) |
 | S4 | 🟠 | ❓ | **Prompt injection**: bước dịch (`_call_agy`) đưa nội dung tài liệu vào prompt của `agy` chạy với `--dangerously-skip-permissions` (agent không hỏi quyền khi dùng công cụ). Tài liệu do người lạ tải lên có thể chứa chỉ dẫn độc hại | `claude_translate.py:313`, `ai_engine.py:317` | [04](tinh-nang/04-ai-engine.md) |

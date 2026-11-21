@@ -99,7 +99,7 @@ flowchart LR
   - Thay việc dò chuỗi `"gộp 1 bước"` (B9) bằng **cờ có cấu trúc**: `convert_file` trả thêm `translated: bool`; cập nhật bảng 4b trong `AGENTS.md`.
   - `markitdown_gui.py` vẫn là điểm vào (`Dockerfile`, `run_gui.bat` không đổi), chỉ còn `build_ui`, các handler và `launch`.
   - *Đạt khi:* `_test_translate_roundtrip.py` đạt; luồng G0.2 cho kết quả giống trước khi tách; `markitdown_gui.py` dưới ~900 dòng.
-- [ ] **G0.4 Xác thực tùy chọn (S1).** `launch(auth=(user, pass))` khi có `MID_AUTH_USER` + `MID_AUTH_PASS`; không có thì như cũ. Ghi vào `TECH.md` mục 6 và `docs/tinh-nang/10-…`.
+- [x] **G0.4 Xác thực tùy chọn (S1).** `launch(auth=(user, pass))` khi có `MID_AUTH_USER` + `MID_AUTH_PASS`; không có thì như cũ. Ghi vào `TECH.md` mục 6 và `docs/tinh-nang/10-…`.
   - *Đạt khi:* đặt hai biến → trang đòi đăng nhập; bỏ biến → vào thẳng. **Kiểm tài liệu Gradio đúng bản đã ghim** về tham số `auth` trước khi viết.
 - [ ] **G0.5 Bộ kiểm thử của fork.** Thư mục `tests_gui/` (kiểu `unittest`, chạy được bằng `python -m unittest discover tests_gui`), bắt đầu với: hàm thuần trong `pipeline.py`, `_apply_preset`, engine giả đầu-cuối. Cập nhật `docs/tinh-nang/11-kiem-thu.md`.
 

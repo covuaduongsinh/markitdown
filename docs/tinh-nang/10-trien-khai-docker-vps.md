@@ -85,6 +85,14 @@ hình sống trên Dokploy. Khi nhân bản phải ghi lại: tên miền, biế
 
 Bảng đầy đủ và nơi đọc: [`../../TECH.md`](../../TECH.md) mục "Biến môi trường".
 
+### Đăng nhập web (G0.4, 2026-11-21)
+
+Đặt **cả hai** biến `MID_AUTH_USER` và `MID_AUTH_PASS` trong cấu hình Dokploy rồi redeploy: Gradio hiện trang đăng nhập
+(`launch(auth=(user, pass))`), mọi đường `/config`, `/gradio_api/...` đều trả 401 khi chưa đăng nhập. Không đặt biến nào = như cũ (không khóa).
+Chỉ đặt một trong hai: ứng dụng **từ chối khởi động** (`❌ Chỉ đặt một trong hai biến…`) thay vì chạy không khóa.
+Đã kiểm trên Gradio 6.32.0 (cục bộ, engine giả): chưa đăng nhập `/config` → 401; sai mật khẩu → 400; đúng → 200. **Chưa kiểm chứng** sau reverse proxy Traefik của Dokploy (cookie phiên qua HTTPS).
+Đây là một tài khoản dùng chung, không tách phiên AI giữa người dùng (S2 vẫn mở).
+
 ## 5. CI
 
 `.github/workflows/tests.yml` (chạy khi `pull_request`) chạy ba job kiểm thử của **các gói upstream**
