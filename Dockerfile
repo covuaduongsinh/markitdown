@@ -37,15 +37,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
     /app/packages/markitdown[all] \
     /app/packages/markitdown-ocr \
-    gradio \
-    pypdfium2 \
-    pillow \
-    numpy \
-    chess \
-    onnxruntime \
-    opencv-python-headless \
-    dropbox \
-    requests
+    -r /app/requirements-gui.txt
 
 EXPOSE 7860
 

@@ -1,0 +1,12 @@
+# Phụ thuộc của ứng dụng web Gradio (8 tệp Python ở thư mục gốc).
+# Dev (.venv) và Docker cài cùng một tệp này để hai môi trường không lệch nhau.
+# gradio ghim theo bản production (kế hoạch 2026-11-21, quyết định Q2): CSS của app bám vào DOM
+# nội bộ của Gradio, nên đổi phiên bản có thể làm vỡ giao diện — nâng bản chỉ khi đã kiểm lại giao diện.
+gradio==6.32.0
+pypdfium2==5.9.0
+pillow==12.2.0
+numpy==2.4.6
+chess==1.11.2
+onnxruntime==1.20.1
+opencv-python-headless==4.13.0.92
+requests==2.34.2

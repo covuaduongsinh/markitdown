@@ -17,14 +17,14 @@
 
 | Thư viện | Phiên bản đã cài trong `.venv` | Dùng ở | Ghi chú |
 |---|---|---|---|
-| `gradio` | 6.17.3 (`gradio_client` 2.5.0) | `markitdown_gui.py` | Không ghim ở Dockerfile |
+| `gradio` | **6.32.0** (`gradio_client` 2.7.2) | `markitdown_gui.py` | Ghim ở `requirements-gui.txt` (bằng bản production); dev và Docker cài cùng tệp |
 | `onnxruntime` | 1.20.1 | `chessboard_fen.py` | Chỉ `CPUExecutionProvider` |
 | `opencv-python-headless` | 4.13.0.92 | `chessboard_fen.py` | |
 | `chess` (python-chess) | 1.11.2 | `chessboard_fen.py` | Chỉ để `refine_fen` |
-| `pypdfium2` | (đã cài, không ghim) | `claude_ocr.py` | Vẽ trang PDF |
-| `Pillow`, `numpy` | (không ghim) | `chessboard_fen.py`, `claude_ocr.py` | |
-| `dropbox` | (cài trong Dockerfile) | **không dùng** | Mã dùng `urllib` thuần |
-| `requests` | (lõi cũng phụ thuộc) | — | |
+| `pypdfium2` | 5.9.0 | `claude_ocr.py` | Vẽ trang PDF |
+| `Pillow`, `numpy` | 12.2.0, 2.4.6 | `chessboard_fen.py`, `claude_ocr.py` | |
+| `dropbox` | (đã bỏ khỏi Dockerfile, O5) | **không dùng** | Mã dùng `urllib` thuần |
+| `requests` | 2.34.2 | — | |
 | `tkinter` | thư viện chuẩn | `pick_files.py` | Chỉ Windows |
 
 ## 3. Gói upstream (thư mục `packages/`)

@@ -40,8 +40,8 @@ python -m venv .venv
 .venv\Scripts\pip.exe install -e "packages/markitdown[all]"
 ```
 
-Ngoài ra cần cài các gói của ứng dụng riêng (xem danh sách trong Dockerfile bên dưới): `gradio`, `pypdfium2`,
-`pillow`, `numpy`, `chess`, `onnxruntime`, `opencv-python-headless`, `dropbox`, `requests`. Thông điệp của
+Ngoài ra cần cài các gói của ứng dụng riêng bằng `pip install -r requirements-gui.txt` (đã ghim phiên bản: `gradio`,
+`pypdfium2`, `pillow`, `numpy`, `chess`, `onnxruntime`, `opencv-python-headless`, `requests`). Thông điệp của
 `run_gui.bat` **không** nhắc tới chúng — người mới dễ thiếu.
 
 ## 2. Docker: `Dockerfile`
@@ -54,7 +54,7 @@ Ngoài ra cần cài các gói của ứng dụng riêng (xem danh sách trong D
 | Node.js 20 | qua `deb.nodesource.com/setup_20.x`, rồi `npm install -g @anthropic-ai/claude-code` |
 | Antigravity | `curl -fsSL https://antigravity.google/cli/install.sh \| bash \|\| true` rồi `ln -sf /root/.local/bin/agy /usr/local/bin/agy \|\| true` |
 | Mã | `WORKDIR /app`, `COPY . /app` |
-| Python | `pip install /app/packages/markitdown[all] /app/packages/markitdown-ocr gradio pypdfium2 pillow numpy chess onnxruntime opencv-python-headless dropbox requests` |
+| Python | `pip install /app/packages/markitdown[all] /app/packages/markitdown-ocr -r /app/requirements-gui.txt` |
 | Chạy | `EXPOSE 7860`; `CMD ["python", "markitdown_gui.py"]` |
 
 `.dockerignore` loại `.git`, `.venv`, `.omc`, `__pycache__`, cache kiểm thử, `dist`, `build`, `*.egg-info`, tệp hệ điều hành.
@@ -99,11 +99,11 @@ Bảng đầy đủ và nơi đọc: [`../../TECH.md`](../../TECH.md) mục "Bi�
   [03](03-nhan-dien-ban-co-fen.md)), và Dockerfile không đặt `OCRCHESS_MODELS_DIR`. Trong container,
   `chessboard_fen.available()` trả `False` → OCR lùi về để AI tự đoán bàn cờ. Nếu muốn có FEN cục bộ trên VPS phải mount
   hoặc COPY mô hình và đặt biến này.
-- Gói `dropbox` cài nhưng không được import ([07](07-dong-bo-dropbox.md)); gói `markitdown-ocr` cài nhưng
+- Gói `dropbox` đã bỏ khỏi Dockerfile (không được import, [07](07-dong-bo-dropbox.md)); gói `markitdown-ocr` cài nhưng
   không được bật ([09](09-plugin-ocr-mcp-mau.md)).
-- Phiên bản gói Python trong Dockerfile **không ghim** (`gradio`, `onnxruntime`…): mỗi lần build có thể ra
-  bản khác. venv cục bộ hiện dùng `gradio 6.17.3`, `onnxruntime 1.20.1`, `chess 1.11.2`,
-  `opencv-python-headless 4.13.0.92`, `gradio_client 2.5.0` — nên ghim khớp.
+- Phiên bản gói GUI được **ghim** ở `requirements-gui.txt` (G0.1, 2026-11-21): `gradio==6.32.0` (bản production),
+  `onnxruntime 1.20.1`, `chess 1.11.2`, `opencv-python-headless 4.13.0.92`…; dev và Docker cài cùng tệp. Gói
+  `markitdown[all]`, `markitdown-ocr` và `claude-code` (npm) vẫn không ghim.
 - Không có `HEALTHCHECK`, không có người dùng không phải root: container chạy bằng **root** (đường dẫn
   `/root/.local/bin`, `~/.gemini`, `~/.claude.json` đều trong `/root`).
 
