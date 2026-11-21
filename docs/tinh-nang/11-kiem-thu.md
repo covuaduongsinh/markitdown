@@ -3,6 +3,7 @@
 > Tài liệu này mô tả mã nguồn tại commit `2c1df67b44` (2026-09-27).
 > Tệp của fork: `_test_dropbox_sync.py` (72 dòng), `_test_translate_roundtrip.py` (90 dòng).
 > Kiểm thử upstream: `packages/*/tests/`.
+> **Bổ sung 2026-11-21 (G0.5):** thư mục `tests_gui/` (29 test, `unittest`, dùng engine giả) — xem mục 1b.
 
 ---
 
@@ -14,6 +15,7 @@ Có **hai lớp** kiểm thử tách biệt:
 |---|---|:-:|
 | **Upstream** — `packages/markitdown/tests` (35 tệp), `markitdown-ocr`, `markitdown-mcp`, `markitdown-sample-plugin` | Thư viện chuyển đổi và các gói con | ✅ (GitHub Actions, khi `pull_request`) |
 | **Fork** — hai tệp `_test_*.py` ở thư mục gốc | Đồng bộ Dropbox; bảo vệ khối bàn cờ khi dịch | ❌ (không có job nào gọi tới) |
+| **Fork** — `tests_gui/` (từ 2026-11-21) | Lõi `pipeline.py`, luồng chuyển PDF→`.md`/`_vn.md`/`_fen.txt` bằng engine giả, preset, xác thực, dựng giao diện | ❌ (chạy tay) |
 
 Phần cốt lõi của bản fork — OCR, prompt, nhận diện bàn cờ, giao diện — **hầu như chưa có kiểm thử tự động**.
 
@@ -57,6 +59,21 @@ Kịch bản viết bằng các câu lệnh `assert` ở cấp mô-đun (không 
 (`api.dropboxapi.com`) — cần Internet; kỳ vọng chỉ là `ok=False`. Tệp import `markitdown_gui`, nên cần `gradio`
 đã cài. Ca `test_gui_prefs_state` truyền `engine_v="Google Antigravity"` và `mode_v="Sách cờ vua"` — **không phải**
 giá trị thật (`"antigravity"`, `MODE_CHESS`); test chỉ kiểm việc đóng gói dict, không kiểm giá trị hợp lệ.
+
+## 1b. `tests_gui/` — kiểm thử luồng bằng engine giả (G0.5)
+
+Chạy **từ thư mục gốc repo**: `.venv\Scripts\python.exe -m unittest discover tests_gui -v` (≈17 s, 29 test). Không gọi AI/Dropbox thật;
+mỗi test đặt `MID_FAKE_ENGINE=1`, `MID_FAKE_DELAY=0` qua `tests_gui/_setup.py` (phải import **trước** mã ứng dụng) và `sample_pdf.py` tạo PDF
+scan mẫu bằng Pillow.
+
+| Tệp | Kiểm gì |
+|---|---|
+| `test_pipeline.py` | `_safe_filename`, `_write_md` (chống đè), `_write_fen_file`, `_zip_all`, `_autosave`, `_resolve_save_dir`, các hàm `_*_from_label`, `_publish_output` (kiểu chính/inline, Dropbox giả), `convert_url` từ chối URL sai |
+| `test_fake_engine_flow.py` | PDF 6 trang: chế độ cờ vua + dịch riêng, gộp OCR+dịch (cờ `translated`), tài liệu thường, `MID_FAKE_FAIL_PAGES=3,5`, tự lưu; khẳng định **không** có `subprocess.run/Popen` nào được gọi |
+| `test_gui_misc.py` | `build_ui()` dựng được; CSS/JS nạp từ `assets/ui/`; bảng preset khớp danh sách model; `_auth_from_env` |
+
+Chưa có test cho: nút Dừng/hủy, công việc nền (làm ở G2), hiển thị trên trình duyệt (cần công cụ trình duyệt).
+Lưu ý: `test_build_ui_runs` in `ResourceWarning: unclosed event loop` của Gradio — vô hại.
 
 ## 2. Kiểm thử upstream — chạy thế nào
 
