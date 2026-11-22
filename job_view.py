@@ -48,48 +48,6 @@ def resume_label(job):
     return "▶ Chạy tiếp"
 
 
-def render_status_md(job, now=None):
-    """Khối Markdown trạng thái của công việc (cùng phong cách dòng trạng thái cũ)."""
-    now = now or time.time()
-    files = job["files"]
-    n = len(files)
-    n_ok = sum(1 for f in files if f["status"] == "done")
-    status = job["status"]
-    lines = []
-    if status == "done":
-        lines.append(f"🏁 Xong {n_ok}/{n} tệp.")
-    elif status == "cancelled":
-        lines.append(f"⏹ {job.get('message') or 'Đã dừng.'}")
-    elif status == "error":
-        lines.append(f"❌ {job.get('message') or 'Không có tệp nào chuyển đổi được.'}")
-    elif status == "queued":
-        lines.append("⌛ Đang chờ tới lượt chạy…")
-    for i, f in enumerate(files, 1):
-        name = f["name"]
-        st = f["status"]
-        if st == "done":
-            body = "\n  ".join(x for x in f.get("notes", []) if x)
-            lines.append(f"**{name}** — {body}" if body else f"**{name}** — ✅ xong")
-        elif st == "running":
-            started = f.get("started") or now
-            lines.append(f"⏳ Đang xử lý {i}/{n}: **{name}** — {_stage_text(f)} · {int(now - started)}s…")
-        elif st == "error":
-            lines.append(f"**{name}** — {f.get('error') or '❌ lỗi'}")
-        elif st == "cancelled":
-            kept = f.get("pages_done", 0)
-            tail = f" ({kept}/{f.get('pages_total')} trang đã được giữ lại)" if f.get("pages_total") else ""
-            lines.append(f"⏹ **{name}** — đã dừng{tail}")
-        else:
-            lines.append(f"⌛ Chờ: **{name}**")
-    k = failed_pages_total(job)
-    if k and status not in ACTIVE:
-        lines.append(
-            f"⚠️ {k} trang OCR bị lỗi (đã đánh dấu `*[Lỗi OCR trang N…]*` trong kết quả). "
-            f"Bấm «{resume_label(job)}» để chỉ làm lại các trang đó."
-        )
-    return "\n\n".join(lines)
-
-
 def signature(job):
     """Chuỗi thay đổi khi có tệp mới xong/đổi trạng thái -> lúc đó mới gửi lại phần xem trước và danh sách tải."""
     parts = [job["id"], job["status"]]
@@ -234,3 +192,173 @@ def queue_html(items, removable=True):
             f'<div class="mid-q-meta">{html.escape(" · ".join(meta))}</div></div>{x}</div>'
         )
     return f'<div class="mid-queue">{head}{"".join(rows)}</div>'
+
+
+# ---------------------------------------------------------------------- bảng trạng thái có cấu trúc (G1.4)
+_IDLE_ICON = (
+    '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" '
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
+    '<polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>'
+)
+_CHECK_ICON = (
+    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" '
+    'stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+)
+
+_CHIP = {
+    "queued": ("running", "Đang chờ"),
+    "running": ("running", "Đang xử lý…"),
+    "error": ("error", "Có lỗi"),
+    "cancelled": ("stopped", "Đã dừng"),
+}
+
+
+def idle_html(message=None):
+    """Trạng thái rỗng: biểu tượng + hướng dẫn. `message` (tùy chọn) hiện thêm một dòng thông báo."""
+    note = f'<div class="mid-st-msg">{html.escape(message)}</div>' if message else ""
+    return (
+        '<div class="mid-st mid-st-idle">'
+        '<div class="mid-st-head"><span class="mid-chip mid-chip-idle"><i class="mid-dot"></i>Chưa chạy</span></div>'
+        f'<div class="mid-idle-ico">{_IDLE_ICON}</div>'
+        '<div class="mid-idle-title">Kết quả Markdown sẽ hiện ở đây</div>'
+        '<div class="mid-idle-text">Chọn tệp hoặc dán URL bên trái, chọn chế độ xử lý rồi bấm <b>Chuyển đổi</b>.</div>'
+        f"{note}</div>"
+    )
+
+
+def message_html(text, kind="info"):
+    """Một thông báo ngắn (văn bản thuần, đã escape; xuống dòng giữ nguyên)."""
+    body = html.escape(text or "").replace("`", "").replace("\n", "<br>")
+    return f'<div class="mid-st mid-st-note mid-st-{html.escape(kind)}"><div class="mid-st-msg">{body}</div></div>'
+
+
+def _file_fraction(f, opts):
+    """Phần hoàn thành (0..1) của một tệp đang chạy. Có dịch riêng -> OCR chiếm 70%, dịch 30%."""
+    separate_tr = bool(opts.get("translate_vn")) and not opts.get("merge")
+    ocr_w = 0.7 if separate_tr else 1.0
+    pt, ct = f.get("pages_total") or 0, f.get("chunks_total") or 0
+    ocr = (f.get("pages_done", 0) / pt) if pt else 0.0
+    if f.get("stage") == "translate":
+        tr = (f.get("chunks_done", 0) / ct) if ct else 0.0
+        return ocr_w + (1 - ocr_w) * tr
+    if f.get("stage") == "publish":
+        return 0.97
+    return ocr_w * ocr
+
+
+def progress_percent(job):
+    files = job["files"]
+    if not files:
+        return 0
+    total = 0.0
+    for f in files:
+        if f["status"] == "done":
+            total += 1
+        elif f["status"] == "running":
+            total += _file_fraction(f, job.get("options", {}))
+    return int(round(100 * total / len(files)))
+
+
+def _elapsed(job, now):
+    start = job.get("started")
+    if not start:
+        return ""
+    end = now if job["status"] in ACTIVE else (job.get("finished") or now)
+    return f"{int(max(0, end - start))}s"
+
+
+def _file_li(f, now):
+    st = f["status"]
+    name = html.escape(f["name"])
+    tag = ""
+    if st == "done":
+        cls, ico = "is-done", _CHECK_ICON
+        tag = "Xong"
+        total = f.get("pages_total")
+        detail = f"{total} trang" if total else "Hoàn tất"
+        if f.get("pages_failed"):
+            cls, tag, detail = "is-warn", f"{f['pages_failed']} trang lỗi", "Hoàn tất, có trang OCR lỗi"
+    elif st == "running":
+        cls, ico = "is-run", ""
+        started = f.get("started") or now
+        detail = f"{_stage_text(f)} · {int(now - started)}s"
+        if f.get("stage") == "ocr" and f.get("pages_total"):
+            tag = f"trang {f.get('pages_done', 0)}/{f['pages_total']}"
+        elif f.get("stage") == "translate" and f.get("chunks_total"):
+            tag = f"đoạn {f.get('chunks_done', 0)}/{f['chunks_total']}"
+    elif st == "error":
+        cls, ico, tag = "is-err", "!", "Lỗi"
+        detail = html.escape(str(f.get("error") or "Lỗi không rõ"))
+    elif st == "cancelled":
+        cls, ico, tag = "is-stop", "■", "Đã dừng"
+        detail = f"{f.get('pages_done', 0)}/{f.get('pages_total')} trang được giữ lại" if f.get("pages_total") else "đã dừng"
+    else:
+        cls, ico, tag, detail = "is-wait", "", "Chờ", "Đang chờ tới lượt"
+    tag_html = f'<span class="mid-st-tag">{html.escape(tag)}</span>' if tag else ""
+    return (
+        f'<li class="mid-st-file {cls}"><span class="mid-st-ico">{ico}</span>'
+        f'<div class="mid-st-main"><div class="mid-st-name">{name}</div><div class="mid-st-detail">{detail}</div></div>'
+        f"{tag_html}</li>"
+    )
+
+
+def _is_chess(opts):
+    import pipeline
+
+    return pipeline._is_chess_mode(opts.get("mode_label", pipeline.MODE_CHESS))
+
+
+def render_status_html(job, now=None):
+    """Bảng trạng thái của công việc: chip, tiêu đề, thanh tiến độ, danh sách từng tệp, ghi chú xử lý."""
+    now = now or time.time()
+    files = job["files"]
+    n = len(files)
+    n_ok = sum(1 for f in files if f["status"] == "done")
+    status = job["status"]
+    opts = job.get("options", {})
+    if status == "done":
+        chip_cls, chip = "done", f"Xong {n_ok}/{n} tệp"
+    else:
+        chip_cls, chip = _CHIP.get(status, ("idle", status))
+    running = status in ACTIVE
+    pct = 100 if status == "done" else progress_percent(job)
+    elapsed = _elapsed(job, now)
+    parts = [f'<div class="mid-st" data-state="{html.escape(status)}">']
+    parts.append(
+        '<div class="mid-st-head">'
+        f'<span class="mid-chip mid-chip-{chip_cls}"><i class="mid-dot"></i>{html.escape(chip)}</span>'
+        + (f'<span class="mid-st-time">{elapsed}</span>' if elapsed else "")
+        + "</div>"
+    )
+    if running:
+        sub = "OCR bằng AI"
+        if _is_chess(opts):
+            sub += " · nhận diện sơ đồ cờ → FEN"
+        if opts.get("translate_vn"):
+            sub += " · dịch sang tiếng Việt"
+        title = "Đang chờ tới lượt chạy…" if status == "queued" else f"Đang chuyển đổi {n} tệp"
+        parts.append(f'<div class="mid-st-title">{title}</div><div class="mid-st-sub">{html.escape(sub)}</div>')
+    elif status in ("cancelled", "error") and job.get("message"):
+        parts.append(f'<div class="mid-st-sub">{html.escape(job["message"])}</div>')
+    if running or pct:
+        parts.append(
+            f'<div class="mid-progress" role="progressbar" aria-valuenow="{pct}" aria-valuemin="0" aria-valuemax="100">'
+            f'<span style="width:{pct}%"></span></div>'
+        )
+    parts.append('<ul class="mid-st-files">' + "".join(_file_li(f, now) for f in files) + "</ul>")
+    k = failed_pages_total(job)
+    if k and not running:
+        parts.append(
+            f'<div class="mid-st-warn">⚠️ {k} trang OCR bị lỗi (đã đánh dấu <code>*[Lỗi OCR trang N…]*</code> trong kết quả). '
+            f"Bấm «{html.escape(resume_label(job))}» để chỉ làm lại các trang đó.</div>"
+        )
+    notes = []
+    for f in files:
+        lines = [x for x in f.get("notes", []) if x]
+        if lines:
+            notes.append(f["name"] + "\n  " + "\n  ".join(lines))
+    if notes:
+        body = html.escape("\n\n".join(notes))
+        parts.append(f'<details class="mid-st-notes"><summary>Chi tiết xử lý</summary><pre>{body}</pre></details>')
+    parts.append("</div>")
+    return "".join(parts)

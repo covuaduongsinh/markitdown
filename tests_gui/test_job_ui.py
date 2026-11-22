@@ -36,24 +36,46 @@ class UiBase(unittest.TestCase):
 
 
 class TestStatusRendering(UiBase):
-    def test_status_lines_for_each_state(self):
+    def test_status_html_for_each_state(self):
         job = dict(
-            id="x", status="running", message="", options={},
+            id="x", status="running", message="", options={"translate_vn": True, "merge": False},
+            started=100.0,
             files=[
-                dict(idx=0, name="a.pdf", status="done", notes=["✅ xong a"], outputs=[], pages_failed=0),
+                dict(idx=0, name="a<x>.pdf", status="done", notes=["✅ xong a"], outputs=[], pages_failed=0, pages_total=4),
                 dict(idx=1, name="b.pdf", status="running", stage="ocr", pages_done=6, pages_total=12, started=100.0, outputs=[], pages_failed=0),
                 dict(idx=2, name="c.pdf", status="pending", outputs=[], pages_failed=0),
             ],
         )
-        md = job_view.render_status_md(job, now=130.0)
-        self.assertIn("**a.pdf** — ✅ xong a", md)
-        self.assertIn("⏳ Đang xử lý 2/3: **b.pdf** — OCR trang 6/12 · 30s…", md)
-        self.assertIn("⌛ Chờ: **c.pdf**", md)
-        job["status"] = "cancelled"
-        job["message"] = "Đã dừng."
-        job["files"][1].update(status="cancelled")
-        self.assertIn("⏹ Đã dừng.", job_view.render_status_md(job))
-        self.assertIn("đã dừng (6/12 trang đã được giữ lại)", job_view.render_status_md(job))
+        h = job_view.render_status_html(job, now=130.0)
+        self.assertIn("Đang xử lý…", h)                      # chip
+        self.assertIn("Đang chuyển đổi 3 tệp", h)
+        self.assertIn("trang 6/12", h)                       # thẻ bên phải của tệp đang chạy
+        self.assertIn("OCR trang 6/12 · 30s", h)
+        self.assertIn("a&lt;x&gt;.pdf", h)                    # tên tệp đã escape
+        self.assertNotIn("a<x>", h)
+        self.assertIn("is-done", h)
+        self.assertIn("is-wait", h)
+        self.assertIn('aria-valuenow="', h)                  # thanh tiến độ
+        # OCR 6/12 trong tệp 2, có dịch riêng: (1 + 0.7*0.5)/3 = 45%
+        self.assertEqual(job_view.progress_percent(job), 45)
+        job["status"], job["message"] = "cancelled", "Đã dừng."
+        job["files"][1]["status"] = "cancelled"
+        h = job_view.render_status_html(job, now=130.0)
+        self.assertIn("mid-chip-stopped", h)
+        self.assertIn("6/12 trang được giữ lại", h)
+        job["status"] = "done"
+        job["files"][1]["status"] = job["files"][2]["status"] = "done"
+        h = job_view.render_status_html(job, now=130.0)
+        self.assertIn("Xong 3/3 tệp", h)
+        self.assertIn('aria-valuenow="100"', h)
+
+    def test_idle_and_message_html(self):
+        self.assertIn("Kết quả Markdown sẽ hiện ở đây", job_view.idle_html())
+        self.assertIn("Chưa chạy", job_view.idle_html())
+        m = job_view.message_html("<b>x</b>" + chr(10) + "`y`", "warn")
+        self.assertNotIn("<b>", m)
+        self.assertIn("<br>", m)
+        self.assertNotIn("`", m)
 
     def test_resume_label_and_signature(self):
         jid, job = self.run_job()
@@ -74,6 +96,43 @@ class TestStatusRendering(UiBase):
 
         p = os.path.join(self.tmp, 'x"><script>.md')  # chỉ dựng HTML, không cần tệp tồn tại (Windows không tạo được tên này)
         self.assertNotIn("<script>", _download_panel([p]))
+
+
+class TestUrlConversion(UiBase):
+    """G1.9: chuyển từ URL ngang hàng với tệp — tùy chọn dịch + dùng chung _publish_output."""
+
+    def _fake_convert_url(self, url, enable_plugins):
+        md = "## Chapter 1: The Italian Game" + chr(10) + chr(10) + "White develops the knight and the bishop toward the centre of the board."
+        path = pipeline._write_md(md, "mid_test_url")
+        return md, md, path, "✅ Thành công"
+
+    def test_translate_autosave_and_download_panel(self):
+        import markitdown_gui as g
+        from unittest import mock
+
+        out_dir = os.path.join(self.tmp, "luu")
+        with mock.patch.object(g, "convert_url", self._fake_convert_url):
+            preview, raw, downloads, status = g.on_convert_url(
+                "https://example.org", False, True, False, "/MarkItDown", "", "", "", "",
+                translate_vn=True, translate_model="fake", translate_effort="low", engine="fake",
+                autosave_on=True, autosave_dir=out_dir, mode_label=pipeline.MODE_GENERAL,
+            )
+        self.assertIn("Chapter 1", preview)
+        self.assertEqual(sorted(os.listdir(out_dir)), ["ketqua_url_vn.md", "mid_test_url.md"])  # bản gốc tên do hàm giả đặt; bản dịch luôn là ketqua_url_vn
+        with open(os.path.join(out_dir, "ketqua_url_vn.md"), encoding="utf-8") as f:
+            self.assertIn("Chương 1: Khai cuộc Ý", f.read())
+        self.assertIn("ketqua_url_vn.md", downloads)
+        self.assertIn("Đã dịch", status)
+        self.assertIn("💾 [VPS] đã lưu", status)
+        self.assertIn('data-auto-download="1"', downloads)
+        self.assertNotIn("`", status)
+
+    def test_failure_has_no_downloads(self):
+        import markitdown_gui as g
+
+        preview, raw, downloads, status = g.on_convert_url("", False)
+        self.assertEqual(downloads, "")
+        self.assertIn("mid-st-warn", status)
 
 
 class TestQueue(UiBase):

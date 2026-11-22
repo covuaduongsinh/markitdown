@@ -31,6 +31,12 @@ import job_view
 import jobs
 from pipeline import (
     _OUTPUT_DIR,
+    _chess_lang_from_mode,
+    _effort_from_label,
+    _is_chess_mode,
+    _model_from_label,
+    _publish_output,
+    _translate_to_vn,
     AUTOSAVE_CUSTOM,
     AUTOSAVE_SRC,
     MODE_CHESS,
@@ -60,7 +66,6 @@ from ui_theme import (
 
 
 
-_STATUS_HINT = job_handlers.STATUS_HINT
 
 
 def _picked_display(paths):
@@ -97,27 +102,44 @@ def on_convert_url(
     url, enable_plugins, auto_download_on=True,
     dropbox_sync_on=False, dropbox_folder="/MarkItDown",
     dropbox_token="", dropbox_refresh_token="", dropbox_app_key="", dropbox_app_secret="",
+    translate_vn=False, translate_model="gemini-3.8-flash", translate_effort="low", engine=ENGINE_ANTIGRAVITY,
+    autosave_on=False, autosave_dir="", api_key="", claude_token="", agy_token="", mode_label=MODE_GENERAL,
 ):
+    """Chuyển một URL sang Markdown. Ngang hàng với chuyển từ tệp: có tùy chọn dịch sang tiếng Việt và dùng chung
+    `_publish_output` (thư mục tự lưu, Dropbox, tải về máy). Chạy ngay trong sự kiện, không qua công việc nền."""
     preview, raw_md, path, st = convert_url(url, enable_plugins)
-    if path and dropbox_sync_on:
-        dbx_path, dbx_err = infrastructure.upload_to_dropbox(
-            path, target_folder=dropbox_folder,
-            token=dropbox_token, refresh_token=dropbox_refresh_token,
+    notes = [st] if st else []
+    done = []
+    if path:
+        done.append(path)
+        if translate_vn and (raw_md or "").strip():
+            vn_path, vn_st = _translate_to_vn(
+                raw_md, "ketqua_url.md", _model_from_label(translate_model), done,
+                chess=_is_chess_mode(mode_label), chess_lang=_chess_lang_from_mode(mode_label),
+                effort=_effort_from_label(translate_effort, default="low"), engine=engine,
+                api_key=api_key or None, claude_token=claude_token or None, agy_token=agy_token or None,
+            )
+            notes.append(vn_st)
+            if vn_path:
+                done.append(vn_path)
+        cfg = dict(
+            folder=dropbox_folder, token=dropbox_token, refresh_token=dropbox_refresh_token,
             app_key=dropbox_app_key, app_secret=dropbox_app_secret,
         )
-        if dbx_path:
-            st += f"\n  ☁️ [Dropbox] Đã đồng bộ: `{dbx_path}`"
-        elif dbx_err:
-            st += f"\n  ⚠️ [Dropbox] {dbx_err}"
-    paths = [path] if path else []
-    return preview, raw_md, _download_panel(paths, auto_download=auto_download_on), st
+        for k, p in enumerate(done):
+            notes.append(f"`{os.path.basename(p)}`" + _publish_output(
+                p, autosave_dir, dropbox_cfg=cfg, inline=k > 0, autosave_on=bool(autosave_on),
+                dropbox_sync_on=bool(dropbox_sync_on), auto_download_on=bool(auto_download_on),
+            ))
+    kind = "ok" if path else "warn"
+    return preview, raw_md, _download_panel(done, auto_download=auto_download_on), job_view.message_html("\n".join(notes), kind)
 
 
 def on_clear():
     # Xoá kết quả hiển thị + danh sách tệp đã chọn bằng hộp thoại + liên kết tới công việc hiện tại.
     # (Công việc vẫn nằm trong tab Lịch sử; muốn dừng việc đang chạy thì bấm Dừng.)
     return (
-        "", "", "", _STATUS_HINT, [], "", "", "",
+        "", "", "", job_view.idle_html(), [], "", "", "",
         gr.update(visible=False), job_view.flag_html(None),
     )
 
@@ -528,7 +550,7 @@ def build_ui():
             # ============ CỘT PHẢI — xem trước / kết quả ============
             with gr.Column(elem_classes="mid-col-right"):
                 with gr.Column(elem_classes=["mid-card", "mid-preview-card"]):
-                    status = gr.Markdown(_STATUS_HINT, elem_id="mid-status")
+                    status = gr.HTML(job_view.idle_html(), elem_id="mid-status")
                     with gr.Tabs(elem_classes="mid-result-tabs"):
                         with gr.Tab("Xem trước"):
                             preview = gr.Markdown(elem_id="mid-preview")
@@ -823,6 +845,8 @@ def build_ui():
                 url_in, enable_plugins, auto_download_on,
                 dropbox_sync_on, dropbox_folder_in,
                 dropbox_token_in, dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in,
+                translate_vn, translate_model, translate_effort, engine_select,
+                autosave_on, autosave_dir, api_key_in, claude_token_in, agy_token_in, mode,
             ],
             outputs,
             show_progress="full",
@@ -836,6 +860,8 @@ def build_ui():
                 url_in, enable_plugins, auto_download_on,
                 dropbox_sync_on, dropbox_folder_in,
                 dropbox_token_in, dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in,
+                translate_vn, translate_model, translate_effort, engine_select,
+                autosave_on, autosave_dir, api_key_in, claude_token_in, agy_token_in, mode,
             ],
             outputs,
             show_progress="full",

@@ -17,7 +17,6 @@ import jobs
 import pipeline
 from ui_render import _download_panel
 
-STATUS_HINT = "👋 Chọn tệp hoặc dán URL rồi bấm **Chuyển đổi**."
 TICK_SECONDS = 2
 
 
@@ -78,7 +77,7 @@ def render_job(job_id, last_sig="", reattach=False):
         )
     resumable = mgr.is_resumable(job)
     return (
-        job_view.render_status_md(job), preview, raw, downloads, sig,
+        job_view.render_status_html(job), preview, raw, downloads, sig,
         gr.Timer(TICK_SECONDS, active=active),
         gr.update(visible=not active), gr.update(visible=active),
         gr.update(visible=resumable, value=job_view.resume_label(job)),
@@ -109,7 +108,7 @@ def on_start_job(
     sources, real = collect_sources(file_paths, picked_paths)
     if not sources:
         return ("",) + _idle(
-            "⚠️ **Chưa có tệp nào được tải lên.**\n\nVui lòng kéo-thả tệp vào khung tải tệp ở trên trước khi bấm **Chuyển đổi**."
+            job_view.message_html("⚠️ Chưa có tệp nào được tải lên." + chr(10) + "Vui lòng kéo-thả tệp vào khung tải tệp ở trên trước khi bấm Chuyển đổi.", "warn")
         )
     options = dict(
         mode_label=mode_label, use_ocr=bool(use_ocr), force_ocr=bool(force_ocr),
@@ -137,7 +136,7 @@ def on_start_job(
 def on_stop_job(job_id):
     """Bấm Dừng: diệt tiến trình AI đang chạy; trạng thái cuối cùng đến qua Timer."""
     if job_id and _mgr().cancel(job_id):
-        return "⏹ **Đang dừng…** diệt các tiến trình AI đang chạy; các trang đã xong được giữ lại."
+        return job_view.message_html("⏹ Đang dừng… diệt các tiến trình AI đang chạy; các trang đã xong được giữ lại.", "warn")
     return gr.skip()
 
 
@@ -169,7 +168,7 @@ def history_refresh():
 def history_open(job_id):
     """Mở lại kết quả một công việc cũ. Trả về [job_id] + JOB_OUTPUTS."""
     if not job_id or not _mgr().get(job_id):
-        return ("",) + _idle("ℹ️ Chọn một công việc trong danh sách rồi bấm **Mở**.")
+        return ("",) + _idle(job_view.message_html("ℹ️ Chọn một công việc trong danh sách rồi bấm «Mở kết quả».", "info"))
     return (job_id,) + render_job(job_id, "", reattach=True)
 
 
