@@ -5,6 +5,7 @@
 
   function setThemeBtn(){
     var dark = document.body.getAttribute('data-mid-theme') === 'dark';
+    document.body.classList.toggle('dark', dark);  // đồng bộ theme tối của chính Gradio (thành phần gốc dùng biến theme *_dark)
     var want = dark ? 'sun' : 'moon';
     document.querySelectorAll('[data-mid-theme-icon]').forEach(function(el){
       if (el.getAttribute('data-mid-icon') !== want){ el.innerHTML = dark ? SUN : MOON; el.setAttribute('data-mid-icon', want); }

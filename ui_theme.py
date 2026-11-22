@@ -8,6 +8,8 @@ Bộ nhận diện "Cờ vua Dương Sinh" (navy/sun/teal), tái tạo từ desi
 import base64
 import json
 import os
+import re
+from urllib.parse import quote
 
 import gradio as gr
 
@@ -28,17 +30,81 @@ _PIECE_NAMES = ["wp", "wn", "wb", "wr", "wq", "wk", "bp", "bn", "bb", "br", "bq"
 _PIECES = {n: _svg_data_uri(f"pieces/{n}.svg") for n in _PIECE_NAMES}
 _SYMBOL_WHITE = _svg_data_uri("symbol-white.svg")
 
-THEME = gr.themes.Base(
-    font=[gr.themes.GoogleFont("Roboto"), "Segoe UI", "system-ui", "sans-serif"],
-    font_mono=[gr.themes.GoogleFont("Roboto Mono"), "monospace"],
-)
+# --- Phông tự lưu trữ (assets/fonts/*.woff2, giấy phép OFL/Apache-2.0 — xem LICENSE-*.txt cùng thư mục) ---------------
+# Trước đây nạp từ Google Fonts: mạng chậm tới CDN làm cả trang đứng ở "Loading…" hơn 20 giây (K8).
+_FONT_FAMILIES = {"roboto-condensed": "Roboto Condensed", "roboto-mono": "Roboto Mono", "roboto": "Roboto"}
+_FONT_RANGES = {
+    "latin": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,"
+             "U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD",
+    "latin-ext": "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,"
+                 "U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF",
+    "vietnamese": "U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,"
+                  "U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB",
+    "cyrillic": "U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116",
+}
+_FONT_FILE_RE = re.compile(r"^(roboto-condensed|roboto-mono|roboto)-(latin-ext|latin|vietnamese|cyrillic)-(\d+)-normal\.woff2$")
 
-_FONTS_LINK = (
-    '<link rel="preconnect" href="https://fonts.googleapis.com">'
-    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-    '<link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;'
-    "0,400;0,500;0,700;0,900;1,400&family=Roboto+Condensed:wght@400;500;600;700"
-    '&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">'
+
+def font_face_css():
+    """Sinh các khối @font-face cho mọi tệp trong assets/fonts/. Đường dẫn qua /gradio_api/file= (thư mục assets nằm
+    trong allowed_paths), tính theo vị trí thật của tệp nên chạy đúng ở mọi nơi triển khai."""
+    fonts_dir = os.path.join(_ASSETS_DIR, "fonts")
+    try:
+        names = sorted(os.listdir(fonts_dir))
+    except OSError:
+        return ""
+    blocks = []
+    for name in names:
+        m = _FONT_FILE_RE.match(name)
+        if not m:
+            continue
+        pkg, subset, weight = m.groups()
+        url = "/gradio_api/file=" + quote(os.path.join(fonts_dir, name).replace("\\", "/"))
+        blocks.append(
+            f"@font-face{{font-family:'{_FONT_FAMILIES[pkg]}';font-style:normal;font-weight:{weight};"
+            f"font-display:swap;src:url('{url}') format('woff2');unicode-range:{_FONT_RANGES[subset]};}}"
+        )
+    return "\n".join(blocks) + "\n"
+
+
+# --- Theme Gradio: màu/bo góc/phông của thành phần gốc đặt qua .set() thay vì ghi đè DOM nội bộ (Q3) -----------------
+_NAVY = gr.themes.Color(
+    c50="#EEF0FA", c100="#E9EBF6", c200="#C9CEEA", c300="#9FA8D8", c400="#6F7BC0", c500="#4553A8",
+    c600="#2B3990", c700="#232E78", c800="#1E2A6B", c900="#151D49", c950="#0E1430", name="mid_navy",
+)
+THEME = gr.themes.Base(
+    primary_hue=_NAVY, secondary_hue=_NAVY, neutral_hue=gr.themes.colors.slate,
+    # gr.themes.Font = phông cục bộ (không nạp stylesheet từ CDN); chuỗi trơn làm Gradio lỗi khi so sánh theme.
+    font=[gr.themes.Font("Roboto"), gr.themes.Font("Segoe UI"), gr.themes.Font("system-ui"), gr.themes.Font("sans-serif")],
+    font_mono=[gr.themes.Font("Roboto Mono"), gr.themes.Font("ui-monospace"), gr.themes.Font("monospace")],
+    radius_size=gr.themes.sizes.radius_md,
+).set(
+    body_background_fill="#F1F3F9", body_background_fill_dark="#0E1430",
+    background_fill_primary="#FFFFFF", background_fill_primary_dark="#1A2356",
+    background_fill_secondary="#F5F6FB", background_fill_secondary_dark="#141C49",
+    block_background_fill="#FFFFFF", block_background_fill_dark="#1A2356",
+    block_border_color="#E3E5EC", block_border_color_dark="rgba(255,255,255,0.10)",
+    border_color_primary="#E3E5EC", border_color_primary_dark="rgba(255,255,255,0.10)",
+    body_text_color="#16203A", body_text_color_dark="#F2F4FB",
+    body_text_color_subdued="#6E7486", body_text_color_subdued_dark="#A6AED2",
+    block_label_text_color="#6E7486", block_label_text_color_dark="#A6AED2",
+    block_title_text_color="#3A4254", block_title_text_color_dark="#D4D9EE",
+    input_background_fill="#F5F6FB", input_background_fill_dark="#141C49",
+    input_border_color="#E3E5EC", input_border_color_dark="rgba(255,255,255,0.10)",
+    input_border_color_focus="#2B3990", input_border_color_focus_dark="#6378D6",
+    button_primary_background_fill="#2B3990", button_primary_background_fill_dark="#2B3990",
+    button_primary_background_fill_hover="#1E2A6B", button_primary_background_fill_hover_dark="#3A4CB0",
+    button_primary_text_color="#FFFFFF", button_primary_text_color_dark="#FFFFFF",
+    button_primary_border_color="#2B3990", button_primary_border_color_dark="#2B3990",
+    button_secondary_background_fill="#F5F6FB", button_secondary_background_fill_dark="#141C49",
+    button_secondary_background_fill_hover="#E9EBF6", button_secondary_background_fill_hover_dark="#1A2356",
+    button_secondary_text_color="#3A4254", button_secondary_text_color_dark="#D4D9EE",
+    button_secondary_border_color="#E3E5EC", button_secondary_border_color_dark="rgba(255,255,255,0.10)",
+    checkbox_background_color_selected="#2B3990", checkbox_background_color_selected_dark="#2B3990",
+    checkbox_border_color_selected="#2B3990", checkbox_border_color_selected_dark="#2B3990",
+    loader_color="#2B3990", loader_color_dark="#F6B92B",
+    block_radius="18px", button_large_radius="12px", button_small_radius="9px", input_radius="9px",
+    block_shadow="none", block_shadow_dark="none",
 )
 
 
@@ -52,10 +118,10 @@ def _read_asset(rel_path):
 # Nội dung ở assets/ui/app.js (không gồm thẻ <script>).
 _SCRIPT = "\n<script>\n" + _read_asset("ui/app.js") + "</script>\n"
 
-HEAD = _FONTS_LINK + _SCRIPT.replace("__MID_PIECES__", json.dumps(_PIECES))
+HEAD = _SCRIPT.replace("__MID_PIECES__", json.dumps(_PIECES))
 
-# CSS: nội dung ở assets/ui/app.css.
-CSS = "\n" + _read_asset("ui/app.css")
+# CSS: @font-face (sinh theo vị trí tệp) + nội dung ở assets/ui/app.css.
+CSS = "\n" + font_face_css() + _read_asset("ui/app.css")
 
 
 # Doc-mode icon (lucide file-text) cho thẻ "Tài liệu thường".

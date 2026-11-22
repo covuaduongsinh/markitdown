@@ -29,6 +29,22 @@ class TestUiAssets(unittest.TestCase):
         self.assertEqual(ui_theme.MODE_CARDS_HTML.count('data-mid-mode="'), 4)
 
 
+class TestSelfHostedFonts(unittest.TestCase):
+    def test_no_cdn_and_font_faces_present(self):
+        css = ui_theme.CSS + ui_theme.HEAD
+        for host in ("fonts.googleapis.com", "fonts.gstatic.com"):
+            self.assertNotIn(host, css)
+        self.assertGreaterEqual(css.count("@font-face"), 30)
+        self.assertIn("font-family:'Roboto Condensed'", css)
+        self.assertIn("unicode-range:U+0102-0103", css)  # tập vietnamese
+        self.assertIn("/gradio_api/file=", css)
+
+    def test_every_font_file_has_a_face_and_exists(self):
+        import os
+        names = [n for n in os.listdir(os.path.join(ui_theme._ASSETS_DIR, "fonts")) if n.endswith(".woff2")]
+        self.assertEqual(ui_theme.font_face_css().count("@font-face"), len(names))
+
+
 class TestPresets(unittest.TestCase):
     def test_every_preset_model_is_in_the_engine_choices(self):
         cases = [

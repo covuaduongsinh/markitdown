@@ -156,7 +156,7 @@ def build_ui():
             with gr.Column(elem_classes="mid-col-left"):
 
                 # --- panel nhập liệu ---
-                with gr.Group(elem_classes=["mid-card", "mid-input-card"]):
+                with gr.Column(elem_classes=["mid-card", "mid-input-card"]):
                     with gr.Tabs(elem_classes="mid-input-tabs"):
                         with gr.Tab("Từ tệp"):
                             gr.HTML(
@@ -370,7 +370,7 @@ def build_ui():
                                 )
 
                 # --- panel chế độ xử lý (thẻ HTML + radio ẩn để giữ backend) ---
-                with gr.Group(elem_classes=["mid-card", "mid-mode-card"]):
+                with gr.Column(elem_classes=["mid-card", "mid-mode-card"]):
                     gr.HTML('<div class="mid-section-title">Chế độ xử lý</div>')
                     gr.HTML(MODE_CARDS_HTML)
                     mode = gr.Radio(
@@ -382,7 +382,7 @@ def build_ui():
                     )
 
                 # --- panel chất lượng + chuyển đổi ---
-                with gr.Group(elem_classes=["mid-card", "mid-quality-card"]):
+                with gr.Column(elem_classes=["mid-card", "mid-quality-card"]):
                     with gr.Row(elem_classes="mid-quality-head"):
                         gr.HTML('<div class="mid-section-title">Mức chất lượng</div>')
                         preset_hint = gr.HTML(
@@ -523,9 +523,9 @@ def build_ui():
 
             # ============ CỘT PHẢI — xem trước / kết quả ============
             with gr.Column(elem_classes="mid-col-right"):
-                with gr.Group(elem_classes=["mid-card", "mid-preview-card"]):
+                with gr.Column(elem_classes=["mid-card", "mid-preview-card"]):
                     status = gr.Markdown(_STATUS_HINT, elem_id="mid-status")
-                    with gr.Tabs():
+                    with gr.Tabs(elem_classes="mid-result-tabs"):
                         with gr.Tab("Xem trước"):
                             preview = gr.Markdown(elem_id="mid-preview")
                         with gr.Tab("Mã .md"):
