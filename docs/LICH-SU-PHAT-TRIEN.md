@@ -227,6 +227,22 @@ input/output).
 
 **Chưa làm / chưa kiểm chứng:** thiết bị di động thật, Safari/Firefox, hộp thoại chọn tệp Windows (`pick_files.py`) và đường tệp chọn bằng hộp thoại trên giao diện mới; thử với AI thật; so sánh từng pixel với `MarkItDown.dc.html` (so bằng mắt: bố cục/màu/chip/thanh tiến độ khớp; icon và vài khoảng cách khác nhỏ); ảnh trang thu nhỏ (G3.2). Phát hiện thêm P8–P10 ở cuối kế hoạch.
 
+### 2026-11-22: Giai đoạn 3 — hiệu đính nội dung cờ vua (và merge Giai đoạn 1 vào `main`)
+
+**Yêu cầu của chủ dự án:** "Merge rồi tiếp G3".
+
+**Đã làm:**
+- Merge fast-forward `feat/nang-cap-giao-dien` → `main` (`39ecfcc..87d20f5`) và push; không deploy (auto deploy đang tắt).
+- G3.1+G3.2 `f0be10f`: `fen_tools.py` (liệt kê/thay thứ n/xoay/kiểm tra FEN, bàn cờ HTML, Lichess), `review.py` (ghi FEN vào `.md`, `_vn.md`, `raw.md`, điểm lưu trang, `_fen.txt`, zip; đối chiếu trang; ảnh trang tạo khi xem), `review_handlers.py` và hai tab mới.
+- G3.3 `41ef752`: `glossary.py` + thẻ ở trang Cài đặt; khối thuật ngữ chèn vào prompt OCR-gộp-dịch và dịch riêng; khóa điểm lưu dịch có dấu vân tay thuật ngữ. **(Đây là thay đổi prompt gửi AI được kế hoạch cho phép riêng ở mục G3.3.)**
+- G3.4 `2a66f3f`: `obsidian.py`, hai công tắc, tách chương vào zip, hiệu đính FEN làm lại chương; `_atomic_write` ghi LF.
+
+**Quyết định + lý do:** thumbnails tạo khi xem thay vì lúc OCR (chạy được cả với công việc cũ, không đổi `ocr_pdf`); tính trước mọi nội dung rồi mới ghi khi sửa FEN (không để tệp ghi dở); sửa FEN cũng ghi vào điểm lưu trang để "Chạy tiếp" không làm mất; chương Obsidian chỉ vào zip để danh sách tải không phình; `gr.Number` không đặt `minimum`.
+
+**Cách kiểm chứng:** 146 test `unittest discover tests_gui` + `_test_translate_roundtrip.py` đạt. Chạy app thật (engine giả) bằng Chrome: bảng FEN (bấm dòng, lật, áp dụng; Mã .md đổi theo), đối chiếu trang (ảnh 900×1164 tải được, bàn cờ vẽ ở khung phải, lọc, chuyển trang), lưu thuật ngữ (thông báo + cảnh báo dòng sai), Obsidian (`Tải tất cả · 14 tệp`, ghi chú "tách 12 chương").
+
+**Chưa làm / chưa kiểm chứng:** thuật ngữ với AI thật; hiệu đính trên sách thật (độ lệch ánh xạ trang khi OCR nhiều trang/lần); Safari/Firefox; di động thật cho hai tab mới; chưa deploy G1+G3 lên production. Phát hiện thêm P11–P13 ở cuối kế hoạch.
+
 ## 5. Cách nối tiếp lịch sử này
 
 Khi làm một thay đổi có ý nghĩa, thêm một mục vào mục 4 với: ngày, yêu cầu, những gì đã làm, quyết định + lý do,

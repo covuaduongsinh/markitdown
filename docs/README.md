@@ -58,6 +58,7 @@
 | 11 | [Kiểm thử](tinh-nang/11-kiem-thu.md) | `_test_*.py`, `packages/*/tests` | 72 + 90 (+ upstream) | Kiểm thử của fork, upstream, khoảng trống |
 | 12 | [Đăng nhập Claude Code](tinh-nang/12-dang-nhap-claude-code.md) | `claude_login_bridge.py` | 392 | OAuth token 1 năm qua `claude setup-token`, không cần SSH |
 | 13 | [Công việc nền](tinh-nang/13-cong-viec-nen.md) | `jobs.py`, `proc_control.py`, `job_view.py`, `job_handlers.py` | — | Điểm lưu theo trang/đoạn, Dừng thật, chạy tiếp, khoảng trang, Lịch sử (từ 2026-11-21) |
+| 14 | [Hiệu đính kết quả](tinh-nang/14-hieu-dinh-ket-qua.md) | `fen_tools.py`, `review.py`, `review_handlers.py`, `glossary.py`, `obsidian.py` | — | Bảng thế cờ (sửa/lật FEN), đối chiếu trang gốc, bảng thuật ngữ dịch, xuất Obsidian (từ 2026-11-22) |
 
 ## Về độ tin cậy
 

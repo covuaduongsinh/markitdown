@@ -3,7 +3,7 @@
 > Tài liệu này mô tả mã nguồn tại commit `2c1df67b44` (2026-09-27).
 > Tệp của fork: `_test_dropbox_sync.py` (72 dòng), `_test_translate_roundtrip.py` (90 dòng).
 > Kiểm thử upstream: `packages/*/tests/`.
-> **Bổ sung 2026-11-21 (G0.5):** thư mục `tests_gui/` (56 test, `unittest`, dùng engine giả) — xem mục 1b.
+> **Bổ sung 2026-11-21 (G0.5):** thư mục `tests_gui/` (146 test, `unittest`, dùng engine giả) — xem mục 1b.
 
 ---
 
@@ -62,7 +62,7 @@ giá trị thật (`"antigravity"`, `MODE_CHESS`); test chỉ kiểm việc đó
 
 ## 1b. `tests_gui/` — kiểm thử luồng bằng engine giả (G0.5)
 
-Chạy **từ thư mục gốc repo**: `.venv\Scripts\python.exe -m unittest discover tests_gui -v` (≈40 s, 56 test). Không gọi AI/Dropbox thật;
+Chạy **từ thư mục gốc repo**: `.venv\Scripts\python.exe -m unittest discover tests_gui -v` (≈55 s, 146 test). Không gọi AI/Dropbox thật;
 mỗi test đặt `MID_FAKE_ENGINE=1`, `MID_FAKE_DELAY=0` qua `tests_gui/_setup.py` (phải import **trước** mã ứng dụng) và `sample_pdf.py` tạo PDF
 scan mẫu bằng Pillow.
 
@@ -72,6 +72,9 @@ scan mẫu bằng Pillow.
 | `test_fake_engine_flow.py` | PDF 6 trang: chế độ cờ vua + dịch riêng, gộp OCR+dịch (cờ `translated`), tài liệu thường, `MID_FAKE_FAIL_PAGES=3,5`, tự lưu; khẳng định **không** có `subprocess.run/Popen` nào được gọi |
 | `test_jobs.py` | công việc nền: điểm lưu, Dừng ≤3 s (và diệt tiến trình thật), chạy tiếp chỉ làm trang thiếu, khoảng trang, khôi phục sau khởi động lại, dọn công việc cũ, không lưu khóa vào `job.json` |
 | `test_job_ui.py` | vẽ trạng thái/lịch sử, escape HTML, handler Dừng/Chạy tiếp/Lịch sử |
+| `test_fen_tools.py`, `test_review.py`, `test_review_handlers.py` | FEN thuần (liệt kê/thay thứ n/xoay 180° so với `chessboard_fen`/bàn cờ HTML/Lichess), ghi FEN vào mọi tệp + điểm lưu trang + zip, đối chiếu trang và ảnh trang, handler hai tab |
+| `test_glossary.py` | phân tích/giới hạn thuật ngữ, khối prompt dùng chung, prompt không đổi khi không có thuật ngữ, khóa điểm lưu |
+| `test_obsidian.py`, `test_obsidian_jobs.py` | frontmatter (chống thoát khối), tách chương theo `#` (bỏ qua hàng rào code), tên tệp; công việc có Obsidian, zip, hiệu đính làm lại chương |
 | `test_gui_misc.py` | `build_ui()` dựng được; CSS/JS nạp từ `assets/ui/`; bảng preset khớp danh sách model; `_auth_from_env` |
 
 Chưa có test tự động cho hiển thị trên trình duyệt (đã kiểm tay bằng Chrome ở G2: chạy, tải lại trang giữa chừng, Dừng, Chạy tiếp, Lịch sử, liên kết tải).

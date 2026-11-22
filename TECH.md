@@ -102,6 +102,9 @@ Biến được **đặt cho tiến trình con** `claude`: `DISABLE_AUTOUPDATER=
 | `<tmp>/mid_ocr_*/page_NNN.png` | ảnh trang PDF khi OCR | có (`finally`) |
 | Thư mục tùy chọn hoặc cạnh tệp gốc | bản sao `.md` (luồng "Lưu bản sao trên máy chủ") | không |
 | `~/.gemini/antigravity-cli/antigravity-oauth-token`, `settings.json` | token Antigravity người dùng dán | không |
+| `$MID_DATA_DIR/glossary.md` | bảng thuật ngữ dịch (mỗi dòng `nguồn → đích`, ≤ 60 cặp), soạn ở trang Cài đặt | không |
+| `$MID_DATA_DIR/jobs/<id>/f01/out/chapters/NN-….md` | chương Obsidian (chỉ đi vào `ketqua.zip`) khi bật "tách chương" | cùng công việc |
+| `$MID_DATA_DIR/jobs/<id>/f01/pages/NNNN.jpg` | ảnh trang thu nhỏ (tạo khi xem tab Đối chiếu trang) | cùng công việc |
 | `assets/fonts/*.woff2` (+ `LICENSE-*.txt`) | phông tự lưu trữ (Roboto, Roboto Condensed, Roboto Mono; 597 KB) — nằm trong repo, phục vụ qua `/gradio_api/file=` | không |
 | `.omc/` | trạng thái công cụ OMC của Claude Code | đã trong `.gitignore` |
 

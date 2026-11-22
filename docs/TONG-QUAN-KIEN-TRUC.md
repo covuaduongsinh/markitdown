@@ -85,6 +85,8 @@ Chi tiết phiên bản và biến môi trường: xem [`../TECH.md`](../TECH.md
 | `jobs.py` | ~470 | Công việc nền lưu đĩa: hàng đợi, điểm lưu, chạy tiếp, dọn dẹp | [13](tinh-nang/13-cong-viec-nen.md) |
 | `proc_control.py` | ~150 | `CancelToken`, `run_cli`: Dừng thật (diệt cây tiến trình AI) | [13](tinh-nang/13-cong-viec-nen.md) |
 | `job_handlers.py`, `job_view.py` | ~220 + ~190 | Handler Gradio và vẽ trạng thái/lịch sử cho công việc nền | [13](tinh-nang/13-cong-viec-nen.md) |
+| `fen_tools.py`, `review.py`, `review_handlers.py` | ~120 + ~190 + ~200 | Hiệu đính: bảng thế cờ (FEN), đối chiếu trang gốc ↔ Markdown | [14](tinh-nang/14-hieu-dinh-ket-qua.md) |
+| `glossary.py`, `obsidian.py` | ~100 + ~130 | Bảng thuật ngữ dịch (chèn vào prompt), xuất Obsidian (frontmatter, tách chương) | [14](tinh-nang/14-hieu-dinh-ket-qua.md) |
 | **`claude_ocr.py`** | 810 | OCR PDF/ảnh: prompt, gộp trang, hậu kiểm FEN | [01](tinh-nang/01-ocr-pdf-anh.md) |
 | `infrastructure.py` | 574 | Kiểm tra kết nối, token Antigravity, Dropbox | [05](tinh-nang/05-ha-tang-va-ket-noi.md), [07](tinh-nang/07-dong-bo-dropbox.md) |
 | `chessboard_fen.py` | 511 | Nhận diện bàn cờ → FEN bằng ONNX | [03](tinh-nang/03-nhan-dien-ban-co-fen.md) |

@@ -3,6 +3,7 @@
 > Tài liệu này mô tả mã nguồn tại commit `2c1df67b44` (2026-09-27).
 > Tệp chính: `claude_translate.py` (474 dòng).
 
+> **Cập nhật 2026-11-22 (G3.3):** bảng thuật ngữ do người dùng soạn (`glossary.py`, `glossary.md`) được nối vào `instruction` của `translate_markdown_vn` và vào prompt OCR-gộp-dịch; khóa điểm lưu có dấu vân tay thuật ngữ. Xem [14](14-hieu-dinh-ket-qua.md).
 > **Cập nhật 2026-11-21 (G2):** `translate_markdown_vn` nhận thêm `chunk_cache` (điểm lưu theo đoạn, khóa `chunk_cache_key`) và `cancel`; `_translate_chunk` chỉ lưu bản dịch sạch. Xem [13](13-cong-viec-nen.md).
 
 ---

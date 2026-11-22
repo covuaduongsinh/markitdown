@@ -84,6 +84,10 @@ Công việc: `queued → running → done | error | cancelled`. Tệp: `pending
 
 `translate_markdown_vn(chunk_cache=…)`: khóa = `sha1(chess|chess_lang|nội dung đoạn)` (`chunk_cache_key`); chỉ lưu bản dịch **sạch** (qua kiểm placeholder và kiểm "chưa dịch"), không lưu bản dự phòng kèm cảnh báo. `DiskChunkCache` ghi `<sha1>.md`.
 
+## 5b. Mở rộng ở Giai đoạn 3
+
+Công việc đã xong còn có: **hiệu đính** (`review.py`: sửa FEN ghi lại cả điểm lưu trang để "Chạy tiếp" không mất sửa đổi; ảnh trang `pages/NNNN.jpg` tạo khi xem), **xuất Obsidian** (`JobManager.apply_obsidian`, tùy chọn `obsidian_frontmatter`, `obsidian_split`) và `JobManager.clone` cho nút "Chạy lại". `_atomic_write` ghi với `newline="\n"` để tệp giống nhau trên mọi hệ điều hành. Xem [14](14-hieu-dinh-ket-qua.md).
+
 ## 6. Điểm cần lưu ý và hạn chế
 
 - **Đường Gemini REST không hủy được giữa lượt gọi** (`urllib`): Dừng không chờ nó (`shutdown(wait=False)`), nhưng yêu cầu HTTP đang bay vẫn chạy nốt tới khi xong/hết giờ và kết quả bị bỏ.

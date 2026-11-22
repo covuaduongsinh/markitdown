@@ -21,6 +21,7 @@ Thư mục `packages/` là **mã upstream** (lõi thư viện, plugin OCR, MCP, 
 | HTML danh sách tải về | `ui_render.py` | `06-…` |
 | Engine giả để kiểm thử (`MID_FAKE_ENGINE=1`) | `fake_engine.py` | `04-…` |
 | Công việc nền (lưu đĩa, chạy tiếp, Dừng thật, Lịch sử) | `jobs.py`, `proc_control.py`, `job_handlers.py`, `job_view.py` | `docs/tinh-nang/13-cong-viec-nen.md` |
+| Hiệu đính: bảng thế cờ, đối chiếu trang, thuật ngữ dịch, xuất Obsidian | `fen_tools.py`, `review.py`, `review_handlers.py`, `glossary.py`, `obsidian.py` | `docs/tinh-nang/14-hieu-dinh-ket-qua.md` |
 | OCR PDF/ảnh, prompt | `claude_ocr.py` | `docs/tinh-nang/01-ocr-pdf-anh.md` |
 | Dịch, bảo vệ khối bàn cờ | `claude_translate.py` | `docs/tinh-nang/02-dich-tieng-viet.md` |
 | Nhận diện bàn cờ (ONNX) | `chessboard_fen.py` | `docs/tinh-nang/03-nhan-dien-ban-co-fen.md` |
@@ -65,6 +66,8 @@ Chạy test của fork **từ thư mục gốc repo** (chúng `import` các tệ
 |---|---|
 | Placeholder `⟦CHESSBOARD_n⟧` | `claude_translate` dùng để bảo vệ FEN/code khi dịch |
 | Marker `<<<<<--- HET_TRANG --->>>>>` | `claude_ocr` tách nhiều trang trong một lần gọi |
+| `glossary.GLOSSARY_HEADER` + `prompt_block()` là nơi DUY NHẤT định nghĩa quy tắc thuật ngữ | được chèn vào prompt OCR-gộp-dịch và dịch riêng (đừng chép chữ sang chỗ khác); `chunk_cache_key` có dấu vân tay thuật ngữ |
+| `gr.Number` không đặt `minimum` | ô rỗng/0 làm Gradio ném lỗi trước khi vào handler (kẹp giá trị trong handler) |
 | CSS không dùng quy tắc bắt đầu bằng `body…`; bật/tắt bằng lớp trên chính phần tử | Gradio nhân mỗi quy tắc `css=` thành bản có tiền tố `.gradio-container … .contain`: quy tắc `body.x #id` không thắng được (xem `06-…` mục 10; có test chặn) |
 | Thẻ giao diện là `gr.Column(elem_classes=["mid-card", …])`, không phải `gr.Group` | `gr.Group` gắn lớp lên hai phần tử lồng nhau → viền kép |
 | Phông dùng `gr.themes.Font("Roboto")` và `assets/fonts/` | chuỗi trơn trong `font=[…]` làm Gradio lỗi lúc `launch`; không nạp phông từ CDN (trang đứng ở "Loading…") |
