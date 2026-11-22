@@ -49,9 +49,10 @@ from presets import (
     PRESET_ACCURATE,
     PRESET_BALANCED,
     PRESET_SAVER,
-    _PRESET_HINTS,
     _apply_preset,
     _load_prefs,
+    _on_mode_change,
+    preset_hint_text,
     _save_prefs,
 )
 from ui_render import _download_panel
@@ -231,7 +232,7 @@ def build_ui():
                     with gr.Row(elem_classes="mid-quality-head"):
                         gr.HTML('<div class="mid-section-title">Mức chất lượng</div>')
                         preset_hint = gr.HTML(
-                            _PRESET_HINTS[PRESET_BALANCED], elem_id="mid-preset-hint"
+                            preset_hint_text(PRESET_BALANCED, default_eng), elem_id="mid-preset-hint"
                         )
                     preset = gr.Radio(
                         choices=[PRESET_SAVER, PRESET_BALANCED, PRESET_ACCURATE],
@@ -606,21 +607,23 @@ def build_ui():
                 "dropbox_app_secret": "",
                 "dropbox_folder": "/MarkItDown",
                 "dropbox_sync": True,
+                "translate_vn": True,
+                "autosave_on": True,
             }
         )
 
         # ---------------- wiring sự kiện ----------------
         outputs = [preview, raw, downloads, status]
+        # Preset chỉ đặt model/effort/DPI/trang-mỗi-lần/gộp (không đụng công tắc dịch/tự lưu/tự tải/Dropbox của người dùng).
         preset_outputs = [
-            force_ocr, translate_vn, merge_ocr_translate, autosave_on, auto_download_on, dropbox_sync_on,
-            ocr_model, ocr_effort, translate_model, translate_effort,
+            merge_ocr_translate, ocr_model, ocr_effort, translate_model, translate_effort,
             board_dpi, ocr_pages_per_call, preset_hint,
         ]
 
-        # Chọn preset / đổi chế độ / đổi engine -> tính lại tham số nâng cao.
-        preset.change(_apply_preset, [preset, mode, engine_select], preset_outputs)
-        mode.change(_apply_preset, [preset, mode, engine_select], preset_outputs)
-        engine_select.change(_apply_preset, [preset, mode, engine_select], preset_outputs)
+        # Chọn preset / đổi engine -> tính lại tham số nâng cao; đổi chế độ -> chỉ đặt lại "Buộc OCR".
+        preset.change(_apply_preset, [preset, engine_select], preset_outputs)
+        engine_select.change(_apply_preset, [preset, engine_select], preset_outputs)
+        mode.change(_on_mode_change, mode, force_ocr)
 
         # Khôi phục lựa chọn đã lưu khi tải trang -> đặt component -> tính lại
         demo.load(
@@ -630,9 +633,12 @@ def build_ui():
                 preset, mode, autosave_dir, engine_select,
                 api_key_in, claude_token_in, agy_token_in, auto_download_on,
                 dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in, dropbox_folder_in, dropbox_sync_on,
+                translate_vn, autosave_on,
             ],
         ).then(
-            _apply_preset, [preset, mode, engine_select], preset_outputs
+            _apply_preset, [preset, engine_select], preset_outputs
+        ).then(
+            _on_mode_change, mode, force_ocr
         ).then(
             None, None, None,
             js="() => window.midSyncModeCards && window.midSyncModeCards()",
@@ -643,6 +649,7 @@ def build_ui():
             preset, mode, autosave_dir, engine_select,
             api_key_in, claude_token_in, agy_token_in, auto_download_on,
             dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in, dropbox_folder_in, dropbox_sync_on,
+            translate_vn, autosave_on,
         ):
             _comp.change(
                 _save_prefs,
@@ -650,6 +657,7 @@ def build_ui():
                     preset, mode, autosave_dir, engine_select,
                     api_key_in, claude_token_in, agy_token_in, auto_download_on,
                     dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in, dropbox_folder_in, dropbox_sync_on,
+                    translate_vn, autosave_on,
                 ],
                 prefs,
             )

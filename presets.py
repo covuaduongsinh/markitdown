@@ -20,11 +20,7 @@ from pipeline import MODE_CHESS, _is_chess_mode
 PRESET_SAVER = "Tiết kiệm"
 PRESET_BALANCED = "Cân bằng"
 PRESET_ACCURATE = "Chính xác"
-_PRESET_HINTS = {
-    PRESET_SAVER: "haiku · effort thấp · gộp OCR+dịch",
-    PRESET_BALANCED: "sonnet · auto · dịch riêng",
-    PRESET_ACCURATE: "opus · effort cao · 400 DPI",
-}
+
 
 
 # Presets ánh xạ theo từng Engine
@@ -47,37 +43,43 @@ _PRESET_OPTS_CLAUDE = {
 }
 
 
-def _apply_preset(preset, mode_label, engine=ENGINE_ANTIGRAVITY):
-    """Chọn preset/đổi chế độ/đổi engine -> tính lại toàn bộ tùy chọn nâng cao."""
+def preset_hint_text(preset, engine=ENGINE_ANTIGRAVITY):
+    """Gợi ý ngắn cạnh "MỨC CHẤT LƯỢNG", SINH từ bảng preset của engine đang chọn (không còn bảng gợi ý tĩnh dễ lệch)."""
     table = _PRESET_OPTS_AGY if engine == ENGINE_ANTIGRAVITY else _PRESET_OPTS_CLAUDE
     opt = table.get(preset, table[PRESET_BALANCED])
-    chess = _is_chess_mode(mode_label)
+    return f"{opt['ocr_model']} · effort {opt['ocr_effort']} · {'gộp OCR+dịch' if opt['merge'] else 'dịch riêng'}"
+
+
+def _apply_preset(preset, engine=ENGINE_ANTIGRAVITY):
+    """Chọn preset / đổi engine -> đặt model, effort, DPI, trang-mỗi-lần và "gộp OCR+dịch".
+
+    KHÔNG đụng tới các công tắc người dùng tự chọn (dịch tiếng Việt, tự lưu, tự tải về, Dropbox): trước đây đổi preset
+    bật lại cả bốn (T8/B10). `force_ocr` chỉ được đặt lại khi đổi CHẾ ĐỘ (xem `_on_mode_change`).
+    Thứ tự trả về khớp `preset_outputs` trong build_ui.
+    """
+    table = _PRESET_OPTS_AGY if engine == ENGINE_ANTIGRAVITY else _PRESET_OPTS_CLAUDE
+    opt = table.get(preset, table[PRESET_BALANCED])
     ocr_choices = ANTIGRAVITY_OCR_MODELS if engine == ENGINE_ANTIGRAVITY else CLAUDE_OCR_MODELS
     tr_choices = ANTIGRAVITY_TRANSLATE_MODELS if engine == ENGINE_ANTIGRAVITY else CLAUDE_TRANSLATE_MODELS
-
-    hint = (
-        f"{opt['ocr_model']} · effort {opt['ocr_effort']} · {'gộp OCR+dịch' if opt['merge'] else 'dịch riêng'}"
-    )
-
     return (
-        gr.update(value=chess),            # force_ocr
-        gr.update(value=True),             # translate_vn
         gr.update(value=opt["merge"]),     # merge_ocr_translate
-        gr.update(value=True),             # autosave_on
-        gr.update(value=True),             # auto_download_on
-        gr.update(value=True),             # dropbox_sync_on
         gr.update(choices=ocr_choices, value=opt["ocr_model"]),
         gr.update(value=opt["ocr_effort"]),
         gr.update(choices=tr_choices, value=opt["tr_model"]),
         gr.update(value=opt["tr_effort"]),
         gr.update(value=opt["dpi"]),
         gr.update(value=opt["pages"]),
-        gr.update(value=hint),             # preset_hint
+        gr.update(value=preset_hint_text(preset, engine)),   # preset_hint
     )
 
 
+def _on_mode_change(mode_label):
+    """Đổi chế độ xử lý -> đặt lại "Buộc OCR": bật cho sách cờ vua, tắt cho tài liệu thường."""
+    return gr.update(value=_is_chess_mode(mode_label))
+
+
 def _load_prefs(p):
-    """BrowserState -> đặt lại preset/chế độ/thư mục lưu/engine/api_key/claude_token/agy_token/auto_download/dropbox khi tải trang."""
+    """BrowserState -> đặt lại preset/chế độ/thư mục lưu/engine/khóa/công tắc/dropbox khi tải trang."""
     p = p or {}
     default_eng = get_default_engine()
     return (
@@ -94,12 +96,15 @@ def _load_prefs(p):
         gr.update(value=p.get("dropbox_app_secret", "")),
         gr.update(value=p.get("dropbox_folder", "/MarkItDown")),
         gr.update(value=p.get("dropbox_sync", True)),
+        gr.update(value=p.get("translate_vn", True)),
+        gr.update(value=p.get("autosave_on", True)),
     )
 
 
 def _save_prefs(
     preset_v, mode_v, dir_v, engine_v, api_key_v="", claude_token_v="", agy_token_v="", auto_download_v=True,
     dropbox_token_v="", dropbox_app_key_v="", dropbox_app_secret_v="", dropbox_folder_v="/MarkItDown", dropbox_sync_v=True,
+    translate_vn_v=True, autosave_on_v=True,
 ):
     """Gói lựa chọn hiện tại để lưu vào BrowserState (localStorage)."""
     return {
@@ -116,4 +121,6 @@ def _save_prefs(
         "dropbox_app_secret": dropbox_app_secret_v,
         "dropbox_folder": dropbox_folder_v,
         "dropbox_sync": dropbox_sync_v,
+        "translate_vn": translate_vn_v,
+        "autosave_on": autosave_on_v,
     }

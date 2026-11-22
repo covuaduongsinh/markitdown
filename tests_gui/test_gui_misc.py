@@ -87,12 +87,38 @@ class TestPresets(unittest.TestCase):
                 self.assertIn(opt["ocr_model"], ocr_values, name)
                 self.assertIn(opt["tr_model"], tr_values, name)
 
-    def test_apply_preset_returns_one_update_per_output(self):
-        out = presets._apply_preset(presets.PRESET_BALANCED, g.MODE_CHESS, "antigravity")
-        self.assertEqual(len(out), 13)
-        self.assertEqual(out[0]["value"], True)   # chế độ cờ vua -> buộc OCR
-        general = presets._apply_preset(presets.PRESET_BALANCED, g.MODE_GENERAL, "antigravity")
-        self.assertEqual(general[0]["value"], False)
+    def test_apply_preset_only_touches_quality_options(self):
+        out = presets._apply_preset(presets.PRESET_ACCURATE, "antigravity")
+        self.assertEqual(len(out), 8)  # merge, ocr_model, ocr_effort, tr_model, tr_effort, dpi, pages, hint
+        merge, ocr_model, ocr_effort, tr_model, tr_effort, dpi, pages, hint = out
+        opt = presets._PRESET_OPTS_AGY[presets.PRESET_ACCURATE]
+        self.assertEqual((merge["value"], ocr_model["value"], tr_model["value"], dpi["value"], pages["value"]),
+                         (opt["merge"], opt["ocr_model"], opt["tr_model"], opt["dpi"], opt["pages"]))
+        self.assertEqual(hint["value"], presets.preset_hint_text(presets.PRESET_ACCURATE, "antigravity"))
+
+    def test_hint_is_generated_from_the_engine_table(self):
+        self.assertIn("gemini-3.8-flash", presets.preset_hint_text(presets.PRESET_BALANCED, "antigravity"))
+        self.assertIn("sonnet", presets.preset_hint_text(presets.PRESET_BALANCED, "claude"))
+        self.assertIn("dịch riêng", presets.preset_hint_text(presets.PRESET_ACCURATE, "claude"))
+        self.assertFalse(hasattr(presets, "_PRESET_HINTS"))  # không còn bảng gợi ý tĩnh dễ lệch
+
+    def test_mode_change_only_resets_force_ocr(self):
+        self.assertEqual(presets._on_mode_change(g.MODE_CHESS)["value"], True)
+        self.assertEqual(presets._on_mode_change(g.MODE_CHESS_RU)["value"], True)
+        self.assertEqual(presets._on_mode_change(g.MODE_GENERAL)["value"], False)
+
+    def test_prefs_roundtrip_keeps_user_switches(self):
+        saved = presets._save_prefs(
+            presets.PRESET_SAVER, g.MODE_GENERAL, "/d", "claude", "k", "ct", "at", False,
+            "dt", "ak", "as", "/F", False, False, False,
+        )
+        self.assertEqual((saved["translate_vn"], saved["autosave_on"], saved["auto_download"], saved["dropbox_sync"]),
+                         (False, False, False, False))
+        loaded = presets._load_prefs(saved)
+        self.assertEqual(len(loaded), 15)
+        self.assertEqual((loaded[13]["value"], loaded[14]["value"]), (False, False))
+        defaults = presets._load_prefs({})
+        self.assertEqual((defaults[13]["value"], defaults[14]["value"]), (True, True))
 
 
 class TestAuthFromEnv(unittest.TestCase):
