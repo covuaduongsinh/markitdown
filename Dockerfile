@@ -8,7 +8,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GRADIO_SERVER_NAME="0.0.0.0" \
     GRADIO_SERVER_PORT=7860 \
     PATH="/root/.local/bin:$PATH" \
-    DOCKER=1 \n    MID_DATA_DIR=/data \n    MID_KEEP_DAYS=60
+    DOCKER=1 \
+    MID_DATA_DIR=/data \
+    MID_KEEP_DAYS=60
 
 # Install runtime & build dependencies + Node.js (for Claude Code) + Google Antigravity CLI (agy)
 RUN apt-get update && apt-get install -y --no-install-recommends \
