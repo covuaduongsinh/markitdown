@@ -25,8 +25,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends nodejs \
     && npm install -g @anthropic-ai/claude-code \
     && claude --version \
-    && (curl -fsSL https://antigravity.google/cli/install.sh | bash || true) \
-    && (ln -sf /root/.local/bin/agy /usr/local/bin/agy || true) \
+    && curl -fsSL https://antigravity.google/cli/install.sh -o /tmp/agy-install.sh \
+    && bash /tmp/agy-install.sh \
+    && rm -f /tmp/agy-install.sh \
+    && ln -sf /root/.local/bin/agy /usr/local/bin/agy \
+    && agy --version \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

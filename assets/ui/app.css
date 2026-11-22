@@ -434,3 +434,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .mid-cmp-noimg { padding:20px; font-size:13px; color:var(--c-subtext); background:var(--c-inset); border-radius:10px; }
 #mid-cmp-md p, #mid-cmp-md li { font-size:14px; line-height:1.65; color:var(--c-body); }
 #mid-cmp-filter { padding:0 !important; background:transparent !important; }
+
+/* G4.2: dòng "Đã cấu hình trên máy chủ" dưới ô khóa/token */
+.mid-env-note { font-size: 13px; color: var(--c-ok, #1FA98F); background: rgba(31,169,143,0.10); border: 1px solid rgba(31,169,143,0.30); border-radius: 8px; padding: 6px 10px; margin: 4px 0; }

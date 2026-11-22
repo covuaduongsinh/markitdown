@@ -122,8 +122,35 @@ def find_claude():
     return None
 
 
+def env_first(env_names, typed=None):
+    """Giá trị bí mật: biến môi trường của MÁY CHỦ (theo thứ tự `env_names`) được ưu tiên hơn giá trị do trình duyệt gửi lên.
+
+    Khi máy chủ đã cấu hình khóa/token, khóa trong trình duyệt bị bỏ qua (S3/G4.2): người dùng web không cần — và không thể
+    ghi đè — phiên AI của chủ dự án bằng khóa của mình. Không có biến môi trường thì dùng giá trị `typed` (nếu có).
+    """
+    for name in env_names:
+        val = (os.environ.get(name) or "").strip()
+        if val:
+            return val
+    return (typed or "").strip() if isinstance(typed, str) or typed is None else str(typed).strip()
+
+
+def engine_display_name(engine) -> str:
+    """Tên engine để hiển thị (một nơi duy nhất thay cho các biểu thức `... if engine == "antigravity" else "Claude Code"`)."""
+    if engine == ENGINE_ANTIGRAVITY:
+        return "Google Antigravity / Gemini"
+    if engine == ENGINE_CLAUDE:
+        return "Claude Code"
+    if engine == ENGINE_FAKE:
+        return "Engine giả (kiểm thử)"
+    return str(engine)
+
+
 def find_gemini_api_key(api_key: str = None) -> str:
-    """Lấy Gemini API Key từ tham số, biến môi trường hoặc tệp cấu hình."""
+    """Lấy Gemini API Key: biến môi trường máy chủ trước, rồi tham số."""
+    env_val = env_first(("GEMINI_API_KEY", "GOOGLE_API_KEY"))
+    if env_val:
+        return env_val
     if api_key and str(api_key).strip():
         return str(api_key).strip()
     key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
@@ -142,26 +169,12 @@ def is_engine_available(
         from fake_engine import is_enabled
 
         return is_enabled()
+    # "Sẵn sàng" chỉ khi thật sự chạy được (B5): có CLI, hoặc (Antigravity) có Gemini API Key để gọi REST.
+    # Chỉ có tệp token/cấu hình mà không có CLI thì KHÔNG dùng được, nên không tính là sẵn sàng.
     if engine == ENGINE_ANTIGRAVITY:
-        if find_agy() is not None:
-            return True
-        if agy_token and str(agy_token).strip():
-            return True
-        user_home = os.path.expanduser("~")
-        token_path = os.path.join(user_home, ".gemini", "antigravity-cli", "antigravity-oauth-token")
-        if os.path.isfile(token_path) and os.path.getsize(token_path) > 0:
-            return True
-        return bool(find_gemini_api_key(api_key))
-    elif engine == ENGINE_CLAUDE:
-        if find_claude() is not None:
-            return True
-        if claude_token and str(claude_token).strip():
-            return True
-        user_home = os.path.expanduser("~")
-        config_path = os.path.join(user_home, ".claude.json")
-        if os.path.isfile(config_path) and os.path.getsize(config_path) > 0:
-            return True
-        return False
+        return find_agy() is not None or bool(find_gemini_api_key(api_key))
+    if engine == ENGINE_CLAUDE:
+        return find_claude() is not None
     return False
 
 

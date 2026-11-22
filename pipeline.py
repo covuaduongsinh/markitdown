@@ -111,15 +111,68 @@ def _zip_all(paths, zip_path=None, extra=()):
     return zip_path
 
 
+def data_dir():
+    """Thư mục dữ liệu của ứng dụng (MID_DATA_DIR; mặc định <tmp>/markitdown_gui_data). jobs.data_dir() dùng lại hàm này."""
+    return os.environ.get("MID_DATA_DIR") or os.path.join(tempfile.gettempdir(), "markitdown_gui_data")
+
+
+def save_root():
+    """Gốc được phép cho ô "Thư mục tùy chọn" (S6). MID_SAVE_ROOT nếu đặt; trên Docker mặc định <MID_DATA_DIR>/saved;
+    máy dev (Windows) không đặt gì thì None = không giới hạn (người dùng chính là chủ máy)."""
+    root = (os.environ.get("MID_SAVE_ROOT") or "").strip()
+    if root:
+        return root
+    if os.environ.get("DOCKER"):
+        return os.path.join(data_dir(), "saved")
+    return None
+
+
+def default_save_dir():
+    """Giá trị mặc định của ô thư mục tự lưu: gốc cho phép nếu bị giới hạn, không thì Downloads của người dùng."""
+    return save_root() or os.path.join(os.path.expanduser("~"), "Downloads")
+
+
+def resolve_save_folder(folder):
+    """Kiểm tra thư mục đích tự lưu. Trả (đường dẫn thật, None) hoặc (None, thông báo lỗi).
+
+    Bị giới hạn bởi `save_root()`: đường dẫn tương đối được hiểu là nằm TRONG gốc; đường dẫn tuyệt đối phải nằm trong gốc;
+    mọi thành phần `..` bị từ chối; liên kết tượng trưng được giải (realpath) trước khi so sánh.
+    """
+    folder = (folder or "").strip()
+    if not folder:
+        return None, "⚠️ Chưa nhập thư mục lưu kết quả."
+    root = save_root()
+    if root is None:
+        return folder, None
+    if ".." in re.split(r"[\\/]+", folder):
+        return None, "⚠️ Thư mục không được chứa '..'."
+    cand = folder if os.path.isabs(folder) else os.path.join(root, folder)
+    try:
+        real_root, real = os.path.realpath(root), os.path.realpath(cand)
+        inside = os.path.commonpath([real_root, real]) == real_root
+    except ValueError:
+        inside = False
+    if not inside:
+        return None, f"⚠️ Thư mục phải nằm trong vùng được phép của máy chủ: {root}"
+    return real, None
+
+
+def normalize_save_dir(folder):
+    """Giá trị đã lưu trong trình duyệt -> giá trị dùng được (nếu ngoài vùng cho phép thì về mặc định)."""
+    if not (folder or "").strip():
+        return default_save_dir()
+    return folder if resolve_save_folder(folder)[1] is None else default_save_dir()
+
+
 def _autosave(path, folder):
     """Copy tệp .md vào thư mục người dùng chọn ngay khi xong.
 
     Không ghi đè tệp có sẵn (thêm hậu tố _2, _3...).
     Trả về (đường dẫn đích, None) hoặc (None, thông báo lỗi).
     """
-    folder = (folder or "").strip()
-    if not folder:
-        return None, "⚠️ Chưa nhập thư mục lưu kết quả."
+    folder, err = resolve_save_folder(folder)
+    if err:
+        return None, err
     try:
         os.makedirs(folder, exist_ok=True)
         dest = os.path.join(folder, os.path.basename(path))
@@ -389,7 +442,9 @@ def _ocr_to_outputs(
     out_name = f"{base_name}_vn" if merge_translate else base_name
     download_path = _write_md(text, out_name, used_paths)
     label = "OCR+dịch (gộp 1 bước)" if merge_translate else "OCR"
-    engine_name = "Google Antigravity / Gemini" if engine == "antigravity" else "Claude Code"
+    from ai_engine import engine_display_name
+
+    engine_name = engine_display_name(engine)
     status = (
         f"✅ Đã {label} bằng {engine_name} (model: {model}, "
         f"effort: {effort or 'auto'}) — {len(text):,} ký tự"
@@ -417,7 +472,9 @@ def convert_file(
     pages_per_call = _pages_from_label(ocr_pages_label)
     is_image = ext in IMAGE_EXTS
     is_pdf = ext == ".pdf"
-    engine_name = "Google Antigravity / Gemini" if engine == "antigravity" else "Claude Code"
+    from ai_engine import engine_display_name
+
+    engine_name = engine_display_name(engine)
 
     # Ảnh: built-in chỉ ra metadata/mô tả, nên OCR trực tiếp nếu được bật.
     if use_ocr and is_image:
@@ -524,7 +581,9 @@ def _translate_to_vn(
     """
     import claude_translate
 
-    engine_name = "Google Antigravity / Gemini" if engine == ENGINE_ANTIGRAVITY else "Claude Code"
+    from ai_engine import engine_display_name
+
+    engine_name = engine_display_name(engine)
     if not is_engine_available(engine, api_key=api_key, claude_token=claude_token, agy_token=agy_token):
         cmd_name = "lệnh 'agy' hoặc Gemini API Key" if engine == ENGINE_ANTIGRAVITY else "lệnh 'claude' hoặc Token thuê bao"
         return None, f"⚠️ Bỏ qua dịch: cần {engine_name} ({cmd_name})."

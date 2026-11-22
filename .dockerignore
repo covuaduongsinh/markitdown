@@ -13,3 +13,8 @@ build
 *.egg-info
 .DS_Store
 Thumbs.db
+*.zip
+design_handoff_markitdown_gui/
+_test_*.py
+tests_gui/
+docs/

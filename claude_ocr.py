@@ -403,8 +403,10 @@ class ClaudeOCRError(RuntimeError):
 
 
 def find_claude():
-    """Trả về đường dẫn tới CLI `claude`, hoặc None nếu không có trong PATH."""
-    return shutil.which("claude")
+    """Đường dẫn tới CLI `claude` hoặc None. Dùng chung `ai_engine.find_claude` (trước đây có hai bản lệch nhau — B4)."""
+    from ai_engine import find_claude as _find  # import muộn: cắt vòng phụ thuộc (quy ước dự án)
+
+    return _find()
 
 
 def _claude_fast_flags(effort="low"):
@@ -434,7 +436,9 @@ def _claude_env(claude_token=None):
     env = os.environ.copy()
     env["DISABLE_AUTOUPDATER"] = "1"
     env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
-    token = (claude_token or "").strip() or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+    from ai_engine import env_first
+
+    token = env_first(("CLAUDE_CODE_OAUTH_TOKEN",), claude_token)  # biến môi trường máy chủ được ưu tiên (G4.2)
     if token:
         env["CLAUDE_CODE_OAUTH_TOKEN"] = token
     return env
@@ -814,7 +818,9 @@ def ocr_pdf(
             finally:
                 pdf.close()
         if todo and n_failed == len(todo) and not any(p in done_pages for p in target):
-            engine_name = "Antigravity/Gemini" if engine == "antigravity" else "Claude Code"
+            from ai_engine import engine_display_name
+
+            engine_name = engine_display_name(engine)
             raise ClaudeOCRError(
                 f"OCR thất bại ở toàn bộ {n_failed} trang. "
                 f"Hãy kiểm tra {engine_name} còn phiên đăng nhập/hạn mức/API Key không."

@@ -13,6 +13,7 @@ from ai_engine import (
     CLAUDE_TRANSLATE_MODELS,
     get_default_engine,
 )
+import pipeline
 from pipeline import MODE_CHESS, _is_chess_mode
 
 
@@ -85,7 +86,7 @@ def _load_prefs(p):
     return (
         gr.update(value=p.get("preset", PRESET_BALANCED)),
         gr.update(value=p.get("mode", MODE_CHESS)),
-        gr.update(value=p.get("dir") or os.path.join(os.path.expanduser("~"), "Downloads")),
+        gr.update(value=pipeline.normalize_save_dir(p.get("dir"))),   # ngoài vùng cho phép (Docker) -> về mặc định
         gr.update(value=p.get("engine", default_eng)),
         gr.update(value=p.get("api_key", "")),
         gr.update(value=p.get("claude_token", "")),
@@ -98,15 +99,23 @@ def _load_prefs(p):
         gr.update(value=p.get("dropbox_sync", True)),
         gr.update(value=p.get("translate_vn", True)),
         gr.update(value=p.get("autosave_on", True)),
+        gr.update(value=p.get("remember_keys", True)),
     )
 
 
 def _save_prefs(
     preset_v, mode_v, dir_v, engine_v, api_key_v="", claude_token_v="", agy_token_v="", auto_download_v=True,
     dropbox_token_v="", dropbox_app_key_v="", dropbox_app_secret_v="", dropbox_folder_v="/MarkItDown", dropbox_sync_v=True,
-    translate_vn_v=True, autosave_on_v=True,
+    translate_vn_v=True, autosave_on_v=True, remember_keys_v=True,
 ):
-    """Gói lựa chọn hiện tại để lưu vào BrowserState (localStorage)."""
+    """Gói lựa chọn hiện tại để lưu vào BrowserState (localStorage).
+
+    remember_keys_v=False ("Nhớ khóa trên trình duyệt này" tắt): các khóa/token/App Secret được lưu RỖNG, nên không nằm lại
+    trong localStorage (S3). Mặc định True giữ hành vi cũ.
+    """
+    keep = bool(remember_keys_v)
+    if not keep:
+        api_key_v = claude_token_v = agy_token_v = dropbox_token_v = dropbox_app_secret_v = ""
     return {
         "preset": preset_v,
         "mode": mode_v,
@@ -123,4 +132,5 @@ def _save_prefs(
         "dropbox_sync": dropbox_sync_v,
         "translate_vn": translate_vn_v,
         "autosave_on": autosave_on_v,
+        "remember_keys": keep,
     }

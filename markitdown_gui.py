@@ -31,6 +31,7 @@ import job_handlers
 import job_view
 import jobs
 import review_handlers
+import pipeline
 from pipeline import (
     _OUTPUT_DIR,
     _chess_lang_from_mode,
@@ -157,6 +158,16 @@ def on_save_glossary(text):
     return msg
 
 
+def _env_badge(which):
+    """Dòng "Đã cấu hình trên máy chủ" khi khóa/token tương ứng đã có trong biến môi trường (G4.2); không thì rỗng."""
+    if not infrastructure.env_configured().get(which):
+        return ""
+    return (
+        '<div class="mid-env-note">✅ <b>Đã cấu hình trên máy chủ</b> — không cần nhập; '
+        "giá trị nhập ở đây sẽ bị bỏ qua (máy chủ ưu tiên cấu hình của nó).</div>"
+    )
+
+
 def _convert_btn_label(n):
     return f"Chuyển đổi {n} tệp" if n else "Chuyển đổi"
 
@@ -213,6 +224,7 @@ def build_ui():
                             btn_pick = gr.Button(
                                 "Chọn tệp từ máy (giữ đường dẫn gốc để lưu cạnh file)",
                                 elem_classes="mid-pick-btn",
+                                visible=not os.environ.get("DOCKER"),  # hộp thoại Windows chỉ có nghĩa khi chạy trên máy cá nhân (G4.1)
                             )
                             picked_view = gr.Markdown(elem_classes="mid-picked-view")
                         with gr.Tab("Từ URL"):
@@ -384,8 +396,12 @@ def build_ui():
                         )
                         autosave_dir = gr.Textbox(
                             label="Thư mục tùy chọn trên VPS",
-                            value=os.path.join(os.path.expanduser("~"), "Downloads"),
+                            value=pipeline.default_save_dir(),
                             elem_classes="mid-autosave-dir",
+                            info=(
+                                f"Chỉ nhận thư mục nằm trong: {pipeline.save_root()} (không dùng '..')."
+                                if pipeline.save_root() else None
+                            ),
                         )
                         enable_plugins = gr.Checkbox(value=False, visible=False)
                         use_ocr = gr.Checkbox(value=True, visible=False)
@@ -472,6 +488,10 @@ def build_ui():
                 infrastructure.render_infrastructure_html(),
                 elem_id="mid-infra-status",
             )
+            remember_keys = gr.Checkbox(
+                label="Nhớ khóa trên trình duyệt này", value=True, elem_classes="mid-toggle", container=False,
+                info="Tắt: khóa/token/App Secret không được lưu lại trong trình duyệt (phải nhập lại mỗi lần mở trang).",
+            )
             with gr.Row(elem_classes="mid-set-grid"):
                 with gr.Column(elem_classes=["mid-card", "mid-set-card"]):
                     gr.HTML(
@@ -515,6 +535,7 @@ def build_ui():
                         '🟣 2. Claude Code CLI (Gói Thuê bao Claude Pro / Team / Max - 0đ phí API)'
                         '</div>'
                     )
+                    gr.HTML(_env_badge("claude"))
                     claude_token_in = gr.Textbox(
                         label="Claude Code OAuth Token",
                         placeholder="Dán token sinh bởi lệnh `claude setup-token` (hạn dùng ~1 năm)",
@@ -576,6 +597,7 @@ def build_ui():
                         '🔑 3. Khóa API Google Gemini (Dự phòng cho REST API)'
                         '</div>'
                     )
+                    gr.HTML(_env_badge("gemini"))
                     api_key_in = gr.Textbox(
                         label="Google Gemini API Key (Dùng trực tiếp trên Web)",
                         placeholder="AIzaSy... (lưu an toàn trên trình duyệt của bạn)",
@@ -601,6 +623,7 @@ def build_ui():
                         '☁️ 4. Cấu hình Đồng bộ Đám mây Dropbox (Dropbox Cloud Sync)'
                         '</div>'
                     )
+                    gr.HTML(_env_badge("dropbox"))
                     dropbox_token_in = gr.Textbox(
                         label="Dropbox Access Token hoặc Refresh Token",
                         placeholder="sl.u... hoặc Refresh Token (lưu an toàn trên trình duyệt)",
@@ -692,6 +715,7 @@ def build_ui():
                 "dropbox_sync": True,
                 "translate_vn": True,
                 "autosave_on": True,
+                "remember_keys": True,
             }
         )
 
@@ -716,7 +740,7 @@ def build_ui():
                 preset, mode, autosave_dir, engine_select,
                 api_key_in, claude_token_in, agy_token_in, auto_download_on,
                 dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in, dropbox_folder_in, dropbox_sync_on,
-                translate_vn, autosave_on,
+                translate_vn, autosave_on, remember_keys,
             ],
         ).then(
             _apply_preset, [preset, engine_select], preset_outputs
@@ -732,7 +756,7 @@ def build_ui():
             preset, mode, autosave_dir, engine_select,
             api_key_in, claude_token_in, agy_token_in, auto_download_on,
             dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in, dropbox_folder_in, dropbox_sync_on,
-            translate_vn, autosave_on,
+            translate_vn, autosave_on, remember_keys,
         ):
             _comp.change(
                 _save_prefs,
@@ -740,7 +764,7 @@ def build_ui():
                     preset, mode, autosave_dir, engine_select,
                     api_key_in, claude_token_in, agy_token_in, auto_download_on,
                     dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in, dropbox_folder_in, dropbox_sync_on,
-                    translate_vn, autosave_on,
+                    translate_vn, autosave_on, remember_keys,
                 ],
                 prefs,
             )

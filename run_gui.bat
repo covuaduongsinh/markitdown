@@ -12,7 +12,8 @@ if not exist ".venv\Scripts\python.exe" (
     echo.
     echo Hay tao virtual environment truoc, vi du:
     echo   python -m venv .venv
-    echo   .venv\Scripts\pip.exe install -e "packages/markitdown[all]"
+    echo   .venv\Scripts\pip.exe install -r requirements-gui.txt
+    echo ^(neu .venv khong co pip: uv pip install --python .venv\Scripts\python.exe -r requirements-gui.txt^)
     echo.
     pause
     exit /b 1

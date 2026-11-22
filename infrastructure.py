@@ -256,13 +256,14 @@ def test_antigravity_cli_connection(agy_token=""):
 
 def get_infrastructure_status(api_key="", claude_token="", agy_token=""):
     """Quét toàn bộ trạng thái hạ tầng và các module của MarkItDown."""
-    from ai_engine import find_agy, find_claude
+    from ai_engine import env_first, find_agy, find_claude
 
     if agy_token and agy_token.strip():
         save_antigravity_token(agy_token.strip())
 
-    key = (api_key or "").strip() or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    c_token = (claude_token or "").strip() or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+    # Biến môi trường của máy chủ được ưu tiên hơn giá trị trình duyệt gửi lên (G4.2)
+    key = env_first(("GEMINI_API_KEY", "GOOGLE_API_KEY"), api_key)
+    c_token = env_first(("CLAUDE_CODE_OAUTH_TOKEN",), claude_token)
 
     has_gemini_key = bool(key)
     has_claude_token = bool(c_token)
@@ -278,8 +279,12 @@ def get_infrastructure_status(api_key="", claude_token="", agy_token=""):
     onnx_desc = "Chưa nạp module nhận diện cờ vua"
     try:
         import chessboard_fen
-        has_onnx = True
-        onnx_desc = "ONNX Model sẵn sàng (Nhận diện bàn cờ & FEN)"
+        # B6/K12: trước đây chỉ kiểm `import` thành công nên báo "Sẵn sàng" dù mô hình .onnx không có trong image.
+        has_onnx = bool(chessboard_fen.available())
+        onnx_desc = (
+            "ONNX Model sẵn sàng (Nhận diện bàn cờ & FEN)" if has_onnx
+            else "Chưa có mô hình ONNX — thế cờ do AI tự đọc từ ảnh (chậm và kém chính xác hơn)"
+        )
     except Exception as exc:
         onnx_desc = f"Không nạp được: {exc}"
 
@@ -363,10 +368,13 @@ def resolve_dropbox_token(token="", refresh_token="", app_key="", app_secret="")
 
     Trả về: (str: access_token, str: error_msg)
     """
-    tok = (token or "").strip() or os.environ.get("DROPBOX_ACCESS_TOKEN", "").strip()
-    rf = (refresh_token or "").strip() or os.environ.get("DROPBOX_REFRESH_TOKEN", "").strip()
-    ak = (app_key or "").strip() or os.environ.get("DROPBOX_APP_KEY", "").strip()
-    as_ = (app_secret or "").strip() or os.environ.get("DROPBOX_APP_SECRET", "").strip()
+    from ai_engine import env_first
+
+    # Biến môi trường máy chủ được ưu tiên hơn giá trị từ trình duyệt (G4.2)
+    tok = env_first(("DROPBOX_ACCESS_TOKEN",), token)
+    rf = env_first(("DROPBOX_REFRESH_TOKEN",), refresh_token)
+    ak = env_first(("DROPBOX_APP_KEY",), app_key)
+    as_ = env_first(("DROPBOX_APP_SECRET",), app_secret)
 
     # Nếu có Refresh Token + Key + Secret -> ưu tiên lấy token mới nhất
     if rf and ak and as_:
@@ -524,6 +532,19 @@ def upload_to_dropbox(file_path: str, target_folder: str = "/MarkItDown", token=
         return None, f"Lỗi tải lên Dropbox ({exc.code}): {msg}"
     except Exception as exc:
         return None, f"Lỗi kết nối khi tải lên Dropbox: {exc}"
+
+
+def env_configured():
+    """Khóa/token nào đã được cấu hình bằng biến môi trường của máy chủ: {'gemini', 'claude', 'dropbox'} -> bool.
+    Giao diện dùng để hiện "Đã cấu hình trên máy chủ" (không cần nhập, giá trị trong trình duyệt sẽ bị bỏ qua)."""
+    def has(*names):
+        return any((os.environ.get(n) or "").strip() for n in names)
+
+    return {
+        "gemini": has("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+        "claude": has("CLAUDE_CODE_OAUTH_TOKEN"),
+        "dropbox": has("DROPBOX_ACCESS_TOKEN", "DROPBOX_REFRESH_TOKEN"),
+    }
 
 
 def render_infrastructure_html(api_key="", claude_token="", agy_token=""):

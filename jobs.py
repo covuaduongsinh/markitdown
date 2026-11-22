@@ -619,7 +619,7 @@ _MANAGER_LOCK = threading.Lock()
 
 
 def data_dir():
-    return os.environ.get("MID_DATA_DIR") or os.path.join(tempfile.gettempdir(), "markitdown_gui_data")
+    return pipeline.data_dir()
 
 
 def get_manager():

@@ -134,7 +134,7 @@ class TestPresets(unittest.TestCase):
         self.assertEqual((saved["translate_vn"], saved["autosave_on"], saved["auto_download"], saved["dropbox_sync"]),
                          (False, False, False, False))
         loaded = presets._load_prefs(saved)
-        self.assertEqual(len(loaded), 15)
+        self.assertEqual(len(loaded), 16)
         self.assertEqual((loaded[13]["value"], loaded[14]["value"]), (False, False))
         defaults = presets._load_prefs({})
         self.assertEqual((defaults[13]["value"], defaults[14]["value"]), (True, True))
