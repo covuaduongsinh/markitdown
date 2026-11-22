@@ -49,6 +49,15 @@
     var st = document.getElementById('mid-settings');
     if (e.key === 'Escape' && st && st.classList.contains('mid-open')) window.midToggleSettings(false);
   });
+  function isMobile(){ return window.matchMedia && window.matchMedia('(max-width: 780px)').matches; }
+  // Tên preset đang chọn -> thuộc tính của đầu thẻ chất lượng (CSS hiện nó như dòng tóm tắt trên di động)
+  window.midSyncQualitySummary = function(){
+    var head = document.querySelector('.mid-quality-head');
+    if (!head) return;
+    var on = document.querySelector('#mid-preset label input:checked');
+    var name = on && on.closest('label') ? on.closest('label').innerText.trim() : '';
+    if (name && head.getAttribute('data-mid-preset') !== name) head.setAttribute('data-mid-preset', name);
+  };
   window.midSelectMode = function(idx){
     document.querySelectorAll('[data-mid-mode]').forEach(function(el){ el.classList.toggle('active', (+el.dataset.midMode) === idx); });
     var rs = document.querySelectorAll('#mid-mode-radio input[type=radio]');
@@ -196,7 +205,20 @@
   document.addEventListener('click', function(e){
     if (!e.target || !e.target.closest) return;
     var card = e.target.closest('[data-mid-mode]');
-    if (card){ window.midSelectMode(+card.dataset.midMode); return; }
+    if (card){
+      var box = card.closest('.mid-modes');
+      if (isMobile() && box && !box.classList.contains('open')){ box.classList.add('open'); return; }  // mở danh sách chế độ
+      window.midSelectMode(+card.dataset.midMode);
+      if (isMobile() && box) box.classList.remove('open');                                         // chọn xong thì thu gọn lại
+      return;
+    }
+    var qh = e.target.closest('.mid-quality-head');
+    if (qh && isMobile()){ var qc = qh.closest('.mid-quality-card'); if (qc) qc.classList.toggle('open'); return; }
+    var cv = e.target.closest('#mid-convert');
+    if (cv && isMobile()){
+      // bấm Chuyển đổi trên điện thoại: cuộn tới khối kết quả (nằm dưới cùng của trang một cột)
+      setTimeout(function(){ var r = document.querySelector('.mid-col-right'); if (r) r.scrollIntoView({behavior:'smooth', block:'start'}); }, 500);
+    }
     var t = e.target.closest('[data-mid-action="toggle-theme"]');
     if (t){ window.midToggleTheme(); return; }
     var ts = e.target.closest('[data-mid-action="toggle-settings"]');
@@ -243,6 +265,7 @@
     setNotifyBtn();
     window.midWatchJob();
     window.midSyncAiBadge();
+    window.midSyncQualitySummary();
   }
   function start(){
     init();
@@ -254,6 +277,7 @@
       setNotifyBtn();
       window.midWatchJob();
       window.midSyncAiBadge();
+      window.midSyncQualitySummary();
     }).observe(document.body, {childList:true, subtree:true});
   }
   if (document.body) start();

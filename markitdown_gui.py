@@ -241,15 +241,17 @@ def build_ui():
                         elem_id="mid-preset",
                         elem_classes="mid-preset",
                     )
-                    btn_file = gr.Button(
-                        "Chuyển đổi", variant="primary", elem_id="mid-convert", interactive=False
-                    )
-                    btn_stop = gr.Button(
-                        "⏹ Dừng", variant="stop", visible=False, elem_id="mid-stop"
-                    )
-                    btn_resume = gr.Button(
-                        "▶ Chạy tiếp", variant="secondary", visible=False, elem_id="mid-resume"
-                    )
+                    # Thanh hành động: trên di động (<780 px) CSS ghim nó xuống đáy màn hình (G1.7)
+                    with gr.Column(elem_id="mid-actionbar"):
+                        btn_file = gr.Button(
+                            "Chuyển đổi", variant="primary", elem_id="mid-convert", interactive=False
+                        )
+                        btn_stop = gr.Button(
+                            "⏹ Dừng", variant="stop", visible=False, elem_id="mid-stop"
+                        )
+                        btn_resume = gr.Button(
+                            "▶ Chạy tiếp", variant="secondary", visible=False, elem_id="mid-resume"
+                        )
 
                     with gr.Accordion(
                         "Tùy chọn nâng cao", open=False, elem_classes="mid-adv"

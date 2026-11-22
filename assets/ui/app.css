@@ -351,3 +351,50 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .mid-set-guide { margin-top:6px !important; border:1px solid var(--c-border) !important; border-radius:10px !important; background:transparent !important; }
 .mid-set-guide > button { font-size:12.5px !important; font-weight:700 !important; color:var(--c-subtext) !important; min-height:40px; }
 #mid-infra-status .infra-panel { margin:0 !important; }
+
+/* =====================================================================================================
+   DI ĐỘNG (< 780 px): một cột, nút hành động dính đáy, chế độ/chất lượng thu gọn, vùng bấm ≥ 44 px
+   (chỉ dùng bộ chọn theo lớp/id của ta — không có quy tắc nào bắt đầu bằng body, xem ghi chú đầu tệp)
+   ===================================================================================================== */
+@media (max-width:780px){
+  #mid-topbar { padding:10px 14px; gap:10px; }
+  #mid-topbar .mid-tagline, #mid-topbar .mid-badges { display:none; }
+  #mid-topbar .mid-topbar-right { gap:6px; }
+  #mid-workspace { padding:14px 12px 120px; gap:14px; }
+  #mid-settings { padding:16px 12px 40px; }
+  .mid-set-card { flex:1 1 100%; }
+  .mid-preview-card { min-height:0; }
+  #mid-preview { padding:20px 16px !important; min-height:240px; }
+  #mid-preview h1 { font-size:23px; }
+
+  /* nút hành động dính đáy màn hình */
+  #mid-actionbar { position:fixed; left:0; right:0; bottom:0; z-index:40; margin:0 !important; gap:8px !important;
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom)) !important; background:var(--c-panel);
+    border-top:1px solid var(--c-border); box-shadow:0 -8px 24px rgba(21,29,73,.18); }
+  #mid-convert, #mid-stop, #mid-resume { min-height:48px; }
+
+  /* chế độ xử lý: chỉ hiện thẻ đang chọn + gợi ý "Đổi"; chạm để mở danh sách */
+  .mid-modes:not(.open) .mid-mode:not(.active) { display:none; }
+  .mid-modes:not(.open) .mid-mode.active .mid-check { display:none; }
+  .mid-modes:not(.open) .mid-mode.active::after { content:"Đổi ▾"; font-size:12px; font-weight:700; color:var(--c-link); flex:0 0 auto; }
+  /* mức chất lượng: đầu thẻ thành dòng tóm tắt; chạm để mở bộ chọn preset */
+  .mid-quality-head { cursor:pointer; min-height:44px; flex-wrap:wrap; }
+  .mid-quality-head::after { content:attr(data-mid-preset) " ▾"; font-size:12.5px; font-weight:700; color:var(--c-link); }
+  .mid-quality-card:not(.open) #mid-preset { display:none !important; }
+
+  /* vùng bấm ≥ 44 px */
+  .mid-card button, .mid-card [role="tab"], .mid-card label, .mid-pick-btn, .dl-btn, .dl-rerun, .mid-q-link,
+  .mid-copy-btn, .mid-set-btn, #mid-topbar button, .mid-result-tabs [role="tab"], #mid-file-pick label, .mid-st-notes summary {
+    min-height:44px; }
+  .mid-q-x { width:44px; height:44px; }
+  .mid-toggle label { min-height:44px; }
+  .dl-row { flex-wrap:wrap; }
+}
+@media (max-width:520px){
+  #mid-topbar .mid-theme-btn span:not([data-mid-theme-icon]) { display:none; }       /* chỉ còn biểu tượng */
+  #mid-topbar .mid-theme-btn { padding:6px 12px; }
+  #mid-topbar .mid-ai-badge { padding:5px 10px; }
+  #mid-topbar .mid-ai-badge [data-mid-ai-label] { font-size:0; }                       /* chỉ còn "AI" + chấm màu */
+  #mid-topbar .mid-ai-badge [data-mid-ai-label]::after { content:"AI"; font-size:12px; }
+  #mid-topbar .mid-brand { font-size:17px; }
+}

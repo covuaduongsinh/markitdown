@@ -29,6 +29,25 @@ class TestUiAssets(unittest.TestCase):
         self.assertEqual(ui_theme.MODE_CARDS_HTML.count('data-mid-mode="'), 4)
 
 
+class TestMobileLayout(unittest.TestCase):
+    def test_actionbar_exists_and_css_has_mobile_rules(self):
+        blocks = g.build_ui()
+        ids = {getattr(b, "elem_id", None) for b in blocks.blocks.values()}
+        for need in ("mid-actionbar", "mid-convert", "mid-stop", "mid-resume", "mid-queue", "mid-file-pick", "mid-rerun"):
+            self.assertIn(need, ids)
+        css = ui_theme.CSS
+        self.assertIn("@media (max-width:780px)", css)
+        self.assertIn("#mid-actionbar { position:fixed", css)
+        self.assertIn(".mid-modes:not(.open) .mid-mode:not(.active) { display:none; }", css)
+        self.assertIn("min-height:44px", css)
+
+    def test_js_has_mobile_behaviour(self):
+        js = ui_theme._read_asset("ui/app.js")
+        self.assertIn("max-width: 780px", js)
+        self.assertIn("scrollIntoView", js)
+        self.assertIn("midSyncQualitySummary", js)
+
+
 class TestSettingsPage(unittest.TestCase):
     def test_topbar_has_gear_and_ai_badge_and_settings_head(self):
         self.assertIn('data-mid-action="toggle-settings"', ui_theme.TOPBAR_HTML)
