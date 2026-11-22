@@ -77,6 +77,7 @@ Quét bằng script trên các tệp chạy thật; cột "Đọc ở" là `tệ
 | `MID_DATA_DIR` | thư mục dữ liệu công việc nền (mặc định `<tmp>/markitdown_gui_data`; Docker: `/data`) | `jobs.py` `data_dir` |
 | `MID_MAX_JOBS` | số công việc chạy cùng lúc (mặc định `1`; việc sau xếp hàng) | `jobs.py` `get_manager` |
 | `MID_KEEP_DAYS` | giữ lịch sử công việc bao nhiêu ngày (mặc định `60`; `0` = không tự xóa) | `jobs.py` `get_manager` |
+| `MID_SAVE_ROOT` | gốc được phép cho ô "Thư mục tùy chọn" (chặn `..`, so realpath). Không đặt: Docker dùng `<MID_DATA_DIR>/saved`, máy dev không giới hạn | `pipeline.py` `save_root` |
 | `MID_AUTH_USER`, `MID_AUTH_PASS` | bật đăng nhập web khi **cả hai** có giá trị (`launch(auth=…)`); chỉ đặt một → app từ chối khởi động; không đặt → không khóa | `markitdown_gui.py` `_auth_from_env` |
 | `MID_FAKE_ENGINE` | `1` = bật **engine giả** (`fake_engine.py`): không gọi `agy`/`claude`/mạng; hiện thêm lựa chọn "Engine giả" và thành engine mặc định. Chỉ dùng để kiểm thử | `ai_engine.py`, `fake_engine.py` |
 | `MID_FAKE_DELAY` | giây ngủ mỗi lần "gọi AI" của engine giả (mặc định `0.3`) | `fake_engine.py` |
@@ -137,3 +138,8 @@ docker run -p 7860:7860 markitdown-gui
 `main` (một nhánh). Remote: `origin` = `github.com/covuaduongsinh/markitdown`, `upstream` = `microsoft/markitdown`.
 Cập nhật từ upstream bằng `git merge upstream/main` (đã làm ở `46d5350`, `ba0a8ad`). Xem
 [`docs/LICH-SU-PHAT-TRIEN.md`](docs/LICH-SU-PHAT-TRIEN.md).
+
+
+### Ưu tiên khóa/token (G4.2)
+
+Biến môi trường của máy chủ (`GEMINI_API_KEY`/`GOOGLE_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `DROPBOX_*`) **thắng** giá trị trình duyệt gửi lên (`ai_engine.env_first`). Khi có biến môi trường, trang Cài đặt hiện "Đã cấu hình trên máy chủ".

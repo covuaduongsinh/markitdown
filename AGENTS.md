@@ -76,6 +76,7 @@ Chạy test của fork **từ thư mục gốc repo** (chúng `import` các tệ
 | `secret` cố định của `job_state` (`BrowserState`) | đổi/bỏ thì sau mỗi redeploy trình duyệt mất mã công việc đang chạy |
 | Cờ `ConvertResult.translated` (`pipeline.py`) | `on_convert_files` dùng để biết đã dịch chưa (thay cho việc dò chuỗi `"gộp 1 bước"`, B9; chuỗi đó nay chỉ để hiển thị) |
 | Thứ tự thẻ chế độ ↔ `choices` của radio `mode` | JS `midSelectMode(idx)` bấm radio theo chỉ số |
+| Ranh giới thư mục tự lưu và ưu tiên biến môi trường | `pipeline.resolve_save_folder` là cổng DUY NHẤT cho đường dẫn tự lưu (chặn `..`, giới hạn `MID_SAVE_ROOT`); `ai_engine.env_first` đặt biến môi trường máy chủ trên khóa trình duyệt (G4) |
 | Thứ tự lớp `PIECE_TYPES` | Phải khớp mô hình ONNX gốc (`ocrchessboard`) |
 | Định dạng khối ```` ```chessboard ```` một dòng `fen:` | Plugin Chessboard Viewer của Obsidian |
 | Ký hiệu nước đi `1.e4 e5`, `0-0` | Quy ước đầu ra của bản dịch |

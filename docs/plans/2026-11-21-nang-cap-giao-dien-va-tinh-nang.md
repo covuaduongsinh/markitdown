@@ -159,11 +159,11 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
 
 ### Giai đoạn 4 — Bảo mật và vận hành (cỡ M) · có thể làm song song G3
 
-- [ ] **G4.1** Trên Docker: ẩn nút hộp thoại Windows; ô "Thư mục tùy chọn" chỉ nhận đường dẫn nằm trong một gốc cho phép (`MID_SAVE_ROOT`), chặn `..` (S6).
-- [ ] **G4.2** Khóa/token: máy chủ ưu tiên biến môi trường; khi đã có ở môi trường, giao diện hiện "Đã cấu hình trên máy chủ" và không yêu cầu nhập. Thêm công tắc "Nhớ khóa trên trình duyệt này" (mặc định giữ như hiện nay) (S3).
-- [ ] **G4.3** Bảng trạng thái trung thực: ONNX gọi `chessboard_fen.available()` (B6, K12); engine chỉ "Sẵn sàng" khi tìm thấy CLI (B5); gộp hai hàm `find_claude` (B4); một hàm `engine_display_name()` (T5 sổ nợ).
-- [ ] **G4.4** `Dockerfile`: build **thất bại** nếu cài `agy` lỗi (bỏ `|| true`, thêm `agy --version`) (O3); `.dockerignore` loại `*.zip`, `design_handoff_markitdown_gui/`, `_test_*.py`, `tests_gui/`, `docs/` (O8).
-- [ ] **G4.5** `run_gui.bat` nhắc cài từ `requirements-gui.txt` (O7); đường dẫn hướng dẫn dùng `expanduser` (T9 sổ nợ).
+- [x] **G4.1** Trên Docker: ẩn nút hộp thoại Windows; ô "Thư mục tùy chọn" chỉ nhận đường dẫn nằm trong một gốc cho phép (`MID_SAVE_ROOT`), chặn `..` (S6).
+- [x] **G4.2** Khóa/token: máy chủ ưu tiên biến môi trường; khi đã có ở môi trường, giao diện hiện "Đã cấu hình trên máy chủ" và không yêu cầu nhập. Thêm công tắc "Nhớ khóa trên trình duyệt này" (mặc định giữ như hiện nay) (S3).
+- [x] **G4.3** Bảng trạng thái trung thực: ONNX gọi `chessboard_fen.available()` (B6, K12); engine chỉ "Sẵn sàng" khi tìm thấy CLI (B5); gộp hai hàm `find_claude` (B4); một hàm `engine_display_name()` (T5 sổ nợ).
+- [x] **G4.4** `Dockerfile`: build **thất bại** nếu cài `agy` lỗi (bỏ `|| true`, thêm `agy --version`) (O3); `.dockerignore` loại `*.zip`, `design_handoff_markitdown_gui/`, `_test_*.py`, `tests_gui/`, `docs/` (O8).
+- [x] **G4.5** `run_gui.bat` nhắc cài từ `requirements-gui.txt` (O7); đường dẫn hướng dẫn dùng `expanduser` (T9 sổ nợ).
 
 **Không làm trong kế hoạch này:** tách frontend riêng (Q1); đổi tên `claude_ocr.py`/`claude_translate.py` (T3 sổ nợ — rủi ro cao, lợi ích thấp); tài khoản nhiều người dùng với phiên AI tách biệt (S2 — cần quyết định riêng); xuất PGN (ván cờ trong văn bản OCR chưa đủ tin cậy để sinh PGN tự động); đưa mô hình ONNX vào image (O1 — chờ làm rõ giấy phép).
 
@@ -198,7 +198,7 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
 | G1 | ✅ xong (2026-11-22), chưa lên production | G1.1–G1.2 `faee4d5` · G1.3 `841e913` · G1.4+G1.9 `56bf41f` · G1.5 `5f837f4` · G1.6 `fcfec52` · G1.8 `e1a8582` · G1.7 `0444a75` | Nhánh `feat/nang-cap-giao-dien`. Đã nhìn tận mắt bằng Chrome (engine giả) ở 1366/768/375 px × sáng/tối; 375 px kiểm bằng iframe cùng nguồn (cửa sổ Chrome không thu nhỏ được). Chưa kiểm: thiết bị di động thật, Safari/Firefox, hộp thoại chọn tệp thật (Windows), thử với AI thật |
 | G2 | ✅ xong (2026-11-22), **đã lên production** | G2.1–G2.3 `183696d` · G2.4–G2.8 `87f8c83` · tài liệu `085123b` · G2.9 `83fe754` (sửa Dockerfile) + cấu hình Dokploy | Nhánh `feat/nang-cap-giao-dien`. Đã kiểm trong Chrome với engine giả: chạy, tải lại giữa chừng, Dừng ≤1,5 s, Chạy tiếp từ trang đã giữ, Lịch sử, liên kết tải. G2.9: mount `/root/markitdown-data`→`/data`, env `MID_DATA_DIR=/data`, `MID_KEEP_DAYS=60`; Docker build thật thành công trên Dokploy; công việc thử (engine giả) còn nguyên sau khi thay container. Chưa kiểm: thông báo trình duyệt (`Notification`), thử với AI thật. Chưa lưu ảnh trang thu nhỏ (`pages/NNNN.jpg`, để G3.2) |
 | G3 | ✅ xong (2026-11-22), chưa lên production | G3.1+G3.2 `f0be10f` · G3.3 `41ef752` · G3.4 `2a66f3f` | Nhánh `feat/nang-cap-giao-dien`. Đã nhìn tận mắt bằng Chrome (engine giả): bảng FEN (chọn dòng, lật, áp dụng, Mã .md đổi theo), đối chiếu trang (ảnh + Markdown + bàn cờ, lọc, chuyển trang), lưu thuật ngữ, Obsidian (zip 14 tệp). **Chưa kiểm chứng với AI thật**: khối thuật ngữ trong prompt. Ảnh trang tạo khi xem (không lưu lúc OCR) |
-| G4 | ☐ chưa làm | | |
+| G4 | ✅ xong (2026-11-22), lên production cùng G1+G3 | G4.1–G4.5 `e2025fb` | Nhánh `feat/nang-cap-giao-dien`, test `tests_gui/test_security.py` (166 test đạt). Chưa kiểm chứng: Dockerfile `agy` fail-fast (chỉ thấy hiệu lực khi build thật), hành vi `agy`/`claude` thật. |
 
 ## 7. Phát hiện thêm (ngoài phạm vi, ghi lại để quyết định sau)
 

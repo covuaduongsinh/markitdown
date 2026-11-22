@@ -243,6 +243,18 @@ input/output).
 
 **Chưa làm / chưa kiểm chứng:** thuật ngữ với AI thật; hiệu đính trên sách thật (độ lệch ánh xạ trang khi OCR nhiều trang/lần); Safari/Firefox; di động thật cho hai tab mới; chưa deploy G1+G3 lên production. Phát hiện thêm P11–P13 ở cuối kế hoạch.
 
+### 2026-11-22 — Giai đoạn 4: bảo mật và vận hành
+
+**Yêu cầu:** "tự động làm hết các giai đoạn còn lại ... xong hết thì deploy một thể". Chỉ còn G4.
+
+**Đã làm** (`e2025fb`): giới hạn thư mục tự lưu (`MID_SAVE_ROOT`, chặn `..`); biến môi trường máy chủ thắng khóa trình duyệt, hiện "Đã cấu hình trên máy chủ"; công tắc "Nhớ khóa trên trình duyệt này"; `is_engine_available` trung thực (B5), ONNX qua `available()` (B6), gộp `find_claude` (B4), `engine_display_name` (T5); Dockerfile fail-fast cho `agy`, `.dockerignore`, `run_gui.bat`. Test mới `tests_gui/test_security.py`.
+
+**Quyết định + lý do:** khóa trình duyệt bị bỏ qua khi máy chủ đã cấu hình, để người dùng web không ghi đè phiên AI của chủ dự án; công tắc nhớ khóa mặc định bật để giữ hành vi cũ.
+
+**Cách kiểm chứng:** 166 test `unittest discover tests_gui` + `_test_translate_roundtrip.py` đạt.
+
+**Chưa kiểm chứng:** Dockerfile fail-fast (cần build thật); `agy`/`claude`/Gemini thật; công tắc nhớ khóa trên trình duyệt thật (chỉ test hàm `_save_prefs`).
+
 ## 5. Cách nối tiếp lịch sử này
 
 Khi làm một thay đổi có ý nghĩa, thêm một mục vào mục 4 với: ngày, yêu cầu, những gì đã làm, quyết định + lý do,

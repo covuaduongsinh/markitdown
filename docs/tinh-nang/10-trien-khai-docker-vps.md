@@ -109,6 +109,14 @@ Chỉ đặt một trong hai: ứng dụng **từ chối khởi động** (`❌ 
 Đã kiểm trên Gradio 6.32.0 (cục bộ, engine giả): chưa đăng nhập `/config` → 401; sai mật khẩu → 400; đúng → 200. **Chưa kiểm chứng** sau reverse proxy Traefik của Dokploy (cookie phiên qua HTTPS).
 Đây là một tài khoản dùng chung, không tách phiên AI giữa người dùng (S2 vẫn mở).
 
+### Bảo mật & vận hành (G4, 2026-11-22)
+
+- **Thư mục tự lưu** (`pipeline.resolve_save_folder`): trên Docker chỉ nhận đường dẫn nằm trong `MID_SAVE_ROOT` (mặc định `<MID_DATA_DIR>/saved`); từ chối `..`, so `realpath` (chặn liên kết tượng trưng); đường dẫn tương đối được hiểu là nằm trong gốc. Máy dev không đặt gì thì không giới hạn. Nút hộp thoại Windows ẩn khi có biến `DOCKER`.
+- **Khóa/token**: biến môi trường máy chủ thắng giá trị trình duyệt (`ai_engine.env_first`). Có biến thì trang Cài đặt hiện "Đã cấu hình trên máy chủ". Công tắc "Nhớ khóa trên trình duyệt này" tắt thì khóa lưu rỗng trong `BrowserState`.
+- **`Dockerfile`**: cài `agy` bằng tải script về rồi chạy, không còn `|| true`; kết thúc bằng `agy --version` nên build **thất bại** nếu thiếu CLI. (Chưa kiểm chứng bằng build thật khi viết; lệnh `agy --version` đã chạy được trong container production.)
+- **`.dockerignore`** loại `*.zip`, `design_handoff_markitdown_gui/`, `_test_*.py`, `tests_gui/`, `docs/`; giữ `assets/` (cần lúc chạy).
+- **`run_gui.bat`** nhắc cài từ `requirements-gui.txt`.
+
 ## 5. CI
 
 `.github/workflows/tests.yml` (chạy khi `pull_request`) chạy ba job kiểm thử của **các gói upstream**
