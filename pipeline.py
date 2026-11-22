@@ -84,7 +84,7 @@ def _write_fen_file(md, base_name, used_paths=None):
     return out_path, len(fens)
 
 
-def _zip_all(paths, zip_path=None):
+def _zip_all(paths, zip_path=None, extra=()):
     """Gộp các tệp .md kết quả vào 1 zip cố định trong _OUTPUT_DIR, trả về đường dẫn.
 
     Dùng tên cố định để mỗi lần gọi ghi đè (không tích lũy zip cũ). Dedup tên
@@ -105,6 +105,9 @@ def _zip_all(paths, zip_path=None):
                 n += 1
             used.add(arc)
             zf.write(p, arcname=arc)
+        for p, arc in extra:  # tệp kèm theo có sẵn đường dẫn trong zip (vd thư mục chương cho Obsidian)
+            if os.path.exists(p):
+                zf.write(p, arcname=arc)
     return zip_path
 
 

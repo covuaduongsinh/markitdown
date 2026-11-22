@@ -5,6 +5,7 @@ Không có tiến trình ``agy``/``claude`` nào được chạy, không có yê
 
 Biến môi trường:
 - ``MID_FAKE_DELAY``      giây ngủ mỗi lần "gọi AI" (mặc định 0.3).
+- ``MID_FAKE_H1`` ``1`` = tiêu đề mỗi trang là cấp ``#`` (mặc định ``##``) — để thử tách chương theo tiêu đề cấp 1.
 - ``MID_FAKE_DELAY_SCALE`` ``1`` = trễ nhân với số trang lớn nhất trong lượt (trang sau xong muộn hơn) — để thử Dừng giữa chừng.
 - ``MID_FAKE_FAIL_PAGES`` danh sách số trang (ví dụ ``3,5``) mà lần OCR sẽ ném ``ClaudeOCRError``
   — để thử luồng "OCR lại trang lỗi". Số trang lấy từ tên tệp ảnh ``page_NNN.png`` trong prompt.
@@ -86,7 +87,8 @@ def _fail_pages():
 def _page_text(n, vietnamese, chess):
     idx = 1 if vietnamese else 0
     lines = [s[idx].format(n=n) for s in _SENTENCES]
-    parts = [f"## {lines[0]}", lines[1]]
+    heading = "#" if os.environ.get("MID_FAKE_H1", "").strip() == "1" else "##"
+    parts = [f"{heading} {lines[0]}", lines[1]]
     if chess:
         parts.append("```chessboard\nfen: " + _FENS[(n - 1) % len(_FENS)] + "\n```")
     parts.append(lines[2])

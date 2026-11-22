@@ -27,6 +27,17 @@ _DL_ZIP_ICON = (
 )
 
 
+def _zip_count(zip_path, fallback):
+    """Số tệp thật trong zip (có thể gồm cả thư mục chương Obsidian); lỗi thì dùng fallback."""
+    try:
+        import zipfile
+
+        with zipfile.ZipFile(zip_path) as zf:
+            return len(zf.namelist())
+    except Exception:
+        return fallback
+
+
 def _download_panel(paths, auto_download=False, zip_path=None, metas=None, rerun=False):
     """HTML danh sách tệp kết quả, mỗi tệp một nút tải riêng.
 
@@ -39,14 +50,15 @@ def _download_panel(paths, auto_download=False, zip_path=None, metas=None, rerun
         return ""
     metas = metas or {}
     rows = []
-    if len(paths) >= 2:
-        zip_path = zip_path if zip_path and os.path.exists(zip_path) else _zip_all(paths)
+    has_zip = bool(zip_path) and os.path.exists(zip_path)
+    if len(paths) >= 2 or has_zip:
+        zip_path = zip_path if has_zip else _zip_all(paths)
         zip_name = html.escape(os.path.basename(zip_path), quote=True)
         zip_href = "/gradio_api/file=" + quote(zip_path.replace("\\", "/"))
         rows.append(
             f'<div class="dl-row dl-all">'
             f'<span class="dl-fileicon">{_DL_ZIP_ICON}</span>'
-            f'<span class="dl-name">Tải tất cả · {len(paths)} tệp</span>'
+            f'<span class="dl-name">Tải tất cả · {_zip_count(zip_path, len(paths))} tệp</span>'
             f'<a class="dl-btn dl-all-btn" href="{zip_href}" download="{zip_name}">'
             f'{_DL_DOWN_ICON}Tải .zip</a></div>'
         )

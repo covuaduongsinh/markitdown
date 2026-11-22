@@ -116,7 +116,7 @@ def on_start_job(
     api_key="", claude_token="", agy_token="",
     dropbox_sync_on=True, dropbox_folder="/MarkItDown",
     dropbox_token="", dropbox_refresh_token="", dropbox_app_key="", dropbox_app_secret="",
-    page_spec="",
+    page_spec="", obsidian_frontmatter=False, obsidian_split=False,
 ):
     """Bấm Chuyển đổi -> tạo công việc nền. Trả về [job_id] + JOB_OUTPUTS."""
     sources, real = collect_sources(file_paths, picked_paths)
@@ -132,6 +132,7 @@ def on_start_job(
         translate_effort=translate_effort, page_spec=page_spec or "", engine=engine,
         autosave_on=bool(autosave_on), autosave_dir=autosave_dir or "", autosave_target=autosave_target,
         sources_are_real=real, auto_download_on=bool(auto_download_on),
+        obsidian_frontmatter=bool(obsidian_frontmatter), obsidian_split=bool(obsidian_split),
         dropbox_sync_on=bool(dropbox_sync_on), dropbox_folder=dropbox_folder or "/MarkItDown",
     )
     creds = dict(

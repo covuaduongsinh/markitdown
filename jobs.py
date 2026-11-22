@@ -31,6 +31,7 @@ import threading
 import time
 import traceback
 
+import obsidian
 import pipeline
 from proc_control import CancelToken, OperationCancelled, use_token
 
@@ -47,7 +48,8 @@ def _now():
 def _atomic_write(path, text):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = f"{path}.{_secrets.token_hex(4)}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    # newline="\n": cùng một nội dung trên mọi hệ điều hành (Windows không đổi \n thành \r\n trong tệp kết quả/điểm lưu)
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
     os.replace(tmp, path)
 
@@ -83,6 +85,7 @@ def default_options():
         page_spec="", engine="antigravity",
         autosave_on=False, autosave_dir="", autosave_target=pipeline.AUTOSAVE_CUSTOM, sources_are_real=False,
         auto_download_on=False, dropbox_sync_on=False, dropbox_folder="/MarkItDown",
+        obsidian_frontmatter=False, obsidian_split=False,
     )
 
 
@@ -384,8 +387,72 @@ class JobManager:
                 p = os.path.join(self.job_dir(job["id"]), o["rel"])
                 if os.path.exists(p):
                     paths.append(p)
-        if len(paths) >= 2:
-            pipeline._zip_all(paths, zip_path=os.path.join(self.job_dir(job["id"]), "ketqua.zip"))
+        extra = self._chapter_files(job)
+        if len(paths) >= 2 or extra:
+            pipeline._zip_all(paths, zip_path=os.path.join(self.job_dir(job["id"]), "ketqua.zip"), extra=extra)
+
+    def _chapter_files(self, job):
+        """[(đường dẫn, tên trong zip)] của các tệp chương Obsidian: <tên sách>/<NN-chương>.md."""
+        extra = []
+        for f in job["files"]:
+            cdir = os.path.join(self.file_dir(job["id"], f["idx"]), "out", "chapters")
+            if not os.path.isdir(cdir):
+                continue
+            stem = os.path.splitext(f["name"])[0]
+            for name in sorted(os.listdir(cdir)):
+                extra.append((os.path.join(cdir, name), f"{stem}/{name}"))
+        return extra
+
+    def apply_obsidian(self, job, entry, outputs):
+        """Xuất cho Obsidian theo tùy chọn của công việc: thêm frontmatter YAML vào các tệp .md/_vn.md và/hoặc tách tệp văn bản
+        cuối (vn nếu có, không thì md) theo tiêu đề `#` thành các tệp chương trong out/chapters/ (chỉ đi vào zip).
+        outputs: [(đường dẫn, loại)]. Chạy lại nhiều lần được (frontmatter cũ bị thay, thư mục chương được tạo lại).
+        Trả số chương đã ghi."""
+        opts = job["options"]
+        want_fm, want_split = bool(opts.get("obsidian_frontmatter")), bool(opts.get("obsidian_split"))
+        fdir = self.file_dir(job["id"], entry["idx"])
+        cdir = os.path.join(fdir, "out", "chapters")
+        shutil.rmtree(cdir, ignore_errors=True)
+        if not (want_fm or want_split):
+            return 0
+        texts = [(p, k) for p, k in outputs if k in ("md", "vn")]
+        if not texts:
+            return 0
+        final_path = next((p for p, k in texts if k == "vn"), texts[0][0])
+        final_body = obsidian.strip_frontmatter(_read(final_path))
+        book = obsidian.first_title(final_body, os.path.splitext(entry["name"])[0])
+        meta = dict(
+            source=entry["name"], date=time.strftime("%Y-%m-%d"), engine=opts.get("engine"),
+            model=opts.get("ocr_model"), pages=entry.get("pages_total") or None,
+        )
+        if want_fm:
+            for path, kind in texts:
+                m = {"title": book, **meta}
+                if kind == "vn":
+                    m["translated"] = True
+                    if opts.get("translate_model") and not opts.get("merge"):
+                        m["translate_model"] = opts["translate_model"]
+                _atomic_write(path, obsidian.with_frontmatter(_read(path), m))
+        n = 0
+        if want_split:
+            book_meta = ({"book": book, **meta} if want_fm else None)
+            for name, body in obsidian.chapters(final_body, book_meta):
+                _atomic_write(os.path.join(cdir, name), body)
+                n += 1
+        return n
+
+    def rebuild_obsidian(self, job_id, file_idx):
+        """Làm lại frontmatter/chương sau khi văn bản kết quả đổi (vd hiệu đính FEN). Không làm gì nếu tùy chọn Obsidian tắt."""
+        job = self.get(job_id)
+        if not job:
+            return 0
+        entry = next((f for f in job["files"] if f["idx"] == file_idx), None)
+        if not entry:
+            return 0
+        outputs = [(os.path.join(self.job_dir(job_id), o["rel"]), o["kind"]) for o in entry.get("outputs", [])]
+        n = self.apply_obsidian(job, entry, outputs)
+        self._write_zip(job)
+        return n
 
     @staticmethod
     def _load_done_pages(pages_dir, target):
@@ -506,6 +573,14 @@ class JobManager:
                     notes.append(f"♟️ Đã gom {n_fen} thế cờ → `{os.path.basename(fen_path)}`")
                     outputs.append((fen_path, "fen"))
 
+            n_chapters = self.apply_obsidian(job, entry, outputs)
+            if opts.get("obsidian_frontmatter"):
+                notes.append("📚 Obsidian: đã thêm frontmatter YAML vào các tệp .md")
+            if opts.get("obsidian_split"):
+                notes.append(
+                    f"📚 Obsidian: tách {n_chapters} chương vào .zip (thư mục `{os.path.splitext(entry['name'])[0]}/`)"
+                    if n_chapters else "📚 Obsidian: không có tiêu đề `#` nào để tách chương"
+                )
             self._upd(job, entry, force=True, stage="publish")
             save_dir, save_note = pipeline._resolve_save_dir(
                 entry.get("orig_path") or src, opts["autosave_target"], opts["autosave_dir"], opts["sources_are_real"],

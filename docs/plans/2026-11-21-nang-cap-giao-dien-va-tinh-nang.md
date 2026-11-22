@@ -155,7 +155,7 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
   - Hàm thuần `replace_nth_fen(md, n, new_fen)` + test khứ hồi.
 - [x] **G3.2 Đối chiếu trang gốc ↔ kết quả.** Chế độ xem hai cột: ảnh trang (từ `pages/NNNN.jpg`) bên trái, Markdown của đúng trang đó bên phải, nút trang trước/sau, lọc "chỉ trang lỗi / trang có bàn cờ". Cần G2.2.
 - [x] **G3.3 Bảng thuật ngữ dịch.** Tệp `glossary.md` trong `MID_DATA_DIR` (sửa ở trang Cài đặt): cặp "nguồn → đích". Chèn vào chỉ thị dịch qua **một** hằng/hàm dựng prompt dùng chung cho OCR-gộp-dịch và dịch riêng (theo quy ước prompt ở `AGENTS.md` mục 4). Giới hạn độ dài để không phình prompt.
-- [ ] **G3.4 Xuất cho Obsidian.** Tùy chọn: thêm frontmatter YAML (tiêu đề, nguồn, ngày, engine/model, số trang); tách theo tiêu đề cấp `#` thành nhiều tệp `01-….md` trong zip.
+- [x] **G3.4 Xuất cho Obsidian.** Tùy chọn: thêm frontmatter YAML (tiêu đề, nguồn, ngày, engine/model, số trang); tách theo tiêu đề cấp `#` thành nhiều tệp `01-….md` trong zip.
 
 ### Giai đoạn 4 — Bảo mật và vận hành (cỡ M) · có thể làm song song G3
 

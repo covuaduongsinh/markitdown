@@ -142,7 +142,7 @@ def apply_fen(mgr, job_id, file_idx, n, new_fen):
     for o in f.get("outputs", []):
         if o.get("kind") == "fen":
             jobs._atomic_write(mgr.abs_path(job_id, o["rel"]), fen_tools.fens_text(new_main))
-    mgr._write_zip(mgr.get(job_id))
+    mgr.rebuild_obsidian(job_id, file_idx)  # làm lại frontmatter/chương Obsidian (nếu bật) và zip theo văn bản mới
     return {"files": [os.path.basename(p) for p in writes], "page": page}
 
 

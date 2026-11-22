@@ -300,6 +300,16 @@ def build_ui():
                             info="Tự động tải tệp kết quả (.md / .txt) lên Dropbox để các phần mềm khác cùng sử dụng.",
                             elem_classes="mid-toggle", container=False,
                         )
+                        obsidian_fm = gr.Checkbox(
+                            label="Obsidian: thêm frontmatter YAML", value=False,
+                            info="Đầu mỗi tệp .md có tiêu đề, nguồn, ngày, engine/model, số trang (khối ---).",
+                            elem_classes="mid-toggle", container=False,
+                        )
+                        obsidian_split = gr.Checkbox(
+                            label="Obsidian: tách chương trong .zip", value=False,
+                            info="Tách theo tiêu đề cấp # thành các tệp 01-….md trong thư mục của .zip (không liệt kê riêng).",
+                            elem_classes="mid-toggle", container=False,
+                        )
                         autosave_on = gr.Checkbox(
                             label="Lưu bản sao trên máy chủ (VPS)", value=True,
                             info="Lưu trên ổ đĩa máy chủ/VPS cạnh file gốc hoặc thư mục chỉ định.",
@@ -903,7 +913,7 @@ def build_ui():
                 api_key_in, claude_token_in, agy_token_in,
                 dropbox_sync_on, dropbox_folder_in,
                 dropbox_token_in, dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in,
-                page_spec,
+                page_spec, obsidian_fm, obsidian_split,
             ],
             [job_state] + job_outputs,
             show_progress="hidden",
