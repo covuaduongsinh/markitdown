@@ -204,8 +204,7 @@ input/output).
 
 **Cách kiểm chứng:** 56 test `unittest discover tests_gui` + `_test_translate_roundtrip.py` đạt (kể cả Dừng ≤3 s, diệt tiến trình thật, chạy tiếp đúng 2 trang lỗi, khoảng trang `2-4` = 3 lượt). Mở app thật bằng Chrome với engine giả: chạy 12 trang, tải lại trang giữa chừng (gắn lại), khởi động lại server rồi tải lại (gắn lại), Dừng (≤1,5 s) → Chạy tiếp từ trang đã giữ, Lịch sử, liên kết tải (bắt được lỗi 403 do thiếu `allowed_paths` — đã sửa).
 
-**Cập nhật cùng ngày — G2.9 đã làm trên production (chủ dự án cho phép):** merge `main` (`a4ccbe3`), thêm mount `/root/markitdown-data`→`/data` + env vào Dokploy, deploy tay (bật `autoDeploy` một lần rồi tắt lại). Lần deploy đầu lỗi do Dockerfile có `
-` chữ (đã sửa ở `83fe754`); lần hai build thật thành công (~35 phút, VPS tải cao), site HTTP 200; công việc thử bằng engine giả còn nguyên sau khi thay container; đã xóa công việc thử.
+**Cập nhật cùng ngày — G2.9 đã làm trên production (chủ dự án cho phép):** merge `main` (`a4ccbe3`), thêm mount `/root/markitdown-data`→`/data` + env vào Dokploy, deploy tay (bật `autoDeploy` một lần rồi tắt lại). Lần deploy đầu lỗi do Dockerfile chứa hai ký tự `\` và `n` thật thay cho xuống dòng (đã sửa ở `83fe754`); lần hai build thật thành công (~35 phút, VPS tải cao), site HTTP 200; công việc thử bằng engine giả còn nguyên sau khi thay container; đã xóa công việc thử.
 
 **Chưa làm / chưa kiểm chứng (tại thời điểm viết mục G2 trước đó):** G2.9 (đã xong như trên); Docker build thật (đã xong); thử với AI thật; `Notification` của trình duyệt; ảnh trang thu nhỏ (G3.2); `prefs` còn mã hóa bằng khóa ngẫu nhiên (P6).
 

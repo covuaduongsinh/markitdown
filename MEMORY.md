@@ -45,8 +45,7 @@
 | 2026-10-13 | Container production (Dokploy) chạy trước đây không mount volume nào | Đã cấu hình bind mount `/root/.gemini` -> `/root/.gemini` trong Dokploy DB (2026-11-21) để giữ phiên đăng nhập Google Antigravity bền vững qua mọi lần deploy |
 | 2026-11-21 | CLI `agy 1.5.14` đã loại bỏ các model cũ (`gemini-3.7-flash`, v.v.), chuyển sang thế hệ mới (`gemini-3.8-flash`, `gemini-4-neon`, `gemini-4-hydrogen`, `gemini-4-argon`, `claude-sonnet-5-5`, `claude-opus-5-5`) | Mặc định chuyển sang `gemini-3.8-flash` cho cả OCR và Dịch |
 | 2026-11-21 | Upstream `microsoft/markitdown` bump lên v0.1.9, mở rộng Python 3.10-3.14, nâng cấp DocIntel API key & query fields | Toàn bộ 8 tệp fork giữ nguyên tương thích; test roundtrip FEN và smoke import đạt 100% |
-| 2026-11-22 | Sửa tệp bằng `python - <<EOF` có `\n`/`\\n` làm ghi chuỗi `
-` chữ vào Dockerfile → build production lỗi (dịch vụ cũ vẫn chạy) | Sửa Dockerfile/tệp cấu hình bằng công cụ Edit, rồi đọc lại `cat -A` trước khi commit |
+| 2026-11-22 | Sửa tệp bằng `python - <<EOF` có `\n`/`\\n` làm ghi hai ký tự `\` và `n` thật (thay cho xuống dòng) vào Dockerfile → build production lỗi (dịch vụ cũ vẫn chạy) | Sửa Dockerfile/tệp cấu hình bằng công cụ Edit, rồi đọc lại `cat -A` trước khi commit |
 | 2026-11-22 | Build Dokploy trên VPS mất ~35 phút khi máy tải cao (load ~60, bước `unpacking` ~20 phút) | Đừng tưởng treo; theo dõi bảng `deployment` và `docker service ps` |
 | 2026-11-22 | `gr.BrowserState` mã hóa bằng khóa ngẫu nhiên MỖI LẦN app khởi động → sau redeploy trình duyệt không đọc lại được giá trị cũ | `job_state` dùng `secret` cố định; `prefs` (khóa/token) chưa (P6, chưa kiểm chứng) |
 | 2026-11-22 | `allowed_paths` của `launch` phải gồm `MID_DATA_DIR`, nếu không mọi liên kết tải kết quả công việc nền trả 403 (test đơn vị không bắt được, chỉ thấy khi mở trình duyệt) | Luôn kiểm liên kết tải bằng trình duyệt thật sau khi đổi nơi lưu tệp |
