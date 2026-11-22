@@ -81,7 +81,10 @@ Chi tiết phiên bản và biến môi trường: xem [`../TECH.md`](../TECH.md
 | `ui_theme.py` + `assets/ui/` | 124 + 153 JS + 229 CSS | Theme, CSS/JS đọc từ tệp, thanh tiêu đề, thẻ chế độ | [06](tinh-nang/06-giao-dien-gradio.md) |
 | `presets.py` | 119 | Preset chất lượng, nhớ tùy chọn | [06](tinh-nang/06-giao-dien-gradio.md) |
 | `ui_render.py` | 68 | HTML danh sách tải về | [06](tinh-nang/06-giao-dien-gradio.md) |
-| `fake_engine.py` | 106 | Engine giả để kiểm thử (`MID_FAKE_ENGINE=1`) | [04](tinh-nang/04-ai-engine.md) |
+| `fake_engine.py` | 120 | Engine giả để kiểm thử (`MID_FAKE_ENGINE=1`) | [04](tinh-nang/04-ai-engine.md) |
+| `jobs.py` | ~470 | Công việc nền lưu đĩa: hàng đợi, điểm lưu, chạy tiếp, dọn dẹp | [13](tinh-nang/13-cong-viec-nen.md) |
+| `proc_control.py` | ~150 | `CancelToken`, `run_cli`: Dừng thật (diệt cây tiến trình AI) | [13](tinh-nang/13-cong-viec-nen.md) |
+| `job_handlers.py`, `job_view.py` | ~220 + ~190 | Handler Gradio và vẽ trạng thái/lịch sử cho công việc nền | [13](tinh-nang/13-cong-viec-nen.md) |
 | **`claude_ocr.py`** | 810 | OCR PDF/ảnh: prompt, gộp trang, hậu kiểm FEN | [01](tinh-nang/01-ocr-pdf-anh.md) |
 | `infrastructure.py` | 574 | Kiểm tra kết nối, token Antigravity, Dropbox | [05](tinh-nang/05-ha-tang-va-ket-noi.md), [07](tinh-nang/07-dong-bo-dropbox.md) |
 | `chessboard_fen.py` | 511 | Nhận diện bàn cờ → FEN bằng ONNX | [03](tinh-nang/03-nhan-dien-ban-co-fen.md) |

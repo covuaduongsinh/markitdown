@@ -74,9 +74,13 @@ Quét bằng script trên các tệp chạy thật; cột "Đọc ở" là `tệ
 | `CLAUDE_CODE_SESSION_ACCESS_TOKEN`, `ANTHROPIC_SESSION_KEY` | token phiên Claude | `claude_ocr.py:419`, `infrastructure.py:267` |
 | `DROPBOX_ACCESS_TOKEN`, `DROPBOX_REFRESH_TOKEN`, `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET` | xác thực Dropbox | `infrastructure.py:368–371` |
 | `OCRCHESS_MODELS_DIR` | thư mục mô hình ONNX | `chessboard_fen.py:38` |
+| `MID_DATA_DIR` | thư mục dữ liệu công việc nền (mặc định `<tmp>/markitdown_gui_data`; Docker: `/data`) | `jobs.py` `data_dir` |
+| `MID_MAX_JOBS` | số công việc chạy cùng lúc (mặc định `1`; việc sau xếp hàng) | `jobs.py` `get_manager` |
+| `MID_KEEP_DAYS` | giữ lịch sử công việc bao nhiêu ngày (mặc định `60`; `0` = không tự xóa) | `jobs.py` `get_manager` |
 | `MID_AUTH_USER`, `MID_AUTH_PASS` | bật đăng nhập web khi **cả hai** có giá trị (`launch(auth=…)`); chỉ đặt một → app từ chối khởi động; không đặt → không khóa | `markitdown_gui.py` `_auth_from_env` |
 | `MID_FAKE_ENGINE` | `1` = bật **engine giả** (`fake_engine.py`): không gọi `agy`/`claude`/mạng; hiện thêm lựa chọn "Engine giả" và thành engine mặc định. Chỉ dùng để kiểm thử | `ai_engine.py`, `fake_engine.py` |
 | `MID_FAKE_DELAY` | giây ngủ mỗi lần "gọi AI" của engine giả (mặc định `0.3`) | `fake_engine.py` |
+| `MID_FAKE_DELAY_SCALE` | `1` = trễ của engine giả nhân với số trang lớn nhất trong lượt (để thử Dừng giữa chừng) | `fake_engine.py` |
 | `MID_FAKE_FAIL_PAGES` | số trang (vd `3,5`) mà OCR giả sẽ báo lỗi, để thử luồng làm lại trang lỗi | `fake_engine.py` |
 | `LOCALAPPDATA` | tìm `agy.exe` | `ai_engine.py:85` |
 | `MARKITDOWN_ENABLE_PLUGINS` | bật plugin trong MCP | `markitdown_mcp/__main__.py:51` |
@@ -93,7 +97,8 @@ Biến được **đặt cho tiến trình con** `claude`: `DISABLE_AUTOUPDATER=
 
 | Đường dẫn | Nội dung | Dọn? |
 |---|---|---|
-| `<tmp>/markitdown_gui_output/*.md, *_fen.txt, markitdown_ketqua.zip` | kết quả chuyển đổi | không |
+| `$MID_DATA_DIR/jobs/<job_id>/…` (mặc định `<tmp>/markitdown_gui_data`; Docker: `/data`) | công việc nền: `job.json`, bản sao nguồn, điểm lưu từng trang/đoạn, kết quả, `ketqua.zip` | có: quá `MID_KEEP_DAYS` ngày (mặc định 60) khi khởi động và mỗi 24 giờ |
+| `<tmp>/markitdown_gui_output/*.md, *_fen.txt, markitdown_ketqua.zip` | kết quả của luồng "Từ URL" (không qua công việc nền) | không |
 | `<tmp>/mid_ocr_*/page_NNN.png` | ảnh trang PDF khi OCR | có (`finally`) |
 | Thư mục tùy chọn hoặc cạnh tệp gốc | bản sao `.md` (luồng "Lưu bản sao trên máy chủ") | không |
 | `~/.gemini/antigravity-cli/antigravity-oauth-token`, `settings.json` | token Antigravity người dùng dán | không |

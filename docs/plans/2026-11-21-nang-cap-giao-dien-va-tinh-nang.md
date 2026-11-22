@@ -135,11 +135,11 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
 - [x] **G2.2 Điểm lưu theo trang.** `claude_ocr.ocr_pdf` nhận thêm tham số tùy chọn (mặc định giữ hành vi cũ): `pages` (tập trang cần làm), `done_pages` (dict trang → văn bản đã có, bỏ qua không gọi AI), `on_page(page_no, text, error)`, `cancel` (`threading.Event`). Dịch riêng: lưu theo băm nội dung đoạn.
 - [x] **G2.3 Dừng thật (B7).** Đổi `subprocess.run` → `Popen` có đăng ký tiến trình ở ba nơi gọi CLI (`ai_engine.run_agy_prompt`, `claude_ocr._run_claude_ocr`, `claude_translate._call_claude`); khi `cancel` bật: ngừng nộp nhóm trang mới, diệt cây tiến trình đang chạy (tái dùng cách `_kill_tree` của `claude_login_bridge.py`), giữ lại các trang đã xong.
   - *Đạt khi:* với engine giả `MID_FAKE_DELAY=5`, bấm Dừng → trong ≤ 3 s không còn luồng/tiến trình con nào của công việc; trạng thái `cancelled`; trang đã xong vẫn tải được.
-- [ ] **G2.4 Giao diện hỏi trạng thái.** Bấm Chuyển đổi → tạo công việc, lưu `job_id` vào `gr.BrowserState`; `gr.Timer` (~2 s, chỉ bật khi có công việc đang chạy) gọi `render_job(job_id)`; chỉ gửi lại phần xem trước khi có tệp mới xong. Mở lại trang → tự gắn vào công việc đang chạy. Bỏ `_stream_job`. **Kiểm tài liệu `gr.Timer` đúng bản đã ghim.**
-- [ ] **G2.5 Chạy tiếp và làm lại trang lỗi.** Nút "Chạy tiếp" (công việc bị dừng/lỗi/app khởi động lại) và "OCR lại N trang lỗi" — chỉ gọi AI cho trang còn thiếu, rồi ghép lại tệp kết quả.
-- [ ] **G2.6 Khoảng trang (T4).** Ô "Trang" trong Tùy chọn nâng cao: `1-5, 20, 31-40` (trống = tất cả). Hàm thuần `parse_page_ranges(text, n_pages)` + test. Trước khi chạy hiện ước lượng: "97 trang → 97 lượt gọi OCR" (theo trang-mỗi-lần).
-- [ ] **G2.7 Tab "Lịch sử".** Danh sách công việc (thời gian, tệp, trạng thái, số trang lỗi), mở lại kết quả, tải zip, xóa. Dọn công việc cũ hơn `MID_KEEP_DAYS` (mặc định **60**) khi khởi động và mỗi 24 giờ; tab Lịch sử hiện tổng dung lượng đang dùng của `MID_DATA_DIR`. Zip nằm trong thư mục công việc → hết đè nhau (S7); `allowed_paths` trỏ vào `MID_DATA_DIR`.
-- [ ] **G2.8 Báo khi xong.** Đổi tiêu đề tab trình duyệt ("✅ Xong — MarkItDown"), thông báo trình duyệt nếu người dùng cho phép (nút bật trong Cài đặt).
+- [x] **G2.4 Giao diện hỏi trạng thái.** Bấm Chuyển đổi → tạo công việc, lưu `job_id` vào `gr.BrowserState`; `gr.Timer` (~2 s, chỉ bật khi có công việc đang chạy) gọi `render_job(job_id)`; chỉ gửi lại phần xem trước khi có tệp mới xong. Mở lại trang → tự gắn vào công việc đang chạy. Bỏ `_stream_job`. **Kiểm tài liệu `gr.Timer` đúng bản đã ghim.**
+- [x] **G2.5 Chạy tiếp và làm lại trang lỗi.** Nút "Chạy tiếp" (công việc bị dừng/lỗi/app khởi động lại) và "OCR lại N trang lỗi" — chỉ gọi AI cho trang còn thiếu, rồi ghép lại tệp kết quả.
+- [x] **G2.6 Khoảng trang (T4).** Ô "Trang" trong Tùy chọn nâng cao: `1-5, 20, 31-40` (trống = tất cả). Hàm thuần `parse_page_ranges(text, n_pages)` + test. Trước khi chạy hiện ước lượng: "97 trang → 97 lượt gọi OCR" (theo trang-mỗi-lần).
+- [x] **G2.7 Tab "Lịch sử".** Danh sách công việc (thời gian, tệp, trạng thái, số trang lỗi), mở lại kết quả, tải zip, xóa. Dọn công việc cũ hơn `MID_KEEP_DAYS` (mặc định **60**) khi khởi động và mỗi 24 giờ; tab Lịch sử hiện tổng dung lượng đang dùng của `MID_DATA_DIR`. Zip nằm trong thư mục công việc → hết đè nhau (S7); `allowed_paths` trỏ vào `MID_DATA_DIR`.
+- [x] **G2.8 Báo khi xong.** Đổi tiêu đề tab trình duyệt ("✅ Xong — MarkItDown"), thông báo trình duyệt nếu người dùng cho phép (nút bật trong Cài đặt).
 - [ ] **G2.9 Volume bền trên Dokploy (C1 — đã chốt).** Chỉ làm ở bước lên production, **sau khi chủ dự án duyệt nhánh**, vì đây là thay đổi hạ tầng production:
   1. Trên VPS: tạo thư mục host `/root/markitdown-data`; kiểm dung lượng trống (`df -h`) và ghi con số vào tài liệu.
   2. Trên Dokploy, ứng dụng markitdown: thêm mount `bind` `/root/markitdown-data` → `/data` (cùng cách đã làm với `/root/.gemini`, xem `2026-11-21-cap-nhat-model-antigravity-va-mount-volume-vps.md`) và biến môi trường `MID_DATA_DIR=/data`, `MID_KEEP_DAYS=60`.
@@ -196,7 +196,7 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
 |---|---|---|---|
 | G0 | ✅ xong (2026-11-21), chưa push/merge | G0.1 `3930dd8` · G0.2 `f491108` · G0.3 `af6ee35` · G0.4 `d0d819e` · G0.5 `23d6812` | Nhánh `feat/nang-cap-giao-dien`. Ngoại lệ so với "Đạt khi" G0.3: `markitdown_gui.py` còn **1.043 dòng** (không phải <900) vì `build_ui` riêng đã 635 dòng — sẽ co lại ở G1.6 (trang Cài đặt). Kiểm tra trình duyệt chưa làm (G0 không đổi giao diện) |
 | G1 | ☐ chưa làm | | |
-| G2 | ☐ chưa làm | | |
+| G2 | 🟡 G2.1–G2.8 xong, **G2.9 chưa làm** (hạ tầng production) | G2.1–G2.3 `183696d` · phần còn lại ở commit kế tiếp | Nhánh `feat/nang-cap-giao-dien`. Đã kiểm trong Chrome với engine giả: chạy, tải lại giữa chừng, Dừng ≤1,5 s, Chạy tiếp từ trang đã giữ, Lịch sử, liên kết tải. Chưa kiểm: thông báo trình duyệt (`Notification`), thử với AI thật, Docker build, volume trên Dokploy. Chưa lưu ảnh trang thu nhỏ (`pages/NNNN.jpg`, để G3.2) |
 | G3 | ☐ chưa làm | | |
 | G4 | ☐ chưa làm | | |
 
@@ -204,8 +204,10 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
 
 | # | Phát hiện (2026-11-21, khi làm G0) | Gợi ý |
 |---|---|---|
-| P1 | `build_ui` truyền `dropbox_token_in` **hai lần** liền nhau ở `inputs` của `on_convert_files`/`on_convert_url` (vị trí `dropbox_token` và `dropbox_refresh_token`) — nhiều khả năng đáng ra là ô refresh token | Kiểm trong G1.6 khi dựng lại trang Cài đặt; **chưa kiểm chứng** là lỗi thật |
-| P2 | Dòng trạng thái ghi \"bằng Claude Code\" cho mọi engine không phải Antigravity (kể cả engine giả) vì `engine_name` được suy ra bằng `== \"antigravity\"` ở 3 nơi | Gom vào `engine_display_name()` (đã có ở G4.3) |
-| P3 | `_with_download_update` trong `markitdown_gui.py` không còn nơi gọi (mã chết) | Xóa khi dọn ở G1 |
+| P1 | `build_ui` truyền `dropbox_token_in` **hai lần** liền nhau (vị trí `dropbox_token` và `dropbox_refresh_token`); `_on_test_dropbox` cũng làm vậy — có vẻ **cố ý** (một ô "Token" dùng cho cả access lẫn refresh token) chứ không phải lỗi | Xác nhận với chủ dự án khi dựng lại trang Cài đặt (G1.6) |
+| P2 | Dòng trạng thái ghi "bằng Claude Code" cho mọi engine không phải Antigravity (kể cả engine giả) vì `engine_name` được suy ra bằng `== \"antigravity\"` ở 3 nơi | Gom vào `engine_display_name()` (đã có ở G4.3) |
+| P3 | ~~`_with_download_update` là mã chết~~ | **Đã xóa ở G2.4** |
 | P4 | `_test_dropbox_sync.test_test_dropbox_connection_invalid_token` gửi một token sai tới `api.dropboxapi.com` (bị từ chối, không ghi gì lên tài khoản) | Giữ; nhưng đừng chạy trong CI không có mạng |
 | P5 | Các tài liệu cũ trích `markitdown_gui.py:NNN` là số dòng của tệp **trước khi tách**; đã thêm ghi chú ở `docs/README.md`, `TONG-QUAN-KIEN-TRUC.md`, `SKILLS.md`, nhưng chưa sửa từng trích dẫn | Sửa dần khi đụng tới từng tài liệu ở G1–G2 |
+| P6 | `BrowserState` của `prefs` (API key, token…) dùng khóa mã hóa **ngẫu nhiên mỗi lần app khởi động** (mặc định Gradio) → sau redeploy các ô lưu trong trình duyệt có thể bị trống. Đã sửa riêng cho `job_state` bằng `secret` cố định | Cân nhắc `secret` cố định cho `prefs` khi làm G4.2 (khóa/token); **chưa kiểm chứng** hiện tượng trên production |
+| P7 | `_apply_preset` luôn bật `autosave_on`, `dropbox_sync_on`, `auto_download_on`, nên một lần chạy thử trên máy dev đã tự ghi bản sao vào `Downloads` của người dùng (đã xóa 2 tệp thử) | Làm ở G1.8 như kế hoạch |

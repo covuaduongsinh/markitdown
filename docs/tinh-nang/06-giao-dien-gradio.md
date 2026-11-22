@@ -89,7 +89,10 @@ flowchart TD
     K --> E
 ```
 
-### 2.1 `_stream_job` — giữ kết nối sống
+> **Cập nhật 2026-11-21 (G2.4):** `_stream_job` và `on_convert_files` đã bị **thay bằng công việc nền** (`jobs.py`, `job_handlers.py`);
+> mục này là lịch sử. Xem [13](13-cong-viec-nen.md). Luồng "Từ URL" vẫn chạy ngay trong sự kiện.
+
+### 2.1 `_stream_job` — giữ kết nối sống (cũ)
 
 Vì OCR một sách có thể chạy hàng chục phút, `_stream_job` (dòng 1026) chạy hàm nặng trong **thread nền
 daemon** và cho generator chính `yield` một dòng tiến độ **ít nhất mỗi 5 giây** (`q.get(timeout=5)`), để

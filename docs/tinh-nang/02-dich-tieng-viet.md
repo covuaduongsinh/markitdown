@@ -3,6 +3,8 @@
 > Tài liệu này mô tả mã nguồn tại commit `2c1df67b44` (2026-09-27).
 > Tệp chính: `claude_translate.py` (474 dòng).
 
+> **Cập nhật 2026-11-21 (G2):** `translate_markdown_vn` nhận thêm `chunk_cache` (điểm lưu theo đoạn, khóa `chunk_cache_key`) và `cancel`; `_translate_chunk` chỉ lưu bản dịch sạch. Xem [13](13-cong-viec-nen.md).
+
 ---
 
 # Phần A — Chức năng

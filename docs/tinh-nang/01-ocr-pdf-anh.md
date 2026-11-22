@@ -3,6 +3,8 @@
 > Tài liệu này mô tả mã nguồn tại commit `2c1df67b44` (2026-09-27).
 > Tệp chính: `claude_ocr.py` (806 dòng). Tên tệp là di sản từ thời chỉ có Claude; hiện nó điều phối cả Antigravity.
 
+> **Cập nhật 2026-11-21 (G2):** `ocr_pdf` nhận thêm các tham số tùy chọn `pages`, `done_pages`, `on_page`, `cancel` (điểm lưu theo trang, khoảng trang, Dừng thật); mặc định giữ hành vi cũ. Xem [13](13-cong-viec-nen.md).
+
 ---
 
 # Phần A — Chức năng

@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GRADIO_SERVER_NAME="0.0.0.0" \
     GRADIO_SERVER_PORT=7860 \
     PATH="/root/.local/bin:$PATH" \
-    DOCKER=1
+    DOCKER=1 \n    MID_DATA_DIR=/data \n    MID_KEEP_DAYS=60
 
 # Install runtime & build dependencies + Node.js (for Claude Code) + Google Antigravity CLI (agy)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -38,6 +38,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
     /app/packages/markitdown[all] \
     /app/packages/markitdown-ocr \
     -r /app/requirements-gui.txt
+
+# Dữ liệu công việc nền (jobs.py): gắn volume bền vào /data để không mất khi redeploy (docs/tinh-nang/10, G2.9)
+VOLUME /data
 
 EXPOSE 7860
 

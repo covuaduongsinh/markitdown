@@ -20,6 +20,7 @@ Thư mục `packages/` là **mã upstream** (lõi thư viện, plugin OCR, MCP, 
 | Preset chất lượng, nhớ tùy chọn (`BrowserState`) | `presets.py` | `06-…` |
 | HTML danh sách tải về | `ui_render.py` | `06-…` |
 | Engine giả để kiểm thử (`MID_FAKE_ENGINE=1`) | `fake_engine.py` | `04-…` |
+| Công việc nền (lưu đĩa, chạy tiếp, Dừng thật, Lịch sử) | `jobs.py`, `proc_control.py`, `job_handlers.py`, `job_view.py` | `docs/tinh-nang/13-cong-viec-nen.md` |
 | OCR PDF/ảnh, prompt | `claude_ocr.py` | `docs/tinh-nang/01-ocr-pdf-anh.md` |
 | Dịch, bảo vệ khối bàn cờ | `claude_translate.py` | `docs/tinh-nang/02-dich-tieng-viet.md` |
 | Nhận diện bàn cờ (ONNX) | `chessboard_fen.py` | `docs/tinh-nang/03-nhan-dien-ban-co-fen.md` |
@@ -64,6 +65,9 @@ Chạy test của fork **từ thư mục gốc repo** (chúng `import` các tệ
 |---|---|
 | Placeholder `⟦CHESSBOARD_n⟧` | `claude_translate` dùng để bảo vệ FEN/code khi dịch |
 | Marker `<<<<<--- HET_TRANG --->>>>>` | `claude_ocr` tách nhiều trang trong một lần gọi |
+| `OperationCancelled` kế thừa `BaseException` (`proc_control.py`) | để `except Exception` sẵn có không nuốt tín hiệu Dừng; đừng đổi sang `Exception` |
+| `jobs.data_dir()` nằm trong `allowed_paths` của `launch` | thiếu thì mọi liên kết tải kết quả công việc nền trả 403 |
+| `secret` cố định của `job_state` (`BrowserState`) | đổi/bỏ thì sau mỗi redeploy trình duyệt mất mã công việc đang chạy |
 | Cờ `ConvertResult.translated` (`pipeline.py`) | `on_convert_files` dùng để biết đã dịch chưa (thay cho việc dò chuỗi `"gộp 1 bước"`, B9; chuỗi đó nay chỉ để hiển thị) |
 | Thứ tự thẻ chế độ ↔ `choices` của radio `mode` | JS `midSelectMode(idx)` bấm radio theo chỉ số |
 | Thứ tự lớp `PIECE_TYPES` | Phải khớp mô hình ONNX gốc (`ocrchessboard`) |

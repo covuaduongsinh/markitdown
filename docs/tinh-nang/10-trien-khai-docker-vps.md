@@ -78,6 +78,18 @@ Ngoài ra cần cài các gói của ứng dụng riêng bằng `pip install -r 
 Repo có hai remote: `origin` (fork của Cờ vua Dương Sinh) và `upstream` (`microsoft/markitdown`). Fork đã merge từ
 upstream hai lần (`46d5350`, `ba0a8ad`).
 
+### Gắn volume dữ liệu công việc nền (G2.9 — **chưa thực hiện trên production**)
+
+Mã G2 ghi dữ liệu vào `MID_DATA_DIR` (Dockerfile đặt `/data`, `VOLUME /data`). Để lịch sử/điểm lưu sống qua redeploy, gắn volume bền. Các bước (làm **sau khi chủ dự án duyệt nhánh và cho phép lên production**):
+
+1. Trên VPS: `mkdir -p /root/markitdown-data` và ghi lại dung lượng trống bằng `df -h /root`.
+2. Dokploy → ứng dụng markitdown → Mounts: thêm `bind` `/root/markitdown-data` → `/data` (cùng cách đã làm với `/root/.gemini`, xem `docs/plans/2026-11-21-cap-nhat-model-antigravity-va-mount-volume-vps.md`); Environment: `MID_DATA_DIR=/data`, `MID_KEEP_DAYS=60`.
+3. Deploy (thủ công — auto deploy đang tắt); xác minh `docker inspect` thấy mount `/data`.
+4. Tạo một công việc (PDF thật 2–3 trang khi được phép), deploy lần nữa, mở lại: công việc **vẫn còn** ở tab Lịch sử.
+5. Ước lượng dung lượng bằng một cuốn mẫu (ảnh trang chưa lưu ở G2; chỉ văn bản + bản sao nguồn) rồi ghi con số vào đây. Nếu gần đầy đĩa: giảm `MID_KEEP_DAYS` trước.
+
+Lưu ý: không có volume thì dữ liệu nằm trong một volume ẩn danh do `VOLUME /data` tạo và **mất khi container bị thay** (như trước).
+
 Đối chiếu kế hoạch với repo: tệp của Dokploy (compose, biến môi trường, volume) **không có trong repo** — cấu
 hình sống trên Dokploy. Khi nhân bản phải ghi lại: tên miền, biến môi trường đặt trên Dokploy, volume nếu có.
 

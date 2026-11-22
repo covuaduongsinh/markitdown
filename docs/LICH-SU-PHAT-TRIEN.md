@@ -190,6 +190,22 @@ input/output).
 
 **Chưa làm / chưa kiểm chứng:** `markitdown_gui.py` còn >900 dòng (xem bảng Tiến độ); chưa mở bằng trình duyệt (G0 không đổi giao diện, nhưng nâng Gradio có thể đổi vẻ ngoài dev — kiểm ở G1); đăng nhập chưa thử sau Traefik/HTTPS; chưa push/merge/deploy. Phát hiện thêm P1–P5 ở cuối kế hoạch.
 
+### 2026-11-22: Giai đoạn 2 — công việc nền (G2.1–G2.8), đẩy G0 lên `main`
+
+**Yêu cầu của chủ dự án:** (sau khi tắt auto deploy) làm theo đề xuất: push nhánh → build thử → merge G0 vào `main` → làm công việc nền (G2).
+
+**Đã làm:**
+- Push nhánh `feat/nang-cap-giao-dien`; không có Docker trên máy dev nên **không build image được** — thay bằng giải phụ thuộc Linux/Python 3.12 (`uv pip compile`) với đúng bộ gói của Dockerfile: thành công, giữ đúng các bản ghim. Merge fast-forward G0 vào `main` và push (`9faa7e9..985e82b`).
+- G2.1–G2.3 `183696d`: `proc_control.py` (CancelToken, `run_cli`, diệt cây tiến trình), `jobs.py` (công việc lưu đĩa, hàng đợi, chạy tiếp, dọn dẹp), `ocr_pdf` nhận `pages/done_pages/on_page/cancel`, dịch có `chunk_cache`, engine giả hủy được.
+- G2.4–G2.8 (commit kế tiếp): `job_handlers.py`/`job_view.py`, `gr.Timer` + `BrowserState` thay `_stream_job`, nút Dừng/Chạy tiếp/OCR lại trang lỗi, ô "Trang cần làm" + ước lượng lượt gọi, tab Lịch sử, tiêu đề tab/thông báo khi xong. Xóa `_stream_job`, `on_convert_files`, `_with_download_update`.
+- `Dockerfile`: `ENV MID_DATA_DIR=/data MID_KEEP_DAYS=60`, `VOLUME /data` (phần mã của G2.9).
+
+**Quyết định + lý do:** `OperationCancelled` là `BaseException` (không bị `except Exception` nuốt); token hủy đi qua `contextvars` thay vì thêm tham số vào ~10 chữ ký hàm; "Chạy tiếp" và "OCR lại trang lỗi" là một thao tác (chỉ gọi AI cho trang chưa có `.md`); `job_state` dùng `secret` cố định để sống qua redeploy; khóa/token không bao giờ ghi vào `job.json`.
+
+**Cách kiểm chứng:** 56 test `unittest discover tests_gui` + `_test_translate_roundtrip.py` đạt (kể cả Dừng ≤3 s, diệt tiến trình thật, chạy tiếp đúng 2 trang lỗi, khoảng trang `2-4` = 3 lượt). Mở app thật bằng Chrome với engine giả: chạy 12 trang, tải lại trang giữa chừng (gắn lại), khởi động lại server rồi tải lại (gắn lại), Dừng (≤1,5 s) → Chạy tiếp từ trang đã giữ, Lịch sử, liên kết tải (bắt được lỗi 403 do thiếu `allowed_paths` — đã sửa).
+
+**Chưa làm / chưa kiểm chứng:** G2.9 (volume Dokploy — hạ tầng production, cần chủ dự án cho phép); Docker build thật; thử với AI thật; `Notification` của trình duyệt; ảnh trang thu nhỏ (G3.2); `prefs` còn mã hóa bằng khóa ngẫu nhiên (P6).
+
 ## 5. Cách nối tiếp lịch sử này
 
 Khi làm một thay đổi có ý nghĩa, thêm một mục vào mục 4 với: ngày, yêu cầu, những gì đã làm, quyết định + lý do,
