@@ -118,12 +118,59 @@
     });
   };
 
+  // ---- Báo khi công việc nền xong: đổi tiêu đề tab + thông báo trình duyệt (nếu người dùng bật) ----
+  var midJobPrev = {id: '', state: 'none'};
+  function notifyOn(){
+    try {
+      return localStorage.getItem('mid-notify') === '1' && window.Notification && Notification.permission === 'granted';
+    } catch(e){ return false; }
+  }
+  function setNotifyBtn(){
+    var lbl = document.querySelector('[data-mid-notify-label]');
+    if (!lbl) return;
+    var txt = notifyOn() ? '🔔 Thông báo: bật' : '🔔 Thông báo';
+    if (lbl.textContent !== txt) lbl.textContent = txt;
+  }
+  window.midEnableNotify = function(){
+    if (!window.Notification) return;
+    if (notifyOn()){
+      try { localStorage.setItem('mid-notify', '0'); } catch(e){}
+      setNotifyBtn();
+      return;
+    }
+    Notification.requestPermission().then(function(p){
+      try { localStorage.setItem('mid-notify', p === 'granted' ? '1' : '0'); } catch(e){}
+      setNotifyBtn();
+    });
+  };
+  window.midWatchJob = function(){
+    var el = document.getElementById('mid-job-flag');
+    if (!el) return;
+    var st = el.getAttribute('data-state') || 'none';
+    var id = el.getAttribute('data-id') || '';
+    var failed = parseInt(el.getAttribute('data-failed') || '0', 10);
+    if (st === midJobPrev.state && id === midJobPrev.id) return;
+    var wasActive = midJobPrev.id === id && (midJobPrev.state === 'running' || midJobPrev.state === 'queued');
+    midJobPrev = {id: id, state: st};
+    var title = 'MarkItDown';
+    if (st === 'running' || st === 'queued') title = '⏳ Đang chạy — MarkItDown';
+    else if (st === 'done') title = (failed > 0 ? '⚠️ Xong, có trang lỗi' : '✅ Xong') + ' — MarkItDown';
+    else if (st === 'error') title = '❌ Lỗi — MarkItDown';
+    else if (st === 'cancelled') title = '⏹ Đã dừng — MarkItDown';
+    document.title = title;
+    if (wasActive && st !== 'running' && st !== 'queued' && notifyOn() && (document.hidden || !document.hasFocus())){
+      try { new Notification(title, {body: failed > 0 ? failed + ' trang OCR bị lỗi — mở lại để làm lại.' : 'Công việc đã kết thúc.'}); } catch(e){}
+    }
+  };
+
   document.addEventListener('click', function(e){
     if (!e.target || !e.target.closest) return;
     var card = e.target.closest('[data-mid-mode]');
     if (card){ window.midSelectMode(+card.dataset.midMode); return; }
     var t = e.target.closest('[data-mid-action="toggle-theme"]');
     if (t){ window.midToggleTheme(); return; }
+    var nt = e.target.closest('[data-mid-action="enable-notify"]');
+    if (nt){ window.midEnableNotify(); return; }
     var clr = e.target.closest('.mid-clear-btn');
     if (clr){ window.midResetDownloads(); }
   });
@@ -138,6 +185,8 @@
     window.midSyncModeCards();
     window.midRenderBoards();
     window.midTriggerAutoDownloads();
+    setNotifyBtn();
+    window.midWatchJob();
   }
   function start(){
     init();
@@ -146,6 +195,8 @@
       window.midSyncModeCards();
       window.midRenderBoards();
       window.midTriggerAutoDownloads();
+      setNotifyBtn();
+      window.midWatchJob();
     }).observe(document.body, {childList:true, subtree:true});
   }
   if (document.body) start();

@@ -79,6 +79,9 @@ TOPBAR_HTML = f"""
       <span class="mid-badge">Ảnh · URL</span>
       <span class="mid-badge mid-badge-chess">Sách cờ vua</span>
     </div>
+    <button class="mid-theme-btn" data-mid-action="enable-notify" type="button" title="Báo khi công việc xong">
+      <span data-mid-notify-label>🔔 Thông báo</span>
+    </button>
     <button class="mid-theme-btn" data-mid-action="toggle-theme" type="button">
       <span data-mid-theme-icon></span><span data-mid-theme-label>Tối</span>
     </button>

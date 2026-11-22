@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Các hàm vẽ HTML cho phần kết quả (danh sách tải về...). Chuỗi đưa vào HTML do hàm gọi chịu trách nhiệm escape."""
 
+import html
 import os
 from urllib.parse import quote
 
@@ -26,7 +27,7 @@ _DL_ZIP_ICON = (
 )
 
 
-def _download_panel(paths, auto_download=False):
+def _download_panel(paths, auto_download=False, zip_path=None):
     """HTML danh sách tệp kết quả, mỗi tệp một nút tải riêng.
 
     Khi có ≥2 tệp, chèn thêm một dòng "Tải tất cả (.zip)" ở đầu danh sách.
@@ -36,8 +37,8 @@ def _download_panel(paths, auto_download=False):
         return ""
     rows = []
     if len(paths) >= 2:
-        zip_path = _zip_all(paths)
-        zip_name = os.path.basename(zip_path)
+        zip_path = zip_path if zip_path and os.path.exists(zip_path) else _zip_all(paths)
+        zip_name = html.escape(os.path.basename(zip_path), quote=True)
         zip_href = "/gradio_api/file=" + quote(zip_path.replace("\\", "/"))
         rows.append(
             f'<div class="dl-row dl-all">'
@@ -47,7 +48,7 @@ def _download_panel(paths, auto_download=False):
             f'{_DL_DOWN_ICON}Tải .zip</a></div>'
         )
     for p in paths:
-        name = os.path.basename(p)
+        name = html.escape(os.path.basename(p), quote=True)
         href = "/gradio_api/file=" + quote(p.replace("\\", "/"))
         rows.append(
             f'<div class="dl-row"><span class="dl-fileicon">{_DL_FILE_ICON}</span>'

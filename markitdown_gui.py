@@ -10,12 +10,8 @@ Sau khi chạy, mở trình duyệt tại http://127.0.0.1:7860
 """
 
 import os
-import queue
 import subprocess
 import sys
-import threading
-import time
-import traceback
 
 import gradio as gr
 
@@ -30,6 +26,9 @@ from ai_engine import (
 )
 import infrastructure
 import claude_login_bridge
+import job_handlers
+import job_view
+import jobs
 from pipeline import (
     _OUTPUT_DIR,
     AUTOSAVE_CUSTOM,
@@ -38,15 +37,6 @@ from pipeline import (
     MODE_CHESS_ES,
     MODE_CHESS_RU,
     MODE_GENERAL,
-    _chess_lang_from_mode,
-    _effort_from_label,
-    _is_chess_mode,
-    _model_from_label,
-    _publish_output,
-    _resolve_save_dir,
-    _translate_to_vn,
-    _write_fen_file,
-    convert_file,
     convert_url,
 )
 from presets import (
@@ -70,59 +60,7 @@ from ui_theme import (
 
 
 
-_STATUS_HINT = "👋 Chọn tệp hoặc dán URL rồi bấm **Chuyển đổi**."
-
-
-def _with_download_update(result, auto_download=False):
-    """Đổi đường dẫn tải về thành bảng HTML chứa nút tải."""
-    preview_md, raw_md, path, status_md = result
-    return preview_md, raw_md, _download_panel([path] if path else [], auto_download=auto_download), status_md
-
-
-
-def _stream_job(func, kwargs, label, unit):
-    """Chạy func(**kwargs, progress=...) trong thread nền, generator yield
-    dòng tiến độ đều đặn (≤5s/lần) để kết nối SSE của Gradio không bị rớt
-    khi tác vụ kéo dài. Kết thúc trả về kết quả của func (qua StopIteration).
-
-    unit: tên đơn vị tiến độ hiển thị ("trang", "đoạn"...).
-    """
-    q = queue.Queue()
-    out = {}
-
-    def run():
-        try:
-            out["result"] = func(progress=lambda i, n: q.put((i, n)), **kwargs)
-        except BaseException as exc:
-            out["error"] = exc
-        finally:
-            q.put(None)  # báo hiệu kết thúc
-
-    threading.Thread(target=run, daemon=True).start()
-    start = time.monotonic()
-    suffix = ""
-    finished = False
-    while not finished:
-        try:
-            msgs = [q.get(timeout=5)]
-        except queue.Empty:
-            msgs = []  # không có tiến độ mới -> vẫn yield keep-alive
-        while True:  # gộp các message dồn lại, chỉ giữ cái mới nhất
-            try:
-                msgs.append(q.get_nowait())
-            except queue.Empty:
-                break
-        for m in msgs:
-            if m is None:
-                finished = True
-            else:
-                suffix = f" — {unit} {m[0]}/{m[1]}"
-        if finished:
-            break
-        yield f"{label}{suffix} · {int(time.monotonic() - start)}s…"
-    if "error" in out:
-        raise out["error"]
-    return out.get("result")
+_STATUS_HINT = job_handlers.STATUS_HINT
 
 
 def _picked_display(paths):
@@ -155,201 +93,6 @@ def on_pick_files():
     return paths, _picked_display(paths)
 
 
-def on_convert_files(
-    file_paths, mode_label, enable_plugins, use_ocr,
-    model_label, ocr_effort_label, translate_model_label, translate_effort_label,
-    force_ocr, board_dpi_label, translate_vn, merge_ocr_translate, ocr_pages_label,
-    autosave_on, auto_download_on, autosave_dir, picked_paths, autosave_target, engine,
-    api_key="", claude_token="", agy_token="",
-    dropbox_sync_on=True, dropbox_folder="/MarkItDown",
-    dropbox_token="", dropbox_refresh_token="", dropbox_app_key="", dropbox_app_secret="",
-):
-    try:
-        raw_sources = picked_paths if picked_paths else file_paths
-        sources_are_real = bool(picked_paths)
-        sources = []
-        if raw_sources:
-            if isinstance(raw_sources, (str, bytes)):
-                sources = [str(raw_sources)]
-            elif isinstance(raw_sources, list):
-                for item in raw_sources:
-                    if not item:
-                        continue
-                    if isinstance(item, str):
-                        sources.append(item)
-                    elif isinstance(item, dict) and "path" in item:
-                        sources.append(item["path"])
-                    elif hasattr(item, "path"):
-                        sources.append(getattr(item, "path"))
-                    else:
-                        sources.append(str(item))
-
-        if not sources:
-            yield (
-                "",
-                "",
-                "",
-                "⚠️ **Chưa có tệp nào được tải lên.**\n\nVui lòng kéo-thả tệp vào khung tải tệp ở trên trước khi bấm **Chuyển đổi**.",
-            )
-            return
-
-        dropbox_cfg = dict(
-            folder=dropbox_folder, token=dropbox_token, refresh_token=dropbox_refresh_token,
-            app_key=dropbox_app_key, app_secret=dropbox_app_secret,
-        )
-        chess = _is_chess_mode(mode_label)
-        chess_lang = _chess_lang_from_mode(mode_label)
-        # Gộp OCR+dịch chỉ có nghĩa khi người dùng cũng bật dịch tiếng Việt.
-        merge = bool(merge_ocr_translate and translate_vn)
-        total = len(sources)
-        n_ok = 0  # số tệp nguồn chuyển đổi thành công (không tính tệp _vn)
-        done_paths, previews, raws, lines = [], [], [], []
-
-        # Phản hồi tức thì ngay tại frame đầu tiên
-        yield (
-            "",
-            "",
-            "",
-            f"🚀 **Đang khởi động tiến trình chuyển đổi ({total} tệp)...**",
-        )
-
-        for i, fp in enumerate(sources, 1):
-            name = os.path.basename(fp)
-            # Báo tiến độ trước khi xử lý, giữ nguyên kết quả các tệp đã xong.
-            progress = "\n\n".join(lines + [f"⏳ Đang xử lý {i}/{total}: **{name}**… (Đang phân tích định dạng)"])
-            yield (
-                "\n\n---\n\n".join(previews),
-                "\n\n".join(raws),
-                _download_panel(done_paths, auto_download=auto_download_on),
-                progress,
-            )
-
-            try:
-                # Chạy trong thread nền, yield tiến độ từng trang để giữ kết nối.
-                job = _stream_job(
-                    convert_file,
-                    dict(
-                        file_path=fp, enable_plugins=enable_plugins, use_ocr=use_ocr,
-                        model_label=model_label, force_ocr=force_ocr,
-                        board_dpi_label=board_dpi_label, used_paths=done_paths,
-                        chess=chess, chess_lang=chess_lang,
-                        ocr_effort_label=ocr_effort_label,
-                        merge_translate=merge, ocr_pages_label=ocr_pages_label,
-                        engine=engine, api_key=api_key or None,
-                        claude_token=claude_token or None,
-                        agy_token=agy_token or None,
-                    ),
-                    label=f"⏳ Đang xử lý {i}/{total}: **{name}**",
-                    unit="trang",
-                )
-                while True:
-                    try:
-                        st_line = next(job)
-                    except StopIteration as stop:
-                        preview, raw_md, path, st, translated = stop.value
-                        break
-                    # Yield tiến độ chỉ cập nhật status (gr.skip các ô còn lại
-                    # để giảm payload gửi về trình duyệt).
-                    yield gr.skip(), gr.skip(), gr.skip(), "\n\n".join(lines + [st_line])
-
-                # Thư mục đích tính một lần cho mỗi tệp nguồn, dùng chung cho tệp gốc
-                # lẫn tệp _vn.md.
-                save_dir, save_note = _resolve_save_dir(
-                    fp, autosave_target, autosave_dir, sources_are_real
-                )
-                if path:
-                    st += _publish_output(
-                        path, save_dir, save_note=save_note, dropbox_cfg=dropbox_cfg,
-                        autosave_on=autosave_on, dropbox_sync_on=dropbox_sync_on,
-                        auto_download_on=auto_download_on,
-                    )
-                if path:
-                    n_ok += 1
-                    done_paths.append(path)
-
-                # Dịch sang tiếng Việt -> tạo thêm tệp _vn.md (nếu được bật).
-                if translate_vn and not translated and path and (raw_md or "").strip():
-                    yield (
-                        "\n\n---\n\n".join(previews),
-                        "\n\n".join(raws),
-                        _download_panel(done_paths, auto_download=auto_download_on),
-                        "\n\n".join(
-                            lines + [f"**{name}** — {st}",
-                                     f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**…"]
-                        ),
-                    )
-                    model = _model_from_label(translate_model_label)
-                    translate_effort = _effort_from_label(
-                        translate_effort_label, default="low"
-                    )
-                    job = _stream_job(
-                        _translate_to_vn,
-                        dict(
-                            raw_md=raw_md, orig_path=path, model=model,
-                            done_paths=done_paths, chess=chess, chess_lang=chess_lang,
-                            effort=translate_effort, engine=engine,
-                            api_key=api_key or None, claude_token=claude_token or None,
-                            agy_token=agy_token or None,
-                        ),
-                        label=f"⏳ Đang dịch sang tiếng Việt {i}/{total}: **{name}**",
-                        unit="đoạn",
-                    )
-                    while True:
-                        try:
-                            st_line = next(job)
-                        except StopIteration as stop:
-                            vn_path, vn_st = stop.value
-                            break
-                        yield (
-                            gr.skip(), gr.skip(), gr.skip(),
-                            "\n\n".join(lines + [f"**{name}** — {st}", st_line]),
-                        )
-                    st += f"\n  {vn_st}"
-                    if vn_path:
-                        st += _publish_output(
-                            vn_path, save_dir, dropbox_cfg=dropbox_cfg, inline=True,
-                            autosave_on=autosave_on, dropbox_sync_on=dropbox_sync_on,
-                            auto_download_on=auto_download_on,
-                        )
-                        done_paths.append(vn_path)
-
-                # Sách cờ vua (mặc định): gom FEN các thế cờ -> tệp <tên gốc>_fen.txt
-                if chess and path and (raw_md or "").strip():
-                    fen_base = os.path.splitext(os.path.basename(fp))[0]
-                    fen_path, n_fen = _write_fen_file(raw_md, fen_base, done_paths)
-                    if fen_path:
-                        st += f"\n  ♟️ Đã gom {n_fen} thế cờ → `{os.path.basename(fen_path)}`"
-                        st += _publish_output(
-                            fen_path, save_dir, dropbox_cfg=dropbox_cfg, inline=True,
-                            autosave_on=autosave_on, dropbox_sync_on=dropbox_sync_on,
-                            auto_download_on=auto_download_on,
-                        )
-                        done_paths.append(fen_path)
-                lines.append(f"**{name}** — {st}")
-                if preview:
-                    previews.append(f"## 📄 {name}\n\n{preview}")
-                if raw_md:
-                    raws.append(raw_md)
-
-            except Exception as exc:
-                err_msg = f"❌ Lỗi xử lý {name}: {type(exc).__name__}: {exc}"
-                lines.append(f"**{name}** — {err_msg}")
-                traceback.print_exc()
-
-            # Tệp xong tới đâu hiện kết quả và cho tải về ngay tới đó.
-            summary = "\n\n".join(lines)
-            if i == total:
-                summary = f"🏁 Xong {n_ok}/{total} tệp.\n\n" + summary
-            yield (
-                "\n\n---\n\n".join(previews),
-                "\n\n".join(raws),
-                _download_panel(done_paths, auto_download=auto_download_on),
-                summary,
-            )
-    except Exception as top_exc:
-        yield "", "", "", f"❌ Đã xảy ra lỗi không mong muốn: {top_exc}"
-
-
 def on_convert_url(
     url, enable_plugins, auto_download_on=True,
     dropbox_sync_on=False, dropbox_folder="/MarkItDown",
@@ -371,8 +114,12 @@ def on_convert_url(
 
 
 def on_clear():
-    # Xoá kết quả + danh sách tệp đã chọn bằng hộp thoại.
-    return "", "", "", _STATUS_HINT, [], ""
+    # Xoá kết quả hiển thị + danh sách tệp đã chọn bằng hộp thoại + liên kết tới công việc hiện tại.
+    # (Công việc vẫn nằm trong tab Lịch sử; muốn dừng việc đang chạy thì bấm Dừng.)
+    return (
+        "", "", "", _STATUS_HINT, [], "", "", "",
+        gr.update(visible=False), job_view.flag_html(None),
+    )
 
 
 def _convert_btn_label(n):
@@ -382,6 +129,13 @@ def _convert_btn_label(n):
 def _set_running(running):
     """Đang chạy -> ẩn nút Chuyển đổi, hiện nút Dừng (và ngược lại khi xong)."""
     return gr.update(visible=not running), gr.update(visible=running)
+
+
+def _buttons_after_stop(job_id):
+    """Sau khi bấm Dừng: công việc còn đang dừng dở thì giữ nút Dừng, ngược lại về nút Chuyển đổi."""
+    job = jobs.get_manager().get(job_id) if job_id else None
+    active = bool(job and job["status"] in job_view.ACTIVE)
+    return gr.update(visible=not active), gr.update(visible=active)
 
 
 def _on_files_change(files):
@@ -647,6 +401,9 @@ def build_ui():
                     btn_stop = gr.Button(
                         "⏹ Dừng", variant="stop", visible=False, elem_id="mid-stop"
                     )
+                    btn_resume = gr.Button(
+                        "▶ Chạy tiếp", variant="secondary", visible=False, elem_id="mid-resume"
+                    )
 
                     with gr.Accordion(
                         "Tùy chọn nâng cao", open=False, elem_classes="mid-adv"
@@ -735,6 +492,14 @@ def build_ui():
                                 filterable=False, elem_classes="mid-select",
                             )
 
+                        page_spec = gr.Textbox(
+                            label="Trang cần làm",
+                            placeholder="Để trống = tất cả. Ví dụ: 1-5, 20, 31-40",
+                            info="Chỉ OCR các trang này của PDF (đếm từ 1). Kết quả chỉ gồm các trang đã chọn.",
+                            elem_id="mid-pages", elem_classes="mid-select",
+                        )
+                        page_estimate = gr.Markdown(elem_id="mid-page-estimate")
+
                         gr.HTML('<div style="height:1px;background:var(--c-border);"></div>')
 
                         autosave_target = gr.Radio(
@@ -768,7 +533,18 @@ def build_ui():
                                 language="markdown", show_label=False,
                                 elem_id="mid-raw",
                             )
+                        with gr.Tab("🕘 Lịch sử") as history_tab:
+                            history_usage = gr.Markdown()
+                            history_pick = gr.Dropdown(
+                                choices=[], value=None, label="Công việc đã chạy",
+                                filterable=False, elem_id="mid-history-pick",
+                            )
+                            with gr.Row():
+                                btn_hist_open = gr.Button("Mở kết quả", variant="primary", elem_id="mid-hist-open")
+                                btn_hist_refresh = gr.Button("Làm mới", variant="secondary", elem_id="mid-hist-refresh")
+                                btn_hist_delete = gr.Button("Xóa", variant="stop", elem_id="mid-hist-delete")
                     downloads = gr.HTML(elem_id="mid-downloads")
+                    job_flag = gr.HTML(job_view.flag_html(None), elem_id="mid-job-flag-wrap")
                 btn_clear = gr.Button(
                     "Xóa kết quả", variant="secondary", elem_classes="mid-clear-btn"
                 )
@@ -967,13 +743,31 @@ def build_ui():
         btn_pick.click(on_pick_files, None, [picked_state, picked_view]).then(
             lambda p: gr.update(value=_convert_btn_label(len(p) if p else 0)),
             picked_state, btn_file,
+        ).then(
+            job_handlers.on_estimate, [file_in, picked_state, page_spec, ocr_pages_per_call], page_estimate,
+            show_progress="hidden",
         )
         file_in.change(_on_files_change, file_in, [picked_state, picked_view, btn_file])
 
-        proc = btn_file.click(
-            lambda: _set_running(True), None, [btn_file, btn_stop]
-        ).then(
-            on_convert_files,
+        # ---------------- công việc nền (jobs.py) ----------------
+        # Bấm Chuyển đổi chỉ TẠO công việc; giao diện hỏi trạng thái mỗi vài giây (gr.Timer, chỉ bật khi có việc đang chạy).
+        # job_state nhớ mã công việc trong trình duyệt -> mở lại trang tự gắn vào việc đang chạy.
+        # secret cố định: mặc định Gradio mã hóa bằng khóa ngẫu nhiên MỖI LẦN app khởi động, nên sau khi redeploy trình duyệt
+        # không đọc lại được mã công việc. Mã công việc không phải bí mật (nó chỉ là một chuỗi ngẫu nhiên khó đoán).
+        job_state = gr.BrowserState("", storage_key="markitdown_active_job", secret="markitdown-job-state-v1")
+        sig_state = gr.State("")
+        job_timer = gr.Timer(job_handlers.TICK_SECONDS, active=False)
+        job_outputs = [
+            status, preview, raw, downloads, sig_state, job_timer,
+            btn_file, btn_stop, btn_resume, job_flag,
+        ]
+        creds_inputs = [
+            api_key_in, claude_token_in, agy_token_in,
+            dropbox_token_in, dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in,
+        ]
+
+        btn_file.click(
+            job_handlers.on_start_job,
             [
                 file_in, mode, enable_plugins, use_ocr,
                 ocr_model, ocr_effort, translate_model, translate_effort,
@@ -983,12 +777,36 @@ def build_ui():
                 api_key_in, claude_token_in, agy_token_in,
                 dropbox_sync_on, dropbox_folder_in,
                 dropbox_token_in, dropbox_token_in, dropbox_app_key_in, dropbox_app_secret_in,
+                page_spec,
             ],
-            outputs,
-            show_progress="full",
+            [job_state] + job_outputs,
+            show_progress="hidden",
         )
-        proc.then(lambda: _set_running(False), None, [btn_file, btn_stop])
+        job_timer.tick(job_handlers.on_tick, [job_state, sig_state], job_outputs, show_progress="hidden")
+        demo.load(job_handlers.on_reattach, job_state, job_outputs, show_progress="hidden")
+        btn_resume.click(
+            job_handlers.on_resume_job, [job_state] + creds_inputs, job_outputs, show_progress="hidden",
+        )
 
+        # Lịch sử công việc
+        history_outputs = [history_pick, history_usage]
+        demo.load(job_handlers.history_refresh, None, history_outputs)
+        history_tab.select(job_handlers.history_refresh, None, history_outputs)
+        btn_hist_refresh.click(job_handlers.history_refresh, None, history_outputs)
+        btn_hist_open.click(job_handlers.history_open, history_pick, [job_state] + job_outputs)
+        btn_hist_delete.click(
+            job_handlers.history_delete, [history_pick, job_state], history_outputs + [job_state],
+        )
+
+        # Ước lượng "N trang → M lượt gọi OCR" khi đổi tệp / khoảng trang / số trang mỗi lần
+        estimate_inputs = [file_in, picked_state, page_spec, ocr_pages_per_call]
+        for _c in (file_in, page_spec, ocr_pages_per_call):
+            _c.change(
+                job_handlers.on_estimate, estimate_inputs, page_estimate,
+                show_progress="hidden", trigger_mode="always_last",
+            )
+
+        # Chuyển từ URL: nhanh, chạy ngay trong sự kiện (không qua công việc nền)
         ev_url = btn_url.click(
             lambda: _set_running(True), None, [btn_file, btn_stop]
         ).then(
@@ -1016,11 +834,14 @@ def build_ui():
         )
         ev_urls.then(lambda: _set_running(False), None, [btn_file, btn_stop])
 
+        # Dừng: diệt tiến trình AI của công việc nền (thật) và hủy các sự kiện URL đang chạy.
         btn_stop.click(
-            lambda: _set_running(False), None, [btn_file, btn_stop],
-            cancels=[proc, ev_url, ev_urls],
+            job_handlers.on_stop_job, job_state, status, cancels=[ev_url, ev_urls],
+        ).then(_buttons_after_stop, job_state, [btn_file, btn_stop])
+        btn_clear.click(
+            on_clear, None,
+            outputs + [picked_state, picked_view, job_state, sig_state, btn_resume, job_flag],
         )
-        btn_clear.click(on_clear, None, outputs + [picked_state, picked_view])
 
     return demo
 
@@ -1059,7 +880,7 @@ if __name__ == "__main__":
         theme=THEME,
         css=CSS,
         head=HEAD,
-        allowed_paths=[_OUTPUT_DIR, _ASSETS_DIR],
+        allowed_paths=[_OUTPUT_DIR, _ASSETS_DIR, jobs.data_dir()],  # thư mục dữ liệu: để tải được tệp kết quả của công việc nền
         auth=auth,
         auth_message="Đăng nhập để dùng MarkItDown — Cờ vua Dương Sinh." if auth else None,
     )
