@@ -398,3 +398,39 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   #mid-topbar .mid-ai-badge [data-mid-ai-label]::after { content:"AI"; font-size:12px; }
   #mid-topbar .mid-brand { font-size:17px; }
 }
+
+/* ---------- bàn cờ HTML (tab Thế cờ): quân vẽ bằng lớp .mid-pc.<màu><quân>, ảnh nền sinh trong ui_theme.piece_css() ---------- */
+.mid-fenboard { --px:240px; box-sizing:content-box; width:var(--px); height:var(--px); max-width:100%; display:grid;
+  grid-template-columns:repeat(8,1fr); grid-template-rows:repeat(8,1fr); border:5px solid #2B3990; border-radius:8px;
+  overflow:hidden; box-shadow:0 8px 22px rgba(43,57,144,.22); }
+.mid-sq { display:flex; align-items:center; justify-content:center; }
+.mid-sq.l { background:#F6F2E4; }
+.mid-sq.d { background:#46B49A; }
+.mid-fenboard-bad { display:flex; align-items:center; justify-content:center; text-align:center; color:var(--c-subtext);
+  background:var(--c-inset); font-size:13px; padding:12px; }
+
+/* ---------- tab Thế cờ ---------- */
+.mid-fen-info { font-size:13px; color:var(--c-body); padding:10px 16px 0; }
+.mid-fen-bad { color:var(--coral); font-weight:700; }
+.mid-fen-ok { color:var(--teal); font-weight:700; }
+#mid-fen-table { padding:10px 16px 0 !important; }
+.mid-fen-nav { align-items:flex-end !important; gap:8px !important; padding:6px 16px 0; flex-wrap:nowrap !important; }
+.mid-fen-nav #mid-fen-idx, .mid-fen-nav #mid-cmp-page { flex:1 1 auto; min-width:90px; }
+.mid-fen-step { flex:0 0 52px !important; min-width:52px !important; min-height:44px; }
+.mid-fen-edit { gap:16px !important; padding:10px 16px 0; align-items:flex-start !important; }
+.mid-fen-prev { display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
+.mid-fen-status { font-size:12.5px; }
+.mid-fen-form { min-width:260px !important; flex:1 1 260px; gap:8px !important; }
+.mid-fen-lichess { display:inline-block; font-size:12.5px; font-weight:700; color:var(--c-link); padding:6px 0; }
+.mid-fen-btn { min-height:44px; }
+#mid-fen-text textarea { font-family:'Roboto Mono',monospace; font-size:12.5px; }
+
+/* ---------- tab Đối chiếu trang ---------- */
+.mid-cmp-nav { padding:10px 16px 0; }
+.mid-cmp-row { gap:16px !important; padding:10px 16px 16px; align-items:flex-start !important; }
+#mid-cmp-img { flex:1 1 280px; min-width:0 !important; }
+#mid-cmp-md { flex:1 1 280px; min-width:0 !important; max-height:760px; overflow:auto; }
+.mid-cmp-img { display:block; width:100%; height:auto; border:1px solid var(--c-border); border-radius:10px; background:#fff; }
+.mid-cmp-noimg { padding:20px; font-size:13px; color:var(--c-subtext); background:var(--c-inset); border-radius:10px; }
+#mid-cmp-md p, #mid-cmp-md li { font-size:14px; line-height:1.65; color:var(--c-body); }
+#mid-cmp-filter { padding:0 !important; background:transparent !important; }

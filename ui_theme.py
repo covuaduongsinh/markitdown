@@ -121,7 +121,19 @@ _SCRIPT = "\n<script>\n" + _read_asset("ui/app.js") + "</script>\n"
 HEAD = _SCRIPT.replace("__MID_PIECES__", json.dumps(_PIECES))
 
 # CSS: @font-face (sinh theo vị trí tệp) + nội dung ở assets/ui/app.css.
-CSS = "\n" + font_face_css() + _read_asset("ui/app.css")
+def piece_css():
+    """Ảnh nền cho quân cờ của bàn cờ HTML (fen_tools.board_html): `.mid-pc.<màu><quân>` (wp, bn, …)."""
+    rules = [
+        ".mid-pc{display:block;width:82%;height:82%;background-size:contain;background-repeat:no-repeat;"
+        "background-position:center;}"
+    ]
+    for name, uri in _PIECES.items():
+        if uri:
+            rules.append(f'.mid-pc.{name}{{background-image:url("{uri}");}}')
+    return "\n".join(rules) + "\n"
+
+
+CSS = "\n" + font_face_css() + piece_css() + _read_asset("ui/app.css")
 
 
 # Doc-mode icon (lucide file-text) cho thẻ "Tài liệu thường".

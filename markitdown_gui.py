@@ -29,6 +29,7 @@ import claude_login_bridge
 import job_handlers
 import job_view
 import jobs
+import review_handlers
 from pipeline import (
     _OUTPUT_DIR,
     _chess_lang_from_mode,
@@ -390,6 +391,42 @@ def build_ui():
                                 language="markdown", show_label=False,
                                 elem_id="mid-raw",
                             )
+                        with gr.Tab("♟ Thế cờ") as fen_tab:
+                            fen_info = gr.HTML()
+                            fen_table = gr.Dataframe(
+                                headers=["#", "Trang", "FEN", "Trạng thái"], datatype=["number", "str", "str", "str"],
+                                column_widths=["9%", "11%", "62%", "18%"],
+                                interactive=False, wrap=True, show_label=False, max_height=230,
+                                elem_id="mid-fen-table",
+                            )
+                            with gr.Row(elem_classes="mid-fen-nav"):
+                                btn_fen_prev = gr.Button("◀", size="sm", elem_classes="mid-fen-step")
+                                # không đặt minimum: ô rỗng/0 làm Gradio ném lỗi trước khi vào handler; handler tự kẹp giá trị
+                                fen_idx = gr.Number(label="Thế cờ số", value=1, precision=0, elem_id="mid-fen-idx")
+                                btn_fen_next = gr.Button("▶", size="sm", elem_classes="mid-fen-step")
+                            with gr.Row(elem_classes="mid-fen-edit"):
+                                fen_preview = gr.HTML(elem_id="mid-fen-preview")
+                                with gr.Column(elem_classes="mid-fen-form"):
+                                    fen_text = gr.Textbox(label="FEN (sửa được)", lines=2, max_lines=3, elem_id="mid-fen-text")
+                                    fen_link = gr.HTML()
+                                    with gr.Row():
+                                        btn_fen_flip = gr.Button("↻ Lật bàn 180°", elem_classes="mid-fen-btn")
+                                        btn_fen_apply = gr.Button("💾 Áp dụng", variant="primary", elem_classes="mid-fen-btn")
+                            fen_msg = gr.HTML()
+                        with gr.Tab("🔍 Đối chiếu trang") as cmp_tab:
+                            cmp_info = gr.HTML()
+                            with gr.Row(elem_classes="mid-cmp-nav"):
+                                cmp_filter = gr.Radio(
+                                    choices=review_handlers.CMP_FILTERS, value=review_handlers.CMP_FILTERS[0],
+                                    show_label=False, elem_id="mid-cmp-filter", elem_classes="mid-chips",
+                                )
+                            with gr.Row(elem_classes="mid-fen-nav"):
+                                btn_cmp_prev = gr.Button("◀", size="sm", elem_classes="mid-fen-step")
+                                cmp_page = gr.Number(label="Trang", value=None, precision=0, elem_id="mid-cmp-page")
+                                btn_cmp_next = gr.Button("▶", size="sm", elem_classes="mid-fen-step")
+                            with gr.Row(elem_classes="mid-cmp-row"):
+                                cmp_img = gr.HTML(elem_id="mid-cmp-img")
+                                cmp_md = gr.Markdown(elem_id="mid-cmp-md")
                         with gr.Tab("🕘 Lịch sử") as history_tab:
                             history_usage = gr.Markdown()
                             history_pick = gr.Dropdown(
@@ -845,6 +882,41 @@ def build_ui():
         demo.load(job_handlers.on_reattach, job_state, job_outputs, show_progress="hidden")
         btn_resume.click(
             job_handlers.on_resume_job, [job_state] + creds_inputs, job_outputs, show_progress="hidden",
+        )
+
+        # ---------------- hiệu đính: bảng thế cờ (G3.1) và đối chiếu trang (G3.2) ----------------
+        fen_outputs = [fen_info, fen_table, fen_idx, fen_text, fen_preview, fen_link, fen_msg]
+        fen_ctx = [job_state, file_pick]
+        fen_tab.select(review_handlers.fen_refresh, fen_ctx, fen_outputs, show_progress="hidden")
+        fen_table.select(review_handlers.fen_select, fen_ctx, fen_outputs, show_progress="hidden")
+        fen_idx.submit(review_handlers.fen_goto, fen_ctx + [fen_idx], fen_outputs, show_progress="hidden")
+        fen_idx.blur(review_handlers.fen_goto, fen_ctx + [fen_idx], fen_outputs, show_progress="hidden")
+        btn_fen_prev.click(
+            lambda j, s, n: review_handlers.fen_step(j, s, n, -1), fen_ctx + [fen_idx], fen_outputs, show_progress="hidden",
+        )
+        btn_fen_next.click(
+            lambda j, s, n: review_handlers.fen_step(j, s, n, 1), fen_ctx + [fen_idx], fen_outputs, show_progress="hidden",
+        )
+        fen_text.input(review_handlers.fen_preview, fen_text, [fen_preview, fen_link], show_progress="hidden")
+        btn_fen_flip.click(review_handlers.fen_flip, fen_text, [fen_text, fen_preview, fen_link], show_progress="hidden")
+        btn_fen_apply.click(
+            review_handlers.fen_apply, fen_ctx + [fen_idx, fen_text], fen_outputs, show_progress="hidden",
+        ).then(
+            # tệp kết quả đã đổi trên đĩa -> vẽ lại Xem trước / Mã .md / danh sách tải về (chữ ký rỗng = buộc vẽ lại)
+            lambda j, s, sel: job_handlers.render_job(j, "", True, sel), [job_state, sig_state, file_pick], job_outputs,
+            show_progress="hidden",
+        )
+
+        cmp_outputs = [cmp_page, cmp_img, cmp_md, cmp_info]
+        cmp_ctx = [job_state, file_pick, cmp_filter, cmp_page]
+        cmp_tab.select(review_handlers.cmp_load, cmp_ctx, cmp_outputs, show_progress="hidden")
+        cmp_filter.change(review_handlers.cmp_load, cmp_ctx, cmp_outputs, show_progress="hidden")
+        cmp_page.submit(review_handlers.cmp_load, cmp_ctx, cmp_outputs, show_progress="hidden")
+        btn_cmp_prev.click(
+            lambda j, s, f, p: review_handlers.cmp_step(j, s, f, p, -1), cmp_ctx, cmp_outputs, show_progress="hidden",
+        )
+        btn_cmp_next.click(
+            lambda j, s, f, p: review_handlers.cmp_step(j, s, f, p, 1), cmp_ctx, cmp_outputs, show_progress="hidden",
         )
 
         # Lịch sử công việc

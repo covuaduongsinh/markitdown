@@ -96,7 +96,10 @@
     return html + '</div>';
   }
   window.midRenderBoards = function(){
-    var prev = document.getElementById('mid-preview');
+    // vẽ bàn cờ ở khung xem trước và ở khung Markdown của tab "Đối chiếu trang"
+    ['mid-preview', 'mid-cmp-md'].forEach(function(id){ renderBoardsIn(document.getElementById(id)); });
+  };
+  function renderBoardsIn(prev){
     if (!prev) return;
     prev.querySelectorAll('pre code').forEach(function(code){
       var pre = code.parentElement;
@@ -114,7 +117,7 @@
       pre.parentNode.insertBefore(wrap, pre);
       pre.style.display = 'none';
     });
-  };
+  }
 
   window.midDownloadedUrls = new Set();
   window.midResetDownloads = function(){
