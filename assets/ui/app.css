@@ -87,7 +87,10 @@ body[data-mid-theme="dark"] .mid-input-tabs [role="tab"][aria-selected="true"] {
 
 /* ---------- nút chọn tệp, ô URL ---------- */
 .mid-pick-btn { margin-top:2px; }
-.mid-pick-btn, .mid-pick-btn button { width:100%; }
+.mid-pick-btn { width:100%; background:var(--c-inset) !important; border:1px solid var(--c-border) !important;
+  color:var(--c-subtext) !important; border-radius:11px !important; font-size:12.5px !important; font-weight:500 !important;
+  min-height:44px; box-shadow:none !important; }
+.mid-pick-btn:hover { background:var(--c-navysoft) !important; }
 .mid-picked-view p, .mid-picked-view li { color:var(--c-subtext) !important; font-size:11.5px; margin:2px 0; }
 .mid-url-box textarea, .mid-url-box input { border:1px solid var(--c-border-strong) !important;
   background:var(--c-dropbg) !important; color:var(--c-text) !important; border-radius:12px !important; font-size:13.5px !important; }
@@ -203,3 +206,42 @@ body[data-mid-theme="dark"] #mid-resume { color:#fff !important; }
 .dl-row.dl-all .dl-btn svg { stroke:var(--navy-ink); }
 .mid-clear-btn { background:var(--c-inset) !important; border:1px solid var(--c-border) !important;
   color:var(--c-subtext) !important; border-radius:11px !important; font-size:12.5px !important; min-height:40px; }
+
+/* ---------- vùng kéo-thả (gr.File#mid-file) — Việt hóa bằng nội dung giả (không phụ thuộc gói ngôn ngữ của Gradio) ---------- */
+.mid-card #mid-file { border:2px dashed var(--c-border-strong) !important; background:var(--c-dropbg) !important;
+  border-radius:14px !important; padding:0 !important; min-height:0; }
+#mid-file button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+  width:100%; min-height:132px; padding:18px; background:transparent !important; border:none !important;
+  cursor:pointer; font-size:0 !important; color:transparent; }
+#mid-file button > div { order:1; font-size:0 !important; display:flex; flex-direction:column; align-items:center;
+  flex:0 0 auto !important; height:auto !important; min-height:0 !important; width:auto !important; }
+#mid-file button > div > span:not(.icon-wrap) { display:none !important; }   /* "- hoặc -" tiếng Anh */
+#mid-file button .icon-wrap { width:46px; height:46px; border-radius:999px; background:var(--c-navysoft);
+  display:flex; align-items:center; justify-content:center; margin:0 !important; }
+#mid-file button svg { width:22px; height:22px; color:var(--navy) !important; stroke:var(--navy) !important; }
+body[data-mid-theme="dark"] #mid-file button svg { color:#fff !important; stroke:#fff !important; }
+#mid-file button::before { content:"Kéo-thả tệp vào đây"; order:2; font-size:14.5px; font-weight:700; color:var(--c-text); }
+#mid-file button::after { content:"hoặc bấm để chọn — PDF, Word, Excel, PPT, ảnh"; order:3; font-size:12px;
+  color:var(--c-subtext); text-align:center; line-height:1.5; }
+#mid-file:hover { border-color:var(--navy) !important; background:var(--c-navysoft) !important; }
+/* Sau khi chọn tệp: ẩn cả khối gr.File (đã có hàng đợi tự vẽ; nút "Thêm tệp"/×/Xóa hết của hàng đợi bấm hộ nút gốc) */
+#mid-file:has(.file-preview-holder) { display:none !important; }
+
+/* ---------- hàng đợi tệp ---------- */
+#mid-queue:empty { display:none; }
+.mid-queue { display:flex; flex-direction:column; gap:8px; }
+.mid-q-head { display:flex; align-items:center; justify-content:space-between; }
+.mid-q-title { font-family:'Roboto Condensed'; font-weight:700; font-size:12px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--c-subtext); }
+.mid-q-link { background:none; border:none; cursor:pointer; color:var(--navy); font-size:12px; font-weight:700; padding:6px 4px; min-height:32px; }
+body[data-mid-theme="dark"] .mid-q-link { color:#9FB0FF; }
+.mid-q-item { display:flex; align-items:center; gap:11px; padding:10px 12px; background:var(--c-inset);
+  border:1px solid var(--c-border); border-radius:11px; }
+.mid-q-ico { width:34px; height:34px; flex:0 0 auto; border-radius:9px; display:flex; align-items:center; justify-content:center;
+  color:var(--tc); background:color-mix(in srgb, var(--tc) 16%, transparent); }
+.mid-q-main { flex:1; min-width:0; }
+.mid-q-name { font-weight:500; font-size:13.5px; color:var(--c-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mid-q-meta { font-size:11.5px; color:var(--c-subtext); margin-top:1px; }
+.mid-q-x { flex:0 0 auto; width:32px; height:32px; border-radius:8px; border:none; background:transparent; color:var(--c-subtext);
+  font-size:20px; line-height:1; cursor:pointer; }
+.mid-q-x:hover { background:var(--c-navysoft); color:var(--c-text); }

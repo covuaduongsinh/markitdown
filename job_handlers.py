@@ -217,3 +217,24 @@ def on_estimate(file_paths, picked_paths, page_spec, pages_per_call):
         except ValueError as exc:
             items.append((name, total, None, str(exc)))
     return job_view.estimate_md(items, ppc)
+
+
+# ---------------------------------------------------------------------- hàng đợi tệp
+def on_queue(file_paths, picked_paths):
+    """Vẽ hàng đợi tệp từ các tệp đã chọn (kéo-thả hoặc hộp thoại Windows). Rỗng khi chưa có tệp."""
+    sources, real = collect_sources(file_paths, picked_paths)
+    items = []
+    for p in sources:
+        try:
+            size = os.path.getsize(p)
+        except OSError:
+            size = None
+        pages = None
+        if os.path.splitext(p)[1].lower() == ".pdf":
+            try:
+                pages = _pages_cached(p, os.path.getmtime(p))
+            except OSError:
+                pages = None
+        items.append((os.path.basename(p), size, pages))
+    # Tệp chọn bằng hộp thoại không nằm trong gr.File nên không xóa từng tệp được -> chỉ liệt kê.
+    return job_view.queue_html(items, removable=not real)

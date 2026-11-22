@@ -126,6 +126,11 @@ def _convert_btn_label(n):
     return f"Chuyển đổi {n} tệp" if n else "Chuyển đổi"
 
 
+def _convert_btn_update(n):
+    """Nhãn "Chuyển đổi N tệp"; vô hiệu khi chưa có tệp (thiết kế: không có tệp thì không bấm được)."""
+    return gr.update(value=_convert_btn_label(n), interactive=bool(n))
+
+
 def _set_running(running):
     """Đang chạy -> ẩn nút Chuyển đổi, hiện nút Dừng (và ngược lại khi xong)."""
     return gr.update(visible=not running), gr.update(visible=running)
@@ -141,7 +146,7 @@ def _buttons_after_stop(job_id):
 def _on_files_change(files):
     """Kéo-thả tệp mới -> xoá lựa chọn từ hộp thoại + cập nhật nhãn nút."""
     n = len(files) if files else 0
-    return [], "", gr.update(value=_convert_btn_label(n))
+    return [], "", _convert_btn_update(n)
 
 
 def build_ui():
@@ -159,10 +164,6 @@ def build_ui():
                 with gr.Column(elem_classes=["mid-card", "mid-input-card"]):
                     with gr.Tabs(elem_classes="mid-input-tabs"):
                         with gr.Tab("Từ tệp"):
-                            gr.HTML(
-                                '<div class="mid-drop-caption"><b>Kéo-thả tệp vào đây</b> '
-                                "— hoặc bấm để chọn (PDF, Word, Excel, PPT, ảnh)</div>"
-                            )
                             file_in = gr.File(
                                 show_label=False,
                                 type="filepath",
@@ -170,6 +171,9 @@ def build_ui():
                                 height=130,
                                 elem_id="mid-file",
                             )
+                            # Hàng đợi tệp tự vẽ (tên, loại, dung lượng, số trang, nút ×). Hộp thoại Gradio gốc bị ẩn bằng CSS;
+                            # nút × / Xóa hết / Thêm tệp được JS bắc cầu sang các nút gốc của gr.File.
+                            queue_view = gr.HTML(elem_id="mid-queue")
                             picked_state = gr.State([])  # đường dẫn THẬT từ hộp thoại
                             btn_pick = gr.Button(
                                 "Chọn tệp từ máy (giữ đường dẫn gốc để lưu cạnh file)",
@@ -396,7 +400,7 @@ def build_ui():
                         elem_classes="mid-preset",
                     )
                     btn_file = gr.Button(
-                        "Chuyển đổi", variant="primary", elem_id="mid-convert"
+                        "Chuyển đổi", variant="primary", elem_id="mid-convert", interactive=False
                     )
                     btn_stop = gr.Button(
                         "⏹ Dừng", variant="stop", visible=False, elem_id="mid-stop"
@@ -741,13 +745,17 @@ def build_ui():
 
         # Mở hộp thoại Windows -> nạp đường dẫn thật vào State + hiển thị.
         btn_pick.click(on_pick_files, None, [picked_state, picked_view]).then(
-            lambda p: gr.update(value=_convert_btn_label(len(p) if p else 0)),
+            lambda p: _convert_btn_update(len(p) if p else 0),
             picked_state, btn_file,
         ).then(
             job_handlers.on_estimate, [file_in, picked_state, page_spec, ocr_pages_per_call], page_estimate,
             show_progress="hidden",
+        ).then(
+            job_handlers.on_queue, [file_in, picked_state], queue_view, show_progress="hidden",
         )
-        file_in.change(_on_files_change, file_in, [picked_state, picked_view, btn_file])
+        file_in.change(_on_files_change, file_in, [picked_state, picked_view, btn_file]).then(
+            job_handlers.on_queue, [file_in, picked_state], queue_view, show_progress="hidden",
+        )
 
         # ---------------- công việc nền (jobs.py) ----------------
         # Bấm Chuyển đổi chỉ TẠO công việc; giao diện hỏi trạng thái mỗi vài giây (gr.Timer, chỉ bật khi có việc đang chạy).

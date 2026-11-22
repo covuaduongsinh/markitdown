@@ -184,3 +184,53 @@ def read_raw_from_disk(manager):
             return ""
 
     return _read
+
+
+# ---------------------------------------------------------------------- hàng đợi tệp (G1.3)
+_Q_TYPES = {
+    ".pdf": ("PDF", "#EE5A52"), ".doc": ("Word", "#3DA0E3"), ".docx": ("Word", "#3DA0E3"), ".rtf": ("Văn bản", "#3DA0E3"),
+    ".xls": ("Excel", "#1FA98F"), ".xlsx": ("Excel", "#1FA98F"), ".csv": ("CSV", "#1FA98F"),
+    ".ppt": ("PowerPoint", "#D99A12"), ".pptx": ("PowerPoint", "#D99A12"),
+    ".jpg": ("Ảnh", "#8B5CF6"), ".jpeg": ("Ảnh", "#8B5CF6"), ".png": ("Ảnh", "#8B5CF6"), ".gif": ("Ảnh", "#8B5CF6"),
+    ".webp": ("Ảnh", "#8B5CF6"), ".bmp": ("Ảnh", "#8B5CF6"), ".tif": ("Ảnh", "#8B5CF6"), ".tiff": ("Ảnh", "#8B5CF6"),
+}
+_Q_FILE_ICON = (
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
+    '<polyline points="14 2 14 8 20 8"/></svg>'
+)
+
+
+def queue_html(items, removable=True):
+    """HTML hàng đợi tệp. items: list (tên, dung_lượng_byte | None, số_trang | None). Rỗng -> chuỗi rỗng."""
+    if not items:
+        return ""
+    n = len(items)
+    head = (
+        f'<div class="mid-q-head"><span class="mid-q-title">{n} tệp trong hàng đợi</span>'
+        + (
+            '<span><button type="button" class="mid-q-link" data-mid-queue-add>+ Thêm tệp</button>'
+            '<button type="button" class="mid-q-link" data-mid-queue-clear>Xóa hết</button></span>'
+            if removable else ""
+        )
+        + "</div>"
+    )
+    rows = []
+    for i, (name, size, pages) in enumerate(items):
+        ext = os.path.splitext(name)[1].lower()
+        kind, color = _Q_TYPES.get(ext, (ext.lstrip(".").upper() or "Tệp", "#2B3990"))
+        meta = [kind]
+        if size is not None:
+            meta.append(fmt_bytes(size))
+        if pages:
+            meta.append(f"{pages} trang")
+        x = (
+            f'<button type="button" class="mid-q-x" data-mid-queue-remove="{i}" aria-label="Xóa khỏi hàng đợi">×</button>'
+            if removable else ""
+        )
+        rows.append(
+            f'<div class="mid-q-item" style="--tc:{color}"><span class="mid-q-ico">{_Q_FILE_ICON}</span>'
+            f'<div class="mid-q-main"><div class="mid-q-name" title="{html.escape(name, quote=True)}">{html.escape(name)}</div>'
+            f'<div class="mid-q-meta">{html.escape(" · ".join(meta))}</div></div>{x}</div>'
+        )
+    return f'<div class="mid-queue">{head}{"".join(rows)}</div>'

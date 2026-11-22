@@ -76,6 +76,29 @@ class TestStatusRendering(UiBase):
         self.assertNotIn("<script>", _download_panel([p]))
 
 
+class TestQueue(UiBase):
+    def test_queue_html_escapes_and_shows_meta(self):
+        html_ = job_view.queue_html([('a<b>.pdf', 4300000, 12), ("ghi chu.docx", 2048, None), ("x.bin", None, None)])
+        self.assertNotIn("<b>", html_)
+        self.assertIn("3 tệp trong hàng đợi", html_)
+        self.assertIn("PDF · 4.1 MB · 12 trang", html_)
+        self.assertIn("Word · 2.0 KB", html_)
+        self.assertIn("BIN", html_)  # loại lạ: dùng đuôi tệp
+        self.assertEqual(html_.count("data-mid-queue-remove"), 3)
+        self.assertIn("data-mid-queue-clear", html_)
+        self.assertEqual(job_view.queue_html([]), "")
+        self.assertNotIn("data-mid-queue-remove", job_view.queue_html([("a.pdf", 1, 1)], removable=False))
+
+    def test_on_queue_reads_real_pdf(self):
+        out = job_handlers.on_queue([self.pdf], [])
+        self.assertIn("sach4.pdf", out)
+        self.assertIn("4 trang", out)
+        self.assertIn("data-mid-queue-remove", out)
+        # tệp chọn bằng hộp thoại Windows: chỉ liệt kê, không có nút xóa
+        self.assertNotIn("data-mid-queue-remove", job_handlers.on_queue([], [self.pdf]))
+        self.assertEqual(job_handlers.on_queue([], []), "")
+
+
 class TestHistory(UiBase):
     def test_labels_open_delete(self):
         jid, job = self.run_job()

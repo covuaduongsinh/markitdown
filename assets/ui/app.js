@@ -170,6 +170,17 @@
     if (card){ window.midSelectMode(+card.dataset.midMode); return; }
     var t = e.target.closest('[data-mid-action="toggle-theme"]');
     if (t){ window.midToggleTheme(); return; }
+    var qa = e.target.closest('[data-mid-queue-add]');
+    if (qa){ var up = document.querySelector('#mid-file button.upload-container'); if (up) up.click(); return; }
+    var qc = e.target.closest('[data-mid-queue-clear]');
+    if (qc){ var cl = document.querySelector('#mid-file button[aria-label="Clear"]'); if (cl) cl.click(); return; }
+    var qr = e.target.closest('[data-mid-queue-remove]');
+    if (qr){
+      var rm = document.querySelectorAll('#mid-file button.label-clear-button');
+      var ix = +qr.getAttribute('data-mid-queue-remove');
+      if (rm[ix]) rm[ix].click();
+      return;
+    }
     var nt = e.target.closest('[data-mid-action="enable-notify"]');
     if (nt){ window.midEnableNotify(); return; }
     var clr = e.target.closest('.mid-clear-btn');
