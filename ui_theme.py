@@ -145,12 +145,32 @@ TOPBAR_HTML = f"""
       <span class="mid-badge">Ảnh · URL</span>
       <span class="mid-badge mid-badge-chess">Sách cờ vua</span>
     </div>
-    <button class="mid-theme-btn" data-mid-action="enable-notify" type="button" title="Báo khi công việc xong">
-      <span data-mid-notify-label>🔔 Thông báo</span>
+    <span class="mid-ai-badge" data-mid-ai-badge data-ready="" title="Trạng thái phiên AI (mở Cài đặt để kết nối)">
+      <i></i><span data-mid-ai-label>AI: đang kiểm tra…</span>
+    </span>
+    <button class="mid-theme-btn" data-mid-action="toggle-settings" type="button" aria-label="Mở trang Cài đặt">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Cài đặt</span>
     </button>
     <button class="mid-theme-btn" data-mid-action="toggle-theme" type="button">
       <span data-mid-theme-icon></span><span data-mid-theme-label>Tối</span>
     </button>
+  </div>
+</div>
+"""
+
+# Đầu trang Cài đặt (toàn chiều rộng): tiêu đề, nút bật thông báo trình duyệt, nút quay lại.
+MID_SETTINGS_HEAD_HTML = """
+<div class="mid-set-head">
+  <div>
+    <div class="mid-set-title">Cài đặt hạ tầng &amp; API</div>
+    <div class="mid-set-sub">Kết nối gói thuê bao AI và Dropbox. Khóa/token chỉ lưu trong trình duyệt của bạn.</div>
+  </div>
+  <div class="mid-set-actions">
+    <button type="button" class="mid-set-btn" data-mid-action="enable-notify" title="Báo khi công việc nền xong">
+      <span data-mid-notify-label>🔔 Thông báo</span>
+    </button>
+    <button type="button" class="mid-set-btn mid-set-back" data-mid-action="close-settings">← Quay lại</button>
   </div>
 </div>
 """

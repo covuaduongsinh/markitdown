@@ -29,6 +29,32 @@ class TestUiAssets(unittest.TestCase):
         self.assertEqual(ui_theme.MODE_CARDS_HTML.count('data-mid-mode="'), 4)
 
 
+class TestSettingsPage(unittest.TestCase):
+    def test_topbar_has_gear_and_ai_badge_and_settings_head(self):
+        self.assertIn('data-mid-action="toggle-settings"', ui_theme.TOPBAR_HTML)
+        self.assertIn("data-mid-ai-badge", ui_theme.TOPBAR_HTML)
+        self.assertIn('data-mid-action="close-settings"', ui_theme.MID_SETTINGS_HEAD_HTML)
+        self.assertIn('data-mid-action="enable-notify"', ui_theme.MID_SETTINGS_HEAD_HTML)
+
+    def test_infra_html_exposes_ai_ready_flag(self):
+        import infrastructure
+        self.assertRegex(infrastructure.render_infrastructure_html(), r'data-mid-ai-ready="[01]"')
+
+    def test_settings_is_a_separate_page_not_an_input_tab(self):
+        blocks = g.build_ui()
+        by_id = {getattr(b, "elem_id", None): b for b in blocks.blocks.values()}
+        self.assertIn("mid-settings", by_id)
+        self.assertIn("mid-workspace", by_id)
+        tabs = [b.label for b in blocks.blocks.values() if type(b).__name__ == "Tab"]
+        self.assertFalse([t for t in tabs if "Cài đặt" in str(t)], tabs)
+
+    def test_css_never_uses_body_prefixed_selectors_for_layout(self):
+        # Gradio nhân quy tắc CSS thành bản có tiền tố .gradio-container .contain: `body.x #id` không thắng được -> cấm.
+        for line in ui_theme.CSS.splitlines():
+            if line.startswith("body") and "{" in line:
+                self.assertTrue(line.startswith("body {") or line.startswith('body[data-mid-theme="dark"] {'), line)
+
+
 class TestSelfHostedFonts(unittest.TestCase):
     def test_no_cdn_and_font_faces_present(self):
         css = ui_theme.CSS + ui_theme.HEAD

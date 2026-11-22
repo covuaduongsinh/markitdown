@@ -20,6 +20,35 @@
     try { localStorage.setItem('mid-theme', next); } catch(e){}
     setThemeBtn();
   };
+  // ---- Trang Cài đặt: bật/tắt bằng class trên <body> (CSS ẩn/hiện #mid-workspace và #mid-settings) ----
+  window.midToggleSettings = function(force){
+    // Lớp đặt trên CHÍNH phần tử (không phải <body>): Gradio nhân mỗi quy tắc CSS thành bản có tiền tố
+    // `.gradio-container .contain`, nên quy tắc `body.xxx #id` không thắng được quy tắc có tiền tố.
+    var ws = document.getElementById('mid-workspace'), st = document.getElementById('mid-settings'), tb = document.getElementById('mid-topbar');
+    if (!ws || !st) return;
+    var open = typeof force === 'boolean' ? force : !st.classList.contains('mid-open');
+    st.classList.toggle('mid-open', open);
+    ws.classList.toggle('mid-hide', open);
+    if (tb) tb.classList.toggle('is-settings', open);
+    window.scrollTo(0, 0);
+  };
+  // Huy hiệu "AI: Sẵn sàng / Cần đăng nhập" ở thanh tiêu đề, đọc từ bảng hạ tầng (data-mid-ai-ready)
+  window.midSyncAiBadge = function(){
+    var badge = document.querySelector('[data-mid-ai-badge]');
+    var panel = document.querySelector('#mid-infra-status [data-mid-ai-ready]');
+    if (!badge || !panel) return;
+    var ok = panel.getAttribute('data-mid-ai-ready') === '1';
+    var want = ok ? '1' : '0';
+    if (badge.getAttribute('data-ready') !== want){
+      badge.setAttribute('data-ready', want);
+      var lb = badge.querySelector('[data-mid-ai-label]');
+      if (lb) lb.textContent = ok ? 'AI: Sẵn sàng' : 'AI: Cần đăng nhập';
+    }
+  };
+  document.addEventListener('keydown', function(e){
+    var st = document.getElementById('mid-settings');
+    if (e.key === 'Escape' && st && st.classList.contains('mid-open')) window.midToggleSettings(false);
+  });
   window.midSelectMode = function(idx){
     document.querySelectorAll('[data-mid-mode]').forEach(function(el){ el.classList.toggle('active', (+el.dataset.midMode) === idx); });
     var rs = document.querySelectorAll('#mid-mode-radio input[type=radio]');
@@ -170,6 +199,10 @@
     if (card){ window.midSelectMode(+card.dataset.midMode); return; }
     var t = e.target.closest('[data-mid-action="toggle-theme"]');
     if (t){ window.midToggleTheme(); return; }
+    var ts = e.target.closest('[data-mid-action="toggle-settings"]');
+    if (ts){ window.midToggleSettings(); return; }
+    var cs = e.target.closest('[data-mid-action="close-settings"]');
+    if (cs){ window.midToggleSettings(false); return; }
     var rr = e.target.closest('[data-mid-action="rerun"]');
     if (rr){ var rb = document.getElementById('mid-rerun'); if (rb) rb.click(); return; }
     var cp = e.target.closest('[data-mid-action="copy-raw"]');
@@ -209,6 +242,7 @@
     window.midTriggerAutoDownloads();
     setNotifyBtn();
     window.midWatchJob();
+    window.midSyncAiBadge();
   }
   function start(){
     init();
@@ -219,6 +253,7 @@
       window.midTriggerAutoDownloads();
       setNotifyBtn();
       window.midWatchJob();
+      window.midSyncAiBadge();
     }).observe(document.body, {childList:true, subtree:true});
   }
   if (document.body) start();

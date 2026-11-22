@@ -542,7 +542,7 @@ def render_infrastructure_html(api_key="", claude_token="", agy_token=""):
     env_text = status["environment"]
 
     return f"""
-<div class="infra-panel" style="background:var(--c-inset);border:1px solid var(--c-border);border-radius:12px;padding:16px;margin:10px 0;">
+<div class="infra-panel" data-mid-ai-ready="{1 if (status['antigravity']['ready'] or status['claude']['ready'] or status['api']['has_gemini_key']) else 0}" style="background:var(--c-inset);border:1px solid var(--c-border);border-radius:12px;padding:16px;margin:10px 0;">
   <div style="font-size:13px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--c-subtext);margin-bottom:12px;display:flex;align-items:center;gap:6px;">
     <span>⚡ Trạng thái Hạ tầng &amp; Phiên Đăng nhập AI</span>
   </div>

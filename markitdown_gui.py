@@ -59,6 +59,7 @@ from ui_theme import (
     _ASSETS_DIR,
     CSS,
     HEAD,
+    MID_SETTINGS_HEAD_HTML,
     MODE_CARDS_HTML,
     THEME,
     TOPBAR_HTML,
@@ -213,188 +214,6 @@ def build_ui():
                             btn_url = gr.Button(
                                 "Chuyển đổi URL", variant="primary", elem_id="mid-convert-url"
                             )
-                        with gr.Tab("⚙️ Cài đặt Hạ tầng & API"):
-                            infra_status_html = gr.HTML(
-                                infrastructure.render_infrastructure_html(),
-                                elem_id="mid-infra-status",
-                            )
-                            with gr.Group():
-                                gr.HTML(
-                                    '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
-                                    '⚡ 1. Google Antigravity CLI (Gói Thuê bao Google Gemini Advanced - 0đ phí API)'
-                                    '</div>'
-                                )
-                                agy_token_in = gr.Textbox(
-                                    label="Google Antigravity OAuth Token / JSON Credentials",
-                                    placeholder='Dán chuỗi token hoặc toàn bộ nội dung file antigravity-oauth-token / oauth_creds.json',
-                                    type="password",
-                                    value="",
-                                    elem_classes="mid-agy-token",
-                                    info="Dùng gói thuê bao Google Antigravity / Gemini Advanced trên VPS (0đ token API).",
-                                )
-                                with gr.Row():
-                                    btn_test_agy = gr.Button(
-                                        "🔍 Kiểm tra kết nối Antigravity CLI",
-                                        variant="secondary",
-                                        size="sm",
-                                    )
-                                agy_test_status = gr.Markdown(
-                                    "",
-                                    elem_id="mid-agy-test-status",
-                                )
-                                gr.HTML(
-                                    '<div style="margin-top:8px;padding:10px 14px;border-radius:8px;'
-                                    'background:rgba(31,169,143,0.06);border:1px solid rgba(31,169,143,0.18);'
-                                    'font-size:12.5px;color:var(--c-text);line-height:1.6;">'
-                                    '⚡ <b>Cách lấy Token Antigravity từ máy tính để dùng trên VPS:</b><br>'
-                                    '• Mở tệp: <code>C:\\Users\\&lt;tên_bạn&gt;\\.gemini\\antigravity-cli\\antigravity-oauth-token</code> (hoặc <code>oauth_creds.json</code>).<br>'
-                                    '• Copy toàn bộ nội dung trong tệp và dán vào ô trên → bấm <b>Kiểm tra kết nối Antigravity CLI</b>.<br>'
-                                    '• Hệ thống sẽ tự động lưu và kết nối phiên Google Antigravity của bạn vĩnh viễn trên VPS!</div>'
-                                )
-
-                            gr.HTML('<div style="height:1px;background:var(--c-border);margin:12px 0;"></div>')
-
-                            with gr.Group():
-                                gr.HTML(
-                                    '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
-                                    '🟣 2. Claude Code CLI (Gói Thuê bao Claude Pro / Team / Max - 0đ phí API)'
-                                    '</div>'
-                                )
-                                claude_token_in = gr.Textbox(
-                                    label="Claude Code OAuth Token",
-                                    placeholder="Dán token sinh bởi lệnh `claude setup-token` (hạn dùng ~1 năm)",
-                                    type="password",
-                                    value="",
-                                    elem_classes="mid-claude-token",
-                                    info="Dùng gói thuê bao tháng Claude Pro/Team/Max để OCR và dịch thuật miễn phí 100% (không tính phí token API).",
-                                )
-                                with gr.Row():
-                                    btn_test_sub = gr.Button(
-                                        "🔍 Kiểm tra kết nối Claude Code CLI",
-                                        variant="secondary",
-                                        size="sm",
-                                    )
-                                sub_test_status = gr.Markdown(
-                                    "",
-                                    elem_id="mid-sub-test-status",
-                                )
-                                gr.HTML(
-                                    '<div style="margin-top:8px;padding:10px 14px;border-radius:8px;'
-                                    'background:rgba(43,57,144,0.06);border:1px solid rgba(43,57,144,0.18);'
-                                    'font-size:12.5px;color:var(--c-text);line-height:1.6;">'
-                                    '🟣 <b>Cách lấy Claude Code OAuth Token (hạn dùng ~1 năm):</b><br>'
-                                    '• Trên máy có cài Claude Code CLI (hoặc SSH vào server), chạy lệnh <code>claude setup-token</code>.<br>'
-                                    '• Mở URL hiện ra trên trình duyệt của bạn, đăng nhập bằng tài khoản Claude Pro/Max, dán mã xác nhận ngược lại terminal nếu được hỏi.<br>'
-                                    '• Copy token được in ra, dán vào ô trên và bấm <b>Kiểm tra kết nối Claude Code CLI</b>.</div>'
-                                )
-
-                                gr.HTML('<div style="height:1px;background:var(--c-border);margin:10px 0;"></div>')
-                                gr.HTML(
-                                    '<div style="font-size:12.5px;font-weight:700;color:var(--c-text);margin-bottom:4px;">'
-                                    '🔐 Hoặc đăng nhập trực tiếp ngay tại đây (không cần SSH vào VPS)'
-                                    '</div>'
-                                )
-                                with gr.Row():
-                                    btn_claude_login_start = gr.Button(
-                                        "🔐 Đăng nhập Claude Code", variant="secondary", size="sm"
-                                    )
-                                    btn_claude_login_cancel = gr.Button(
-                                        "✖ Hủy", variant="stop", size="sm", visible=False
-                                    )
-                                claude_login_url_md = gr.Markdown("", visible=False)
-                                claude_login_code_in = gr.Textbox(
-                                    label="Dán mã xác nhận (nếu trang web yêu cầu)",
-                                    placeholder="Dán mã hiện trên trình duyệt sau khi đăng nhập claude.ai",
-                                    visible=False,
-                                )
-                                btn_claude_login_submit = gr.Button(
-                                    "✅ Xác nhận mã", variant="primary", size="sm", visible=False
-                                )
-                                claude_login_result_md = gr.Markdown("")
-                                claude_login_session_state = gr.State("")
-
-                            gr.HTML('<div style="height:1px;background:var(--c-border);margin:12px 0;"></div>')
-
-                            with gr.Group():
-                                gr.HTML(
-                                    '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
-                                    '🔑 3. Khóa API Google Gemini (Dự phòng cho REST API)'
-                                    '</div>'
-                                )
-                                api_key_in = gr.Textbox(
-                                    label="Google Gemini API Key (Dùng trực tiếp trên Web)",
-                                    placeholder="AIzaSy... (lưu an toàn trên trình duyệt của bạn)",
-                                    type="password",
-                                    value="",
-                                    elem_classes="mid-api-key",
-                                    info="Dùng cho OCR nhận diện thế cờ & dịch tiếng Việt trực tiếp qua REST API (không cần cài CLI).",
-                                )
-                                with gr.Row():
-                                    btn_test_api = gr.Button(
-                                        "🔍 Kiểm tra kết nối API Key",
-                                        variant="secondary",
-                                        size="sm",
-                                    )
-                                api_test_status = gr.Markdown(
-                                    "",
-                                    elem_id="mid-api-test-status",
-                                )
-                                gr.HTML('<div style="height:1px;background:var(--c-border);margin:12px 0;"></div>')
-
-                            with gr.Group():
-                                gr.HTML(
-                                    '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
-                                    '☁️ 4. Cấu hình Đồng bộ Đám mây Dropbox (Dropbox Cloud Sync)'
-                                    '</div>'
-                                )
-                                dropbox_token_in = gr.Textbox(
-                                    label="Dropbox Access Token hoặc Refresh Token",
-                                    placeholder="sl.u... hoặc Refresh Token (lưu an toàn trên trình duyệt)",
-                                    type="password",
-                                    value="",
-                                    elem_classes="mid-api-key",
-                                    info="Dùng để tự động đồng bộ tất cả tệp kết quả (.md, _vn.md, _fen.txt) lên tài khoản Dropbox của bạn.",
-                                )
-                                with gr.Row():
-                                    dropbox_app_key_in = gr.Textbox(
-                                        label="Dropbox App Key (Dành cho Refresh Token)",
-                                        placeholder="vd: abc123xyz...",
-                                        value="",
-                                        elem_classes="mid-api-key",
-                                    )
-                                    dropbox_app_secret_in = gr.Textbox(
-                                        label="Dropbox App Secret (Dành cho Refresh Token)",
-                                        placeholder="vd: sec123...",
-                                        type="password",
-                                        value="",
-                                        elem_classes="mid-api-key",
-                                    )
-                                dropbox_folder_in = gr.Textbox(
-                                    label="Thư mục mặc định trên Dropbox",
-                                    value="/MarkItDown",
-                                    elem_classes="mid-autosave-dir",
-                                    info="Các tệp chuyển đổi sẽ được lưu vào thư mục này trên Dropbox (mặc định: /MarkItDown).",
-                                )
-                                with gr.Row():
-                                    btn_test_dropbox = gr.Button(
-                                        "🔍 Kiểm tra kết nối Dropbox",
-                                        variant="secondary",
-                                        size="sm",
-                                    )
-                                dropbox_test_status = gr.Markdown(
-                                    "",
-                                    elem_id="mid-dropbox-test-status",
-                                )
-                                gr.HTML(
-                                    '<div style="margin-top:6px;padding:8px 12px;border-radius:8px;'
-                                    'background:rgba(0,97,254,0.06);border:1px solid rgba(0,97,254,0.2);'
-                                    'font-size:12.5px;color:var(--c-text);line-height:1.6;">'
-                                    '☁️ <b>Cách lấy Token Dropbox (1 phút):</b><br>'
-                                    '• Truy cập <a href="https://www.dropbox.com/developers/apps" target="_blank" style="color:#0061FE;font-weight:700;text-decoration:underline;">Dropbox App Console</a> → Tạo App (chọn <b>Scoped Access</b> → <b>Full Dropbox</b> hoặc <b>App Folder</b>).<br>'
-                                    '• Tab <b>Permissions</b>: tick chọn <code>files.content.write</code>, <code>files.content.read</code>, <code>account_info.read</code> → Bấm <b>Submit</b>.<br>'
-                                    '• Tab <b>Settings</b>: Bấm <b>Generate Access Token</b> hoặc copy <b>App Key</b> &amp; <b>App Secret</b> để dán vào đây.</div>'
-                                )
-
                 # --- panel chế độ xử lý (thẻ HTML + radio ẩn để giữ backend) ---
                 with gr.Column(elem_classes=["mid-card", "mid-mode-card"]):
                     gr.HTML('<div class="mid-section-title">Chế độ xử lý</div>')
@@ -585,6 +404,191 @@ def build_ui():
                 )
                 # Nút ẩn: JS bấm hộ khi người dùng bấm "Chạy lại" trong danh sách tải về
                 btn_rerun = gr.Button("Chạy lại", elem_id="mid-rerun", elem_classes="mid-hidden")
+
+        # ============ TRANG CÀI ĐẶT (toàn chiều rộng; bật/tắt bằng nút bánh răng ở thanh tiêu đề, JS) ============
+        with gr.Column(elem_id="mid-settings"):
+            gr.HTML(MID_SETTINGS_HEAD_HTML)
+            infra_status_html = gr.HTML(
+                infrastructure.render_infrastructure_html(),
+                elem_id="mid-infra-status",
+            )
+            with gr.Row(elem_classes="mid-set-grid"):
+                with gr.Column(elem_classes=["mid-card", "mid-set-card"]):
+                    gr.HTML(
+                        '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
+                        '⚡ 1. Google Antigravity CLI (Gói Thuê bao Google Gemini Advanced - 0đ phí API)'
+                        '</div>'
+                    )
+                    agy_token_in = gr.Textbox(
+                        label="Google Antigravity OAuth Token / JSON Credentials",
+                        placeholder='Dán chuỗi token hoặc toàn bộ nội dung file antigravity-oauth-token / oauth_creds.json',
+                        type="password",
+                        value="",
+                        elem_classes="mid-agy-token",
+                        info="Dùng gói thuê bao Google Antigravity / Gemini Advanced trên VPS (0đ token API).",
+                    )
+                    with gr.Row():
+                        btn_test_agy = gr.Button(
+                            "🔍 Kiểm tra kết nối Antigravity CLI",
+                            variant="secondary",
+                            size="sm",
+                        )
+                    agy_test_status = gr.Markdown(
+                        "",
+                        elem_id="mid-agy-test-status",
+                    )
+                    with gr.Accordion("Hướng dẫn chi tiết", open=False, elem_classes="mid-set-guide"):
+                        gr.HTML(
+                            '<div style="margin-top:8px;padding:10px 14px;border-radius:8px;'
+                            'background:rgba(31,169,143,0.06);border:1px solid rgba(31,169,143,0.18);'
+                            'font-size:12.5px;color:var(--c-text);line-height:1.6;">'
+                            '⚡ <b>Cách lấy Token Antigravity từ máy tính để dùng trên VPS:</b><br>'
+                            '• Mở tệp: <code>C:\\Users\\&lt;tên_bạn&gt;\\.gemini\\antigravity-cli\\antigravity-oauth-token</code> (hoặc <code>oauth_creds.json</code>).<br>'
+                            '• Copy toàn bộ nội dung trong tệp và dán vào ô trên → bấm <b>Kiểm tra kết nối Antigravity CLI</b>.<br>'
+                            '• Hệ thống sẽ tự động lưu và kết nối phiên Google Antigravity của bạn vĩnh viễn trên VPS!</div>'
+                        )
+    
+    
+                with gr.Column(elem_classes=["mid-card", "mid-set-card"]):
+                    gr.HTML(
+                        '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
+                        '🟣 2. Claude Code CLI (Gói Thuê bao Claude Pro / Team / Max - 0đ phí API)'
+                        '</div>'
+                    )
+                    claude_token_in = gr.Textbox(
+                        label="Claude Code OAuth Token",
+                        placeholder="Dán token sinh bởi lệnh `claude setup-token` (hạn dùng ~1 năm)",
+                        type="password",
+                        value="",
+                        elem_classes="mid-claude-token",
+                        info="Dùng gói thuê bao tháng Claude Pro/Team/Max để OCR và dịch thuật miễn phí 100% (không tính phí token API).",
+                    )
+                    with gr.Row():
+                        btn_test_sub = gr.Button(
+                            "🔍 Kiểm tra kết nối Claude Code CLI",
+                            variant="secondary",
+                            size="sm",
+                        )
+                    sub_test_status = gr.Markdown(
+                        "",
+                        elem_id="mid-sub-test-status",
+                    )
+                    with gr.Accordion("Hướng dẫn chi tiết", open=False, elem_classes="mid-set-guide"):
+                        gr.HTML(
+                            '<div style="margin-top:8px;padding:10px 14px;border-radius:8px;'
+                            'background:rgba(43,57,144,0.06);border:1px solid rgba(43,57,144,0.18);'
+                            'font-size:12.5px;color:var(--c-text);line-height:1.6;">'
+                            '🟣 <b>Cách lấy Claude Code OAuth Token (hạn dùng ~1 năm):</b><br>'
+                            '• Trên máy có cài Claude Code CLI (hoặc SSH vào server), chạy lệnh <code>claude setup-token</code>.<br>'
+                            '• Mở URL hiện ra trên trình duyệt của bạn, đăng nhập bằng tài khoản Claude Pro/Max, dán mã xác nhận ngược lại terminal nếu được hỏi.<br>'
+                            '• Copy token được in ra, dán vào ô trên và bấm <b>Kiểm tra kết nối Claude Code CLI</b>.</div>'
+                        )
+    
+                    gr.HTML(
+                        '<div style="font-size:12.5px;font-weight:700;color:var(--c-text);margin-bottom:4px;">'
+                        '🔐 Hoặc đăng nhập trực tiếp ngay tại đây (không cần SSH vào VPS)'
+                        '</div>'
+                    )
+                    with gr.Row():
+                        btn_claude_login_start = gr.Button(
+                            "🔐 Đăng nhập Claude Code", variant="secondary", size="sm"
+                        )
+                        btn_claude_login_cancel = gr.Button(
+                            "✖ Hủy", variant="stop", size="sm", visible=False
+                        )
+                    claude_login_url_md = gr.Markdown("", visible=False)
+                    claude_login_code_in = gr.Textbox(
+                        label="Dán mã xác nhận (nếu trang web yêu cầu)",
+                        placeholder="Dán mã hiện trên trình duyệt sau khi đăng nhập claude.ai",
+                        visible=False,
+                    )
+                    btn_claude_login_submit = gr.Button(
+                        "✅ Xác nhận mã", variant="primary", size="sm", visible=False
+                    )
+                    claude_login_result_md = gr.Markdown("")
+                    claude_login_session_state = gr.State("")
+    
+    
+            with gr.Row(elem_classes="mid-set-grid"):
+                with gr.Column(elem_classes=["mid-card", "mid-set-card"]):
+                    gr.HTML(
+                        '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
+                        '🔑 3. Khóa API Google Gemini (Dự phòng cho REST API)'
+                        '</div>'
+                    )
+                    api_key_in = gr.Textbox(
+                        label="Google Gemini API Key (Dùng trực tiếp trên Web)",
+                        placeholder="AIzaSy... (lưu an toàn trên trình duyệt của bạn)",
+                        type="password",
+                        value="",
+                        elem_classes="mid-api-key",
+                        info="Dùng cho OCR nhận diện thế cờ & dịch tiếng Việt trực tiếp qua REST API (không cần cài CLI).",
+                    )
+                    with gr.Row():
+                        btn_test_api = gr.Button(
+                            "🔍 Kiểm tra kết nối API Key",
+                            variant="secondary",
+                            size="sm",
+                        )
+                    api_test_status = gr.Markdown(
+                        "",
+                        elem_id="mid-api-test-status",
+                    )
+    
+                with gr.Column(elem_classes=["mid-card", "mid-set-card"]):
+                    gr.HTML(
+                        '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
+                        '☁️ 4. Cấu hình Đồng bộ Đám mây Dropbox (Dropbox Cloud Sync)'
+                        '</div>'
+                    )
+                    dropbox_token_in = gr.Textbox(
+                        label="Dropbox Access Token hoặc Refresh Token",
+                        placeholder="sl.u... hoặc Refresh Token (lưu an toàn trên trình duyệt)",
+                        type="password",
+                        value="",
+                        elem_classes="mid-api-key",
+                        info="Dùng để tự động đồng bộ tất cả tệp kết quả (.md, _vn.md, _fen.txt) lên tài khoản Dropbox của bạn.",
+                    )
+                    with gr.Row():
+                        dropbox_app_key_in = gr.Textbox(
+                            label="Dropbox App Key (Dành cho Refresh Token)",
+                            placeholder="vd: abc123xyz...",
+                            value="",
+                            elem_classes="mid-api-key",
+                        )
+                        dropbox_app_secret_in = gr.Textbox(
+                            label="Dropbox App Secret (Dành cho Refresh Token)",
+                            placeholder="vd: sec123...",
+                            type="password",
+                            value="",
+                            elem_classes="mid-api-key",
+                        )
+                    dropbox_folder_in = gr.Textbox(
+                        label="Thư mục mặc định trên Dropbox",
+                        value="/MarkItDown",
+                        elem_classes="mid-autosave-dir",
+                        info="Các tệp chuyển đổi sẽ được lưu vào thư mục này trên Dropbox (mặc định: /MarkItDown).",
+                    )
+                    with gr.Row():
+                        btn_test_dropbox = gr.Button(
+                            "🔍 Kiểm tra kết nối Dropbox",
+                            variant="secondary",
+                            size="sm",
+                        )
+                    dropbox_test_status = gr.Markdown(
+                        "",
+                        elem_id="mid-dropbox-test-status",
+                    )
+                    with gr.Accordion("Hướng dẫn chi tiết", open=False, elem_classes="mid-set-guide"):
+                        gr.HTML(
+                            '<div style="margin-top:6px;padding:8px 12px;border-radius:8px;'
+                            'background:rgba(0,97,254,0.06);border:1px solid rgba(0,97,254,0.2);'
+                            'font-size:12.5px;color:var(--c-text);line-height:1.6;">'
+                            '☁️ <b>Cách lấy Token Dropbox (1 phút):</b><br>'
+                            '• Truy cập <a href="https://www.dropbox.com/developers/apps" target="_blank" style="color:#0061FE;font-weight:700;text-decoration:underline;">Dropbox App Console</a> → Tạo App (chọn <b>Scoped Access</b> → <b>Full Dropbox</b> hoặc <b>App Folder</b>).<br>'
+                            '• Tab <b>Permissions</b>: tick chọn <code>files.content.write</code>, <code>files.content.read</code>, <code>account_info.read</code> → Bấm <b>Submit</b>.<br>'
+                            '• Tab <b>Settings</b>: Bấm <b>Generate Access Token</b> hoặc copy <b>App Key</b> &amp; <b>App Secret</b> để dán vào đây.</div>'
+                        )
 
         # Ghi nhớ lựa chọn giữa các lần mở (lưu vào localStorage trình duyệt).
         prefs = gr.BrowserState(
