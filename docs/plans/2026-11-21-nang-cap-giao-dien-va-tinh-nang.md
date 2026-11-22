@@ -196,7 +196,7 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
 |---|---|---|---|
 | G0 | ✅ xong (2026-11-21), chưa push/merge | G0.1 `3930dd8` · G0.2 `f491108` · G0.3 `af6ee35` · G0.4 `d0d819e` · G0.5 `23d6812` | Nhánh `feat/nang-cap-giao-dien`. Ngoại lệ so với "Đạt khi" G0.3: `markitdown_gui.py` còn **1.043 dòng** (không phải <900) vì `build_ui` riêng đã 635 dòng — sẽ co lại ở G1.6 (trang Cài đặt). Kiểm tra trình duyệt chưa làm (G0 không đổi giao diện) |
 | G1 | ☐ chưa làm | | |
-| G2 | 🟡 G2.1–G2.8 xong, **G2.9 chưa làm** (hạ tầng production) | G2.1–G2.3 `183696d` · phần còn lại ở commit kế tiếp | Nhánh `feat/nang-cap-giao-dien`. Đã kiểm trong Chrome với engine giả: chạy, tải lại giữa chừng, Dừng ≤1,5 s, Chạy tiếp từ trang đã giữ, Lịch sử, liên kết tải. Chưa kiểm: thông báo trình duyệt (`Notification`), thử với AI thật, Docker build, volume trên Dokploy. Chưa lưu ảnh trang thu nhỏ (`pages/NNNN.jpg`, để G3.2) |
+| G2 | 🟡 G2.1–G2.8 xong, **G2.9 chưa làm** (hạ tầng production) | G2.1–G2.3 `183696d` · G2.4–G2.8 `87f8c83` · tài liệu `085123b` | Nhánh `feat/nang-cap-giao-dien`. Đã kiểm trong Chrome với engine giả: chạy, tải lại giữa chừng, Dừng ≤1,5 s, Chạy tiếp từ trang đã giữ, Lịch sử, liên kết tải. Chưa kiểm: thông báo trình duyệt (`Notification`), thử với AI thật, Docker build, volume trên Dokploy. Chưa lưu ảnh trang thu nhỏ (`pages/NNNN.jpg`, để G3.2) |
 | G3 | ☐ chưa làm | | |
 | G4 | ☐ chưa làm | | |
 
