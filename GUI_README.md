@@ -52,6 +52,13 @@ trong `ai_engine.py`, đã đối chiếu với `agy models` thực tế):
 **Claude Code**: `haiku` (tiết kiệm), `sonnet` (cân bằng, mặc định OCR),
 `opus` (chính xác).
 
+## Giao diện (từ 2026-11-22)
+
+Hai cột (một cột trên điện thoại): nhập liệu & điều khiển bên trái, kết quả bên phải. **Cài đặt Hạ tầng & API** là trang riêng (nút ⚙ trên
+thanh tiêu đề); huy hiệu "AI: Sẵn sàng / Cần đăng nhập" cho biết đã kết nối phiên AI chưa. Bấm *Chuyển đổi* là tạo **công việc nền**:
+đóng trình duyệt không mất việc, *Dừng* dừng thật, *Chạy tiếp* chỉ làm trang còn thiếu, tab *Lịch sử* giữ 60 ngày.
+Ô *Trang cần làm* (Tùy chọn nâng cao) nhận `1-5, 20, 31-40`. Chi tiết: `docs/tinh-nang/06-…` và `13-…`.
+
 ## Preset Tiết kiệm / Cân bằng / Chính xác
 
 Giá trị thật lấy từ `_PRESET_OPTS_AGY` / `_PRESET_OPTS_CLAUDE`

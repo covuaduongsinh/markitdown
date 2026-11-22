@@ -107,7 +107,7 @@ flowchart LR
 
 Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.dc.html`. Kiểm ở 3 bề rộng (1366, 768, 375) × 2 theme.
 
-- [ ] **G1.1 Viết lại CSS theo Q3.** Màu/phông/bo góc của thành phần Gradio đặt qua `THEME.set(...)` và biến CSS; quy tắc riêng chỉ dùng id/lớp của ta **đặt trực tiếp trên phần tử** (ví dụ `#mid-convert{…}` thay vì `#mid-convert button{…}`). Sửa K3–K6: nút Chuyển đổi/Dừng, chữ thương hiệu trắng, thẻ không lồng viền, tab segmented, nút chọn tệp, công tắc, dropdown, tab kết quả. Rà lại theme tối.
+- [x] **G1.1 Viết lại CSS theo Q3.** Màu/phông/bo góc của thành phần Gradio đặt qua `THEME.set(...)` và biến CSS; quy tắc riêng chỉ dùng id/lớp của ta **đặt trực tiếp trên phần tử** (ví dụ `#mid-convert{…}` thay vì `#mid-convert button{…}`). Sửa K3–K6: nút Chuyển đổi/Dừng, chữ thương hiệu trắng, thẻ không lồng viền, tab segmented, nút chọn tệp, công tắc, dropdown, tab kết quả. Rà lại theme tối.
 - [x] **G1.2 Phông tự lưu trữ (Q4).** Tải Roboto / Roboto Condensed / Roboto Mono (woff2, giấy phép Apache-2.0/OFL) vào `assets/fonts/`, khai báo `@font-face` trong `app.css`, bỏ `gr.themes.GoogleFont` và `_FONTS_LINK`.
   - *Đạt khi:* tab Network không còn yêu cầu nào tới `fonts.googleapis.com` / `fonts.gstatic.com`.
 - [x] **G1.3 Việt hóa và hàng đợi tệp.** Vùng kéo-thả theo handoff (vòng tròn biểu tượng, "Kéo-thả tệp vào đây", phụ đề định dạng) — không còn chuỗi tiếng Anh (K7). Dưới vùng thả: **hàng đợi tệp** vẽ bằng `gr.HTML` (biểu tượng theo loại, tên, dung lượng, số trang với PDF) + "Xóa hết". Nút Chuyển đổi mang nhãn "Chuyển đổi N tệp", vô hiệu khi chưa có tệp/URL.
@@ -117,7 +117,7 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
 - [x] **G1.7 Di động (K10).** Dưới 780 px: nút Chuyển đổi/Dừng **dính đáy màn hình**; "Chế độ" và "Mức chất lượng" thu gọn thành một dòng tóm tắt bấm để mở; bấm Chuyển đổi thì cuộn tới khối kết quả; vùng bấm ≥ 44 px; ba tab nhập không bị đẩy vào menu "…".
 - [x] **G1.8 Sửa hành vi preset (T8).** `_apply_preset` chỉ đặt model/effort/DPI/trang-mỗi-lần/gộp; **không** đụng `translate_vn`, `autosave_on`, `auto_download_on`, `dropbox_sync_on`; `force_ocr` chỉ đặt lại khi **đổi chế độ**. Bỏ `_PRESET_HINTS` tĩnh, luôn sinh gợi ý từ bảng preset. Lưu thêm các công tắc này vào `prefs`.
 - [x] **G1.9 Chuyển từ URL ngang hàng với tệp (T9):** dùng chung đường `_publish_output`, có tùy chọn dịch.
-- [ ] Cập nhật `docs/tinh-nang/06-giao-dien-gradio.md` (bảng preset đang ghi model đã bị khai tử, số dòng cũ), `GUI_README.md`.
+- [x] Cập nhật `docs/tinh-nang/06-giao-dien-gradio.md` (bảng preset đang ghi model đã bị khai tử, số dòng cũ), `GUI_README.md`.
 
 ### Giai đoạn 2 — Công việc nền, tin cậy cho sách dài (cỡ L)
 
@@ -195,7 +195,7 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
 | Giai đoạn | Trạng thái | Commit | Ghi chú |
 |---|---|---|---|
 | G0 | ✅ xong (2026-11-21), chưa push/merge | G0.1 `3930dd8` · G0.2 `f491108` · G0.3 `af6ee35` · G0.4 `d0d819e` · G0.5 `23d6812` | Nhánh `feat/nang-cap-giao-dien`. Ngoại lệ so với "Đạt khi" G0.3: `markitdown_gui.py` còn **1.043 dòng** (không phải <900) vì `build_ui` riêng đã 635 dòng — sẽ co lại ở G1.6 (trang Cài đặt). Kiểm tra trình duyệt chưa làm (G0 không đổi giao diện) |
-| G1 | ☐ chưa làm | | |
+| G1 | ✅ xong (2026-11-22), chưa lên production | G1.1–G1.2 `faee4d5` · G1.3 `841e913` · G1.4+G1.9 `56bf41f` · G1.5 `5f837f4` · G1.6 `fcfec52` · G1.8 `e1a8582` · G1.7 `0444a75` | Nhánh `feat/nang-cap-giao-dien`. Đã nhìn tận mắt bằng Chrome (engine giả) ở 1366/768/375 px × sáng/tối; 375 px kiểm bằng iframe cùng nguồn (cửa sổ Chrome không thu nhỏ được). Chưa kiểm: thiết bị di động thật, Safari/Firefox, hộp thoại chọn tệp thật (Windows), thử với AI thật |
 | G2 | ✅ xong (2026-11-22), **đã lên production** | G2.1–G2.3 `183696d` · G2.4–G2.8 `87f8c83` · tài liệu `085123b` · G2.9 `83fe754` (sửa Dockerfile) + cấu hình Dokploy | Nhánh `feat/nang-cap-giao-dien`. Đã kiểm trong Chrome với engine giả: chạy, tải lại giữa chừng, Dừng ≤1,5 s, Chạy tiếp từ trang đã giữ, Lịch sử, liên kết tải. G2.9: mount `/root/markitdown-data`→`/data`, env `MID_DATA_DIR=/data`, `MID_KEEP_DAYS=60`; Docker build thật thành công trên Dokploy; công việc thử (engine giả) còn nguyên sau khi thay container. Chưa kiểm: thông báo trình duyệt (`Notification`), thử với AI thật. Chưa lưu ảnh trang thu nhỏ (`pages/NNNN.jpg`, để G3.2) |
 | G3 | ☐ chưa làm | | |
 | G4 | ☐ chưa làm | | |
@@ -211,3 +211,6 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
 | P5 | Các tài liệu cũ trích `markitdown_gui.py:NNN` là số dòng của tệp **trước khi tách**; đã thêm ghi chú ở `docs/README.md`, `TONG-QUAN-KIEN-TRUC.md`, `SKILLS.md`, nhưng chưa sửa từng trích dẫn | Sửa dần khi đụng tới từng tài liệu ở G1–G2 |
 | P6 | `BrowserState` của `prefs` (API key, token…) dùng khóa mã hóa **ngẫu nhiên mỗi lần app khởi động** (mặc định Gradio) → sau redeploy các ô lưu trong trình duyệt có thể bị trống. Đã sửa riêng cho `job_state` bằng `secret` cố định | Cân nhắc `secret` cố định cho `prefs` khi làm G4.2 (khóa/token); **chưa kiểm chứng** hiện tượng trên production |
 | P7 | `_apply_preset` luôn bật `autosave_on`, `dropbox_sync_on`, `auto_download_on`, nên một lần chạy thử trên máy dev đã tự ghi bản sao vào `Downloads` của người dùng (đã xóa 2 tệp thử) | Làm ở G1.8 như kế hoạch |
+| P8 | Gradio nhân mỗi quy tắc CSS thành bản có tiền tố `.gradio-container … .contain`; quy tắc `body…` không thắng được bản có tiền tố của quy tắc khác (và bản `body` có tiền tố không bao giờ khớp). Các quy tắc `body[data-mid-theme=dark] …` ở bản cũ **chưa từng hoạt động** | Đã chuyển sang biến CSS/lớp trên phần tử (G1.6); ghi ở `06-…` mục 10, `AGENTS.md` 4b, có test |
+| P9 | Ẩn vùng thả/hàng đợi của `gr.File` dựa vào tên lớp/aria nội bộ của Gradio 6.32 (`button.upload-container`, `button.label-clear-button`, `aria-label="Clear"`): nâng Gradio có thể làm hỏng nút ×/Xóa hết/Thêm tệp | Kiểm lại ba nút này mỗi khi đổi phiên bản Gradio; cân nhắc `gr.File` tự vẽ ở giai đoạn sau |
+| P10 | `engine_name` trong thông báo vẫn ghi "Claude Code" cho mọi engine không phải Antigravity (P2 chưa xử lý — thuộc G4.3). Huy hiệu "AI: Sẵn sàng" chỉ phản ánh `get_infrastructure_status` (tồn tại CLI/token), chưa phải kiểm tra thật (B5) | G4.3 |

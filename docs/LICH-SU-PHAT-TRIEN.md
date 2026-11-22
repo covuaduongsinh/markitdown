@@ -208,6 +208,25 @@ input/output).
 
 **Chưa làm / chưa kiểm chứng (tại thời điểm viết mục G2 trước đó):** G2.9 (đã xong như trên); Docker build thật (đã xong); thử với AI thật; `Notification` của trình duyệt; ảnh trang thu nhỏ (G3.2); `prefs` còn mã hóa bằng khóa ngẫu nhiên (P6).
 
+### 2026-11-22: Giai đoạn 1 — giao diện đúng thiết kế, dùng tốt trên điện thoại
+
+**Yêu cầu của chủ dự án:** thực hiện Giai đoạn 1 của kế hoạch nâng cấp giao diện (prompt `…-prompt-trien-khai.md`, `GIAI_DOAN = 1`).
+
+**Đã làm** (nhánh `feat/nang-cap-giao-dien`; không merge `main`, không đụng production):
+- G1.1–G1.2: `ui_theme.THEME` bằng `.set()` (có `*_dark`), CSS viết lại bám id/lớp của ta; 40 tệp phông woff2 tự lưu trữ + `font_face_css()`; thẻ đổi từ `gr.Group` sang `gr.Column` (hết viền kép); bỏ Google Fonts.
+- G1.3: vùng thả tiếng Việt, hàng đợi tệp tự vẽ (loại/dung lượng/số trang/×/Xóa hết/Thêm tệp), nút "Chuyển đổi N tệp" vô hiệu khi chưa có tệp.
+- G1.4 + G1.9: `render_status_html` (chip, thanh tiến độ gradient, danh sách tệp, trạng thái rỗng); `on_convert_url` dùng `_publish_output` và có tùy chọn dịch.
+- G1.5: chip chọn xem từng tệp, nút Sao chép Markdown, meta mỗi tệp, "Chạy lại" (`JobManager.clone`).
+- G1.6: trang Cài đặt riêng (lưới thẻ 2 cột, hướng dẫn thu vào accordion), nút ⚙ + huy hiệu AI trên thanh tiêu đề.
+- G1.7: di động (<780 px): nút hành động dính đáy, thẻ chế độ/chất lượng thu gọn, cuộn tới kết quả, vùng bấm ≥ 44 px.
+- G1.8: preset không ghi đè công tắc; gợi ý sinh từ bảng; công tắc được lưu vào prefs.
+
+**Quyết định + lý do:** bật/tắt trang Cài đặt bằng lớp trên chính phần tử và dùng biến CSS thay quy tắc `body…` (Gradio nhân quy tắc CSS có tiền tố nên `body…` vô hiệu); Việt hóa vùng thả bằng CSS thay vì gói i18n (Gradio không có `vi`); "Chạy lại" tạo công việc mới khi không còn gì để chạy tiếp.
+
+**Cách kiểm chứng:** 77 test `unittest discover tests_gui` + `_test_translate_roundtrip.py` đạt. Chạy app thật (engine giả) và nhìn bằng Chrome: chạy 12 trang, tải lại giữa chừng, chip/preview/meta/sao chép/Chạy lại, trang Cài đặt, preset giữ công tắc và nhớ sau khi tải lại; mạng không còn yêu cầu nào ra `fonts.googleapis.com`/`fonts.gstatic.com` (13 woff2 nạp từ máy chủ); 375 px (iframe): nút dính đáy, thẻ chế độ thu gọn, tự cuộn tới kết quả, 0 vùng bấm < 40 px, không tràn ngang; theme tối ở 375/768 px.
+
+**Chưa làm / chưa kiểm chứng:** thiết bị di động thật, Safari/Firefox, hộp thoại chọn tệp Windows (`pick_files.py`) và đường tệp chọn bằng hộp thoại trên giao diện mới; thử với AI thật; so sánh từng pixel với `MarkItDown.dc.html` (so bằng mắt: bố cục/màu/chip/thanh tiến độ khớp; icon và vài khoảng cách khác nhỏ); ảnh trang thu nhỏ (G3.2). Phát hiện thêm P8–P10 ở cuối kế hoạch.
+
 ## 5. Cách nối tiếp lịch sử này
 
 Khi làm một thay đổi có ý nghĩa, thêm một mục vào mục 4 với: ngày, yêu cầu, những gì đã làm, quyết định + lý do,

@@ -10,23 +10,28 @@
 
 ## Người dùng làm gì trên màn hình
 
-Màn hình hai cột dưới một thanh tiêu đề xanh navy:
+Màn hình hai cột dưới một thanh tiêu đề xanh navy (có huy hiệu **AI: Sẵn sàng / Cần đăng nhập**, nút **⚙ Cài đặt**, nút sáng/tối).
+Trên điện thoại (< 780 px) là **một cột**, nút Chuyển đổi/Dừng **dính đáy màn hình**:
 
 **Cột trái — nhập liệu và điều khiển**
-1. **Ba thẻ nhập:** *Từ tệp* (kéo thả, nhiều tệp, hoặc nút chọn tệp từ máy Windows), *Từ URL* (YouTube,
-   Wikipedia, RSS, trang web), *⚙️ Cài đặt Hạ tầng & API*.
+1. **Hai thẻ nhập:** *Từ tệp* (vùng "Kéo-thả tệp vào đây", nhiều tệp, hoặc nút chọn tệp từ máy Windows; dưới vùng thả là
+   **hàng đợi tệp** có loại, dung lượng, số trang và nút ×), *Từ URL* (YouTube, Wikipedia, RSS, trang web; có thể dịch và dùng
+   cùng đường lưu/Dropbox như tệp). **Cài đặt hạ tầng & API** nay là **trang riêng** (nút ⚙ trên thanh tiêu đề).
 2. **Chế độ xử lý** — bốn thẻ lớn: sách cờ vua ký hiệu Anh / Nga / Tây Ban Nha, hoặc tài liệu thường.
 3. **Mức chất lượng** — ba nút: *Tiết kiệm*, *Cân bằng*, *Chính xác*. Chọn một nút là hệ thống tự đặt
    model, effort, DPI, số trang mỗi lần gọi, gộp/tách OCR-dịch.
-4. **Nút Chuyển đổi** (đổi thành **⏹ Dừng** khi đang chạy) và **Tùy chọn nâng cao** để chỉnh tay.
+4. **Nút "Chuyển đổi N tệp"** (vô hiệu khi chưa có tệp; đổi thành **⏹ Dừng** khi đang chạy, **▶ Chạy tiếp** khi cần) và **Tùy chọn
+   nâng cao** (công tắc, model, effort, DPI, trang/lần, **Trang cần làm**).
 
-**Cột phải — kết quả:** dòng trạng thái, tab *Xem trước* (bàn cờ được vẽ thật từ FEN), tab *Mã .md*, danh
-sách nút tải về từng tệp (kèm "Tải tất cả .zip" khi có từ hai tệp).
+**Cột phải — kết quả:** bảng trạng thái (chip *Chưa chạy / Đang xử lý / Xong n/n / Có lỗi / Đã dừng*, thanh tiến độ gradient
+navy→vàng, danh sách từng tệp với "trang 6/12"), chip chọn xem từng tệp, tab *Xem trước* (bàn cờ vẽ thật từ FEN), tab *Mã .md*
+(có nút **Sao chép Markdown**), tab *Lịch sử*, và danh sách tải về (meta số ký tự/số thế cờ, "Tải tất cả .zip", **Chạy lại**).
 
 ## Trải nghiệm đáng chú ý
 
-- **Phản hồi tức thì:** vừa bấm là đổi ngay sang `🚀 Đang khởi động…`, rồi `⏳ Đang xử lý 2/5: tên.pdf — trang 7/120 · 43s…`.
-- **Tệp xong tới đâu hiện tới đó**, có thể tải ngay trong lúc các tệp sau còn chạy.
+- **Phản hồi tức thì:** bấm là hiện ngay chip "Đang xử lý…", thanh tiến độ và từng tệp (`OCR trang 7/120 · 43s`).
+- **Tệp xong tới đâu hiện tới đó**, có thể tải ngay trong lúc các tệp sau còn chạy; công việc chạy nền nên đóng trình duyệt không mất việc
+  (xem [13](13-cong-viec-nen.md)).
 - **Bàn cờ hiện ngay trong xem trước** — khối ```` ```chessboard ```` được JavaScript thay bằng bàn cờ
   256 px với quân cờ SVG của Cờ vua Dương Sinh.
 - **Sáng/tối** bằng nút trên thanh tiêu đề; nhớ lựa chọn.
@@ -38,21 +43,59 @@ Giá trị thật từ `_PRESET_OPTS_AGY` (dòng 1348) và `_PRESET_OPTS_CLAUDE`
 
 | Preset | Engine | Gộp OCR+dịch | Model OCR | Effort OCR | Model dịch | Effort dịch | DPI bàn cờ | Trang/lần |
 |---|---|:-:|---|---|---|---|---:|---:|
-| Tiết kiệm | Antigravity | ✅ | `gemini-3.6-flash` | low | `gemini-3.6-flash` | low | 250 | 2 |
+| Tiết kiệm | Antigravity | ✅ | `gemini-4-hydrogen` | low | `gemini-4-hydrogen` | low | 250 | 2 |
 | Cân bằng | Antigravity | ✅ | `gemini-3.8-flash` | auto | `gemini-3.8-flash` | low | 250 | 1 |
-| Chính xác | Antigravity | ❌ | `gemini-3.1-pro` | high | `gemini-3.1-pro` | medium | 400 | 1 |
+| Chính xác | Antigravity | ❌ | `gemini-4-argon` | high | `gemini-4-argon` | medium | 400 | 1 |
 | Tiết kiệm | Claude Code | ✅ | `haiku` | low | `haiku` | low | 250 | 2 |
 | Cân bằng | Claude Code | ✅ | `sonnet` | auto | `haiku` | low | 250 | 1 |
 | Chính xác | Claude Code | ❌ | `opus` | high | `sonnet` | medium | 400 | 1 |
 
-Ghi chú vận hành (từ `GUI_README.md`): `gemini-3.1-pro` trên `agy` chỉ có hai mức effort thật là **high** và
-**low** (không có **medium**), nên preset "Chính xác" đặt `medium` cho dịch có thể không đúng ý.
+**Hành vi preset (G1.8, 2026-11-22):** chọn preset/đổi engine chỉ đặt *model, effort, DPI, trang/lần, gộp OCR+dịch* và dòng gợi ý
+(`presets.preset_hint_text`, sinh từ bảng trên). Nó **không** đụng tới công tắc *Dịch tiếng Việt*, *Tự lưu*, *Tự tải về*, *Dropbox*
+(trước đây bật lại cả bốn — B10); các công tắc này và preset được **lưu vào trình duyệt**. *Buộc OCR* chỉ đặt lại khi **đổi chế độ**.
+Mã: `presets.py` (`_apply_preset`, `_on_mode_change`).
 
 ---
 
 # Phần B — Kỹ thuật
 
-## 1. Cấu trúc tệp `markitdown_gui.py`
+## 10. Giao diện sau Giai đoạn 1 (2026-11-22)
+
+**Nguyên tắc CSS (Q3).** `assets/ui/app.css` bám vào `elem_id`/`elem_classes` do ta đặt; thành phần gốc của Gradio đổi màu/bo góc/phông qua
+`ui_theme.THEME` (`gr.themes.Base(...).set(...)`, có biến `*_dark`) và lớp `dark` trên `<body>` (JS đồng bộ với nút sáng/tối).
+Các thẻ là `gr.Column(elem_classes=["mid-card", …])` — **không** dùng `gr.Group` vì Gradio gắn lớp lên cả hai phần tử lồng nhau
+(viền kép, K5).
+
+**Bẫy lớn nhất:** Gradio nhân mỗi quy tắc `css=` thành **một bản có tiền tố** `.gradio-container.gradio-container-X .contain …`.
+Quy tắc bắt đầu bằng `body…` (ví dụ `body.x #id`) có bản có tiền tố **không bao giờ khớp** (`body` nằm ngoài `.contain`), còn bản có
+tiền tố của quy tắc gốc lại có độ ưu tiên cao hơn → không thắng được. Vì vậy: màu theme tối đi qua **biến CSS** (`--c-link`,
+`--c-link-strong`…), còn bật/tắt trang Cài đặt dùng lớp đặt **trên chính phần tử** (`#mid-settings.mid-open`, `#mid-workspace.mid-hide`).
+Test `test_css_never_uses_body_prefixed_selectors_for_layout` chặn tái phạm.
+
+**Phông tự lưu trữ (G1.2).** `assets/fonts/*.woff2` (Roboto 300/400/500/700/900, Roboto Condensed 400/600/700, Roboto Mono 400/500;
+latin, latin-ext, vietnamese, cyrillic — cyrillic chỉ cho Roboto và Roboto Mono). `ui_theme.font_face_css()` sinh `@font-face` từ thư mục,
+URL qua `/gradio_api/file=<đường dẫn thật>` (thư mục `assets` nằm trong `allowed_paths`). Không còn yêu cầu nào tới `fonts.googleapis.com`.
+Phải dùng `gr.themes.Font("Roboto")` (không dùng chuỗi trơn trong danh sách phông: Gradio lỗi khi so sánh theme lúc `launch`).
+
+**Vùng thả tiếng Việt (G1.3).** Gói ngôn ngữ của Gradio không có tiếng Việt; chữ tiếng Anh của `gr.File` bị ẩn bằng CSS
+(`font-size:0` trên nút) và thay bằng `::before/::after`. Hộp thoại/danh sách tệp gốc bị ẩn (`#mid-file:has(.file-preview-holder)`);
+hàng đợi `#mid-queue` (HTML từ `job_view.queue_html`) có nút ×, "Xóa hết", "+ Thêm tệp" — JS bấm hộ các nút gốc
+(`button.label-clear-button`, nút có `aria-label` "Clear", `button.upload-container`). **Phụ thuộc vào các tên lớp/aria nội bộ đó** của Gradio 6.32.
+
+**Trạng thái (G1.4).** `job_view.render_status_html(job)` → `gr.HTML#mid-status`; `idle_html()` là trạng thái rỗng; `message_html(text)` cho
+thông báo ngắn. Phần trăm tiến độ: OCR chiếm 70% nếu có dịch riêng, ngược lại 100%.
+
+**Kết quả theo tệp (G1.5).** `gr.Radio#mid-file-pick` (chip) chỉ hiện khi ≥2 tệp xong; chữ ký làm mới (`sig`) gồm cả tệp đang chọn.
+"Chạy lại" (`on_rerun_job`): còn việc dở/trang lỗi thì chạy tiếp, không thì `JobManager.clone` tạo công việc mới.
+
+**Trang Cài đặt (G1.6).** `gr.Column#mid-settings` nằm cạnh `#mid-workspace`; JS `midToggleSettings`; huy hiệu AI đọc
+`data-mid-ai-ready` trong bảng hạ tầng (`infrastructure.render_infrastructure_html`).
+
+**Di động (G1.7).** `@media (max-width:780px)`: `#mid-actionbar` `position:fixed`; thẻ chế độ chỉ hiện thẻ đang chọn (`.mid-modes.open`
+mở danh sách), đầu thẻ chất lượng thành dòng tóm tắt (`.mid-quality-card.open`); bấm Chuyển đổi cuộn tới `.mid-col-right`; vùng bấm ≥ 44 px.
+Kiểm bằng `iframe` rộng 375 px cùng nguồn (cửa sổ Chrome tự động không thu nhỏ được xuống 375 px): 0 vùng bấm < 40 px, không tràn ngang.
+
+## 1. Cấu trúc tệp `markitdown_gui.py` (lịch sử — trước 2026-11-21)
 
 | Khối | Dòng | Nội dung |
 |---|---:|---|
@@ -207,7 +250,7 @@ không truyền `share=True`, không đặt xác thực.
   không giới hạn thư mục đích).
 - **Khoá và token lưu thô trong `localStorage`** và truyền qua websocket của Gradio: API key Gemini, token
   Claude/Antigravity, Dropbox token, **App Secret**. XSS hoặc máy dùng chung sẽ lộ chúng.
-- `CSS`/`HEAD` nạp Google Fonts từ CDN (`fonts.googleapis.com`) → cần Internet ở phía trình duyệt.
+- ~~`CSS`/`HEAD` nạp Google Fonts từ CDN~~ — **đã xử lý (G1.2)**: phông tự lưu trữ.
 
 **Điều đáng ngờ**
 - `_convert_btn_label(n)` đổi nhãn nút thành `Chuyển đổi N tệp`, nhưng `_on_files_change` và nút chọn tệp cùng

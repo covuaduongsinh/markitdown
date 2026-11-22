@@ -102,6 +102,7 @@ Biến được **đặt cho tiến trình con** `claude`: `DISABLE_AUTOUPDATER=
 | `<tmp>/mid_ocr_*/page_NNN.png` | ảnh trang PDF khi OCR | có (`finally`) |
 | Thư mục tùy chọn hoặc cạnh tệp gốc | bản sao `.md` (luồng "Lưu bản sao trên máy chủ") | không |
 | `~/.gemini/antigravity-cli/antigravity-oauth-token`, `settings.json` | token Antigravity người dùng dán | không |
+| `assets/fonts/*.woff2` (+ `LICENSE-*.txt`) | phông tự lưu trữ (Roboto, Roboto Condensed, Roboto Mono; 597 KB) — nằm trong repo, phục vụ qua `/gradio_api/file=` | không |
 | `.omc/` | trạng thái công cụ OMC của Claude Code | đã trong `.gitignore` |
 
 ## 8. Cổng và lệnh thường dùng

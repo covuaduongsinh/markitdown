@@ -65,6 +65,9 @@ Chạy test của fork **từ thư mục gốc repo** (chúng `import` các tệ
 |---|---|
 | Placeholder `⟦CHESSBOARD_n⟧` | `claude_translate` dùng để bảo vệ FEN/code khi dịch |
 | Marker `<<<<<--- HET_TRANG --->>>>>` | `claude_ocr` tách nhiều trang trong một lần gọi |
+| CSS không dùng quy tắc bắt đầu bằng `body…`; bật/tắt bằng lớp trên chính phần tử | Gradio nhân mỗi quy tắc `css=` thành bản có tiền tố `.gradio-container … .contain`: quy tắc `body.x #id` không thắng được (xem `06-…` mục 10; có test chặn) |
+| Thẻ giao diện là `gr.Column(elem_classes=["mid-card", …])`, không phải `gr.Group` | `gr.Group` gắn lớp lên hai phần tử lồng nhau → viền kép |
+| Phông dùng `gr.themes.Font("Roboto")` và `assets/fonts/` | chuỗi trơn trong `font=[…]` làm Gradio lỗi lúc `launch`; không nạp phông từ CDN (trang đứng ở "Loading…") |
 | `OperationCancelled` kế thừa `BaseException` (`proc_control.py`) | để `except Exception` sẵn có không nuốt tín hiệu Dừng; đừng đổi sang `Exception` |
 | `jobs.data_dir()` nằm trong `allowed_paths` của `launch` | thiếu thì mọi liên kết tải kết quả công việc nền trả 403 |
 | `secret` cố định của `job_state` (`BrowserState`) | đổi/bỏ thì sau mỗi redeploy trình duyệt mất mã công việc đang chạy |
