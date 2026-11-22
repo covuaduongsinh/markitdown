@@ -78,7 +78,7 @@ Ngoài ra cần cài các gói của ứng dụng riêng bằng `pip install -r 
 Repo có hai remote: `origin` (fork của Cờ vua Dương Sinh) và `upstream` (`microsoft/markitdown`). Fork đã merge từ
 upstream hai lần (`46d5350`, `ba0a8ad`).
 
-### Gắn volume dữ liệu công việc nền (G2.9 — **chưa thực hiện trên production**)
+### Gắn volume dữ liệu công việc nền (G2.9 — **đã thực hiện trên production 2026-11-22**)
 
 Mã G2 ghi dữ liệu vào `MID_DATA_DIR` (Dockerfile đặt `/data`, `VOLUME /data`). Để lịch sử/điểm lưu sống qua redeploy, gắn volume bền. Các bước (làm **sau khi chủ dự án duyệt nhánh và cho phép lên production**):
 
@@ -87,6 +87,12 @@ Mã G2 ghi dữ liệu vào `MID_DATA_DIR` (Dockerfile đặt `/data`, `VOLUME /
 3. Deploy (thủ công — auto deploy đang tắt); xác minh `docker inspect` thấy mount `/data`.
 4. Tạo một công việc (PDF thật 2–3 trang khi được phép), deploy lần nữa, mở lại: công việc **vẫn còn** ở tab Lịch sử.
 5. Ước lượng dung lượng bằng một cuốn mẫu (ảnh trang chưa lưu ở G2; chỉ văn bản + bản sao nguồn) rồi ghi con số vào đây. Nếu gần đầy đĩa: giảm `MID_KEEP_DAYS` trước.
+
+**Kết quả thực tế (2026-11-22):** `/root/markitdown-data` trên host (đĩa `/` 193 GB, trống 41 GB trước khi gắn, dùng 79%); mount thêm bằng bản ghi `markitdown_data_mount` trong bảng `mount` của Postgres Dokploy + cột `env` của `application` (giống cách `gemini_oauth_mount_217`). Deploy bằng webhook: vì `autoDeploy=false` nên webhook trả 400 — đã bật `autoDeploy` **một lần**, gọi webhook, rồi tắt lại ngay (`false`). Build thật trên Dokploy mất ~35 phút do VPS tải cao (load average ~60 từ các ứng dụng khác); bước cài gói bằng `requirements-gui.txt` thành công. Kiểm chứng: `docker service inspect` thấy mount `/data` và env; trong container `gradio 6.32.0`, `agy`, `claude` đủ; tạo một công việc thử bằng **engine giả** (không gọi AI) → thư mục host có dữ liệu → `docker service update --force` (container đổi) → công việc **vẫn còn** → đã xóa công việc thử. Dung lượng: 3 trang giả = 76 KB; với sách thật dung lượng chủ yếu là **bản sao PDF nguồn** (có thể hàng chục MB mỗi cuốn) — theo dõi tab Lịch sử (hiện tổng dung lượng) và giảm `MID_KEEP_DAYS` trước khi đĩa gần đầy.
+
+Bài học: lần deploy đầu thất bại vì Dockerfile có chuỗi `
+` chữ (lỗi heredoc khi sửa tệp) — Docker báo `can't find = in "
+"` và dịch vụ cũ vẫn chạy bình thường (rolling update chỉ thay khi build thành công).
 
 Lưu ý: không có volume thì dữ liệu nằm trong một volume ẩn danh do `VOLUME /data` tạo và **mất khi container bị thay** (như trước).
 

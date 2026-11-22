@@ -140,7 +140,7 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
 - [x] **G2.6 Khoảng trang (T4).** Ô "Trang" trong Tùy chọn nâng cao: `1-5, 20, 31-40` (trống = tất cả). Hàm thuần `parse_page_ranges(text, n_pages)` + test. Trước khi chạy hiện ước lượng: "97 trang → 97 lượt gọi OCR" (theo trang-mỗi-lần).
 - [x] **G2.7 Tab "Lịch sử".** Danh sách công việc (thời gian, tệp, trạng thái, số trang lỗi), mở lại kết quả, tải zip, xóa. Dọn công việc cũ hơn `MID_KEEP_DAYS` (mặc định **60**) khi khởi động và mỗi 24 giờ; tab Lịch sử hiện tổng dung lượng đang dùng của `MID_DATA_DIR`. Zip nằm trong thư mục công việc → hết đè nhau (S7); `allowed_paths` trỏ vào `MID_DATA_DIR`.
 - [x] **G2.8 Báo khi xong.** Đổi tiêu đề tab trình duyệt ("✅ Xong — MarkItDown"), thông báo trình duyệt nếu người dùng cho phép (nút bật trong Cài đặt).
-- [ ] **G2.9 Volume bền trên Dokploy (C1 — đã chốt).** Chỉ làm ở bước lên production, **sau khi chủ dự án duyệt nhánh**, vì đây là thay đổi hạ tầng production:
+- [x] **G2.9 Volume bền trên Dokploy (C1 — đã chốt).** Chỉ làm ở bước lên production, **sau khi chủ dự án duyệt nhánh**, vì đây là thay đổi hạ tầng production:
   1. Trên VPS: tạo thư mục host `/root/markitdown-data`; kiểm dung lượng trống (`df -h`) và ghi con số vào tài liệu.
   2. Trên Dokploy, ứng dụng markitdown: thêm mount `bind` `/root/markitdown-data` → `/data` (cùng cách đã làm với `/root/.gemini`, xem `2026-11-21-cap-nhat-model-antigravity-va-mount-volume-vps.md`) và biến môi trường `MID_DATA_DIR=/data`, `MID_KEEP_DAYS=60`.
   3. Redeploy; xác minh trong container: `docker inspect` thấy mount `/data`; tạo một công việc bằng engine giả hoặc một PDF thật 2–3 trang (khi chủ dự án cho phép) → redeploy lần nữa → công việc **vẫn còn** trong tab Lịch sử.
@@ -196,7 +196,7 @@ Chuẩn đối chiếu: `design_handoff_markitdown_gui/README.md` + `MarkItDown.
 |---|---|---|---|
 | G0 | ✅ xong (2026-11-21), chưa push/merge | G0.1 `3930dd8` · G0.2 `f491108` · G0.3 `af6ee35` · G0.4 `d0d819e` · G0.5 `23d6812` | Nhánh `feat/nang-cap-giao-dien`. Ngoại lệ so với "Đạt khi" G0.3: `markitdown_gui.py` còn **1.043 dòng** (không phải <900) vì `build_ui` riêng đã 635 dòng — sẽ co lại ở G1.6 (trang Cài đặt). Kiểm tra trình duyệt chưa làm (G0 không đổi giao diện) |
 | G1 | ☐ chưa làm | | |
-| G2 | 🟡 G2.1–G2.8 xong, **G2.9 chưa làm** (hạ tầng production) | G2.1–G2.3 `183696d` · G2.4–G2.8 `87f8c83` · tài liệu `085123b` | Nhánh `feat/nang-cap-giao-dien`. Đã kiểm trong Chrome với engine giả: chạy, tải lại giữa chừng, Dừng ≤1,5 s, Chạy tiếp từ trang đã giữ, Lịch sử, liên kết tải. Chưa kiểm: thông báo trình duyệt (`Notification`), thử với AI thật, Docker build, volume trên Dokploy. Chưa lưu ảnh trang thu nhỏ (`pages/NNNN.jpg`, để G3.2) |
+| G2 | ✅ xong (2026-11-22), **đã lên production** | G2.1–G2.3 `183696d` · G2.4–G2.8 `87f8c83` · tài liệu `085123b` · G2.9 `83fe754` (sửa Dockerfile) + cấu hình Dokploy | Nhánh `feat/nang-cap-giao-dien`. Đã kiểm trong Chrome với engine giả: chạy, tải lại giữa chừng, Dừng ≤1,5 s, Chạy tiếp từ trang đã giữ, Lịch sử, liên kết tải. G2.9: mount `/root/markitdown-data`→`/data`, env `MID_DATA_DIR=/data`, `MID_KEEP_DAYS=60`; Docker build thật thành công trên Dokploy; công việc thử (engine giả) còn nguyên sau khi thay container. Chưa kiểm: thông báo trình duyệt (`Notification`), thử với AI thật. Chưa lưu ảnh trang thu nhỏ (`pages/NNNN.jpg`, để G3.2) |
 | G3 | ☐ chưa làm | | |
 | G4 | ☐ chưa làm | | |
 
