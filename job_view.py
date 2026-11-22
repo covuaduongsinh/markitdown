@@ -56,11 +56,11 @@ def signature(job):
     return "|".join(parts)
 
 
-def collect_previews(job, read_raw):
-    """(preview_md, raw_md) ghép từ các tệp đã xong. read_raw(job, file_entry) -> văn bản."""
+def collect_previews(job, read_raw, only=None):
+    """(preview_md, raw_md) ghép từ các tệp đã xong (hoặc chỉ tệp có idx == only). read_raw(job, file_entry) -> văn bản."""
     previews, raws = [], []
     for f in job["files"]:
-        if f["status"] != "done":
+        if f["status"] != "done" or (only is not None and f["idx"] != only):
             continue
         text = read_raw(job, f)
         if not text.strip():
@@ -68,6 +68,32 @@ def collect_previews(job, read_raw):
         previews.append(f"## 📄 {f['name']}\n\n{text}")
         raws.append(text)
     return "\n\n---\n\n".join(previews), "\n\n".join(raws)
+
+
+def pick_selected(job, selected):
+    """Tệp đang xem: `selected` nếu là một tệp đã xong, không thì tệp xong đầu tiên (None nếu chưa có tệp nào xong)."""
+    done = [f["idx"] for f in job["files"] if f["status"] == "done"]
+    if selected in done:
+        return selected
+    return done[0] if done else None
+
+
+def output_meta(job, read_path):
+    """{rel: 'N ký tự · M thế cờ'} cho từng tệp kết quả. read_path(rel) -> văn bản."""
+    meta = {}
+    for f in job["files"]:
+        for o in f.get("outputs", []):
+            text = read_path(o["rel"])
+            if not text:
+                continue
+            if o.get("kind") == "fen":
+                n = len([ln for ln in text.splitlines() if ln.strip()])
+                meta[o["rel"]] = f"{n} thế cờ"
+            else:
+                chars = f"{len(text):,}".replace(",", ".")
+                boards = text.count("```chessboard")
+                meta[o["rel"]] = f"{chars} ký tự" + (f" · {boards} thế cờ" if boards else "")
+    return meta
 
 
 def output_rels(job):

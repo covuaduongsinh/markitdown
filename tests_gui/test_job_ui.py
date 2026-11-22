@@ -98,6 +98,62 @@ class TestStatusRendering(UiBase):
         self.assertNotIn("<script>", _download_panel([p]))
 
 
+class TestFileViewAndRerun(UiBase):
+    def two_file_job(self):
+        base = dict(engine="fake", ocr_model="fake", translate_model="fake", board_dpi="200", translate_vn=False)
+        jid = self.mgr.submit(
+            [{"path": self.pdf, "name": "a.pdf"}, {"path": self.pdf, "name": "b.pdf"}], base,
+        )
+        self.mgr.wait(jid)
+        return jid
+
+    def test_chips_show_one_file_at_a_time(self):
+        jid = self.two_file_job()
+        out = job_handlers.render_job(jid, "")
+        pick = out[10]
+        self.assertTrue(pick["visible"])
+        self.assertEqual([c[0] for c in pick["choices"]], ["a.pdf", "b.pdf"])
+        self.assertEqual(pick["value"], 0)
+        self.assertIn("a.pdf", out[1])
+        self.assertNotIn("b.pdf", out[1])
+        other = job_handlers.render_job(jid, out[4], selected=1)   # chữ ký đổi theo tệp đang chọn -> vẽ lại
+        self.assertIn("b.pdf", other[1])
+        self.assertNotIn("## 📄 a.pdf", other[1])
+        self.assertNotEqual(other[4], out[4])
+        self.assertEqual(job_handlers.render_job(jid, other[4], selected=1)[1], gr.skip())
+
+    def test_single_file_has_no_chips(self):
+        jid, _job = self.run_job()
+        self.assertFalse(job_handlers.render_job(jid, "")[10]["visible"])
+
+    def test_download_meta_and_rerun_button(self):
+        jid = self.two_file_job()
+        dl = job_handlers.render_job(jid, "")[3]
+        self.assertIn("ký tự", dl)
+        self.assertIn("thế cờ", dl)
+        self.assertIn('data-mid-action="rerun"', dl)
+
+    def test_rerun_clones_finished_job(self):
+        jid = self.two_file_job()
+        out = job_handlers.on_rerun_job(jid)
+        new_id = out[0]
+        self.assertNotEqual(new_id, jid)
+        job = self.mgr.wait(new_id)
+        self.assertEqual(job["status"], jobs.DONE)
+        self.assertEqual([f["name"] for f in job["files"]], ["a.pdf", "b.pdf"])
+        self.assertEqual(self.mgr.get(jid)["status"], jobs.DONE)   # công việc gốc còn nguyên
+
+    def test_rerun_resumes_when_failed_pages(self):
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"MID_FAKE_FAIL_PAGES": "2"}):
+            jid, job = self.run_job(translate_vn=False)
+        self.assertEqual(job["files"][0]["pages_failed"], 1)
+        out = job_handlers.on_rerun_job(jid)
+        self.assertEqual(out[0], jid)                              # cùng công việc (chạy tiếp), không nhân bản
+        self.assertEqual(self.mgr.wait(jid)["files"][0]["pages_failed"], 0)
+
+
 class TestUrlConversion(UiBase):
     """G1.9: chuyển từ URL ngang hàng với tệp — tùy chọn dịch + dùng chung _publish_output."""
 

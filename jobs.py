@@ -248,6 +248,17 @@ class JobManager:
         self._enqueue(job_id)
         return True
 
+    def clone(self, job_id, creds=None):
+        """Tạo công việc MỚI từ cùng tệp nguồn và tùy chọn của một công việc cũ ("Chạy lại"). Trả job_id mới hoặc None."""
+        job = self.get(job_id)
+        if not job:
+            return None
+        files = [
+            {"path": os.path.join(self.job_dir(job_id), f["src"]), "name": f["name"], "orig_path": f.get("orig_path")}
+            for f in job["files"]
+        ]
+        return self.submit(files, job["options"], creds)
+
     def delete(self, job_id):
         with self._lock:
             job = self._jobs.get(job_id)

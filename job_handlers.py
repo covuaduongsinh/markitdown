@@ -50,30 +50,44 @@ def _idle(status=None):
     return (
         status if status is not None else gr.skip(), gr.skip(), gr.skip(), gr.skip(), "",
         gr.Timer(active=False), gr.update(visible=True), gr.update(visible=False),
-        gr.update(visible=False), job_view.flag_html(None),
+        gr.update(visible=False), job_view.flag_html(None), gr.update(visible=False),
     )
 
 
-def render_job(job_id, last_sig="", reattach=False):
+def render_job(job_id, last_sig="", reattach=False, selected=None):
     """Trạng thái hiện tại của công việc -> bộ giá trị cho JOB_OUTPUTS.
 
     last_sig: chữ ký lần vẽ trước; không đổi thì không gửi lại xem trước/tải về (giảm tải đường truyền).
     reattach=True: mở lại công việc cũ (tải lại trang, Lịch sử) -> không tự tải tệp về máy.
+    selected: idx tệp đang xem (chip chọn tệp); chỉ tệp đó hiện ở Xem trước / Mã .md.
     """
     mgr = _mgr()
     job = mgr.get(job_id) if job_id else None
     if not job:
         return _idle()
     active = job["status"] in job_view.ACTIVE
-    sig = job_view.signature(job)
+    sel = job_view.pick_selected(job, selected)
+    sig = f"{job_view.signature(job)}|sel{sel}"
+    done = [f for f in job["files"] if f["status"] == "done"]
+    file_pick = gr.update(choices=[(f["name"], f["idx"]) for f in done], value=sel, visible=len(done) > 1)
     if sig == last_sig:
         preview = raw = downloads = gr.skip()
     else:
-        preview, raw = job_view.collect_previews(job, job_view.read_raw_from_disk(mgr))
+        preview, raw = job_view.collect_previews(job, job_view.read_raw_from_disk(mgr), only=sel)
+
+        def _read_rel(rel):
+            try:
+                with open(mgr.abs_path(job["id"], rel), encoding="utf-8") as fh:
+                    return fh.read()
+            except (OSError, ValueError):
+                return ""
+
+        by_rel = job_view.output_meta(job, _read_rel)
         paths = [mgr.abs_path(job["id"], rel) for rel in job_view.output_rels(job)]
+        metas = {mgr.abs_path(job["id"], rel): m for rel, m in by_rel.items()}
         downloads = _download_panel(
             paths, auto_download=bool(job["options"].get("auto_download_on")) and not reattach,
-            zip_path=os.path.join(mgr.job_dir(job["id"]), "ketqua.zip"),
+            zip_path=os.path.join(mgr.job_dir(job["id"]), "ketqua.zip"), metas=metas, rerun=not active,
         )
     resumable = mgr.is_resumable(job)
     return (
@@ -81,12 +95,12 @@ def render_job(job_id, last_sig="", reattach=False):
         gr.Timer(TICK_SECONDS, active=active),
         gr.update(visible=not active), gr.update(visible=active),
         gr.update(visible=resumable, value=job_view.resume_label(job)),
-        job_view.flag_html(job),
+        job_view.flag_html(job), file_pick,
     )
 
 
-def on_tick(job_id, last_sig):
-    return render_job(job_id, last_sig)
+def on_tick(job_id, last_sig, selected=None):
+    return render_job(job_id, last_sig, selected=selected)
 
 
 def on_reattach(job_id):
@@ -153,6 +167,27 @@ def on_resume_job(
     if not job_id or not _mgr().resume(job_id, creds):
         return render_job(job_id, "", reattach=True)
     return render_job(job_id, "")
+
+
+def on_rerun_job(
+    job_id, api_key="", claude_token="", agy_token="",
+    dropbox_token="", dropbox_refresh_token="", dropbox_app_key="", dropbox_app_secret="",
+):
+    """"Chạy lại" ở danh sách tải về: còn việc dở/trang lỗi thì chạy tiếp; không thì tạo công việc mới cùng tệp + tùy chọn.
+    Trả về [job_id] + JOB_OUTPUTS."""
+    creds = dict(
+        api_key=api_key, claude_token=claude_token, agy_token=agy_token, dropbox_token=dropbox_token,
+        dropbox_refresh_token=dropbox_refresh_token, dropbox_app_key=dropbox_app_key,
+        dropbox_app_secret=dropbox_app_secret,
+    )
+    mgr = _mgr()
+    job = mgr.get(job_id) if job_id else None
+    if not job or job["status"] in job_view.ACTIVE:
+        return (job_id or "",) + render_job(job_id, "", reattach=True)
+    if mgr.is_resumable(job) and mgr.resume(job_id, creds):
+        return (job_id,) + render_job(job_id, "")
+    new_id = mgr.clone(job_id, creds)
+    return (new_id,) + render_job(new_id, "")
 
 
 # ---------------------------------------------------------------------- lịch sử

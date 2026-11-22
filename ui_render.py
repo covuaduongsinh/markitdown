@@ -27,14 +27,17 @@ _DL_ZIP_ICON = (
 )
 
 
-def _download_panel(paths, auto_download=False, zip_path=None):
+def _download_panel(paths, auto_download=False, zip_path=None, metas=None, rerun=False):
     """HTML danh sách tệp kết quả, mỗi tệp một nút tải riêng.
 
     Khi có ≥2 tệp, chèn thêm một dòng "Tải tất cả (.zip)" ở đầu danh sách.
     `auto_download=True`: thêm cờ data-auto-download="1" để JS client tự động tải về máy.
+    `metas`: {đường dẫn: chuỗi meta} hiện dưới tên tệp (số ký tự, số thế cờ).
+    `rerun=True`: thêm nút "Chạy lại" (JS bấm hộ nút ẩn #mid-rerun).
     """
     if not paths:
         return ""
+    metas = metas or {}
     rows = []
     if len(paths) >= 2:
         zip_path = zip_path if zip_path and os.path.exists(zip_path) else _zip_all(paths)
@@ -50,20 +53,25 @@ def _download_panel(paths, auto_download=False, zip_path=None):
     for p in paths:
         name = html.escape(os.path.basename(p), quote=True)
         href = "/gradio_api/file=" + quote(p.replace("\\", "/"))
+        meta = metas.get(p)
+        meta_html = f'<span class="dl-meta">{html.escape(meta)}</span>' if meta else ""
         rows.append(
             f'<div class="dl-row"><span class="dl-fileicon">{_DL_FILE_ICON}</span>'
-            f'<span class="dl-name">{name}</span>'
+            f'<span class="dl-main"><span class="dl-name">{name}</span>{meta_html}</span>'
             f'<a class="dl-btn dl-file-btn" href="{href}" download="{name}">{_DL_DOWN_ICON}Tải về</a></div>'
         )
     auto_attr = ' data-auto-download="1"' if auto_download else ' data-auto-download="0"'
-    auto_badge = (
-        ' <span style="font-size:11px;font-weight:normal;color:var(--teal);margin-left:6px;">'
-        '⚡ Tự động tải về máy</span>'
-        if auto_download else ''
+    auto_badge = ' <span class="dl-auto">⚡ Tự động tải về máy</span>' if auto_download else ""
+    rerun_btn = (
+        '<button type="button" class="dl-rerun" data-mid-action="rerun" title="Chạy lại công việc này">'
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
+        'stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/>'
+        '<path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Chạy lại</button>'
+        if rerun else ""
     )
     return (
-        f'<div class="dl-list"{auto_attr}><div class="dl-title">Tệp kết quả · '
-        f'{len(paths)} tệp{auto_badge}</div>'
+        f'<div class="dl-list"{auto_attr}><div class="dl-head"><div class="dl-title">Tệp .md kết quả · '
+        f'{len(paths)} tệp{auto_badge}</div>{rerun_btn}</div>'
         + "".join(rows)
         + "</div>"
     )

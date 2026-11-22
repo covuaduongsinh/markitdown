@@ -140,7 +140,7 @@ def on_clear():
     # (Công việc vẫn nằm trong tab Lịch sử; muốn dừng việc đang chạy thì bấm Dừng.)
     return (
         "", "", "", job_view.idle_html(), [], "", "", "",
-        gr.update(visible=False), job_view.flag_html(None),
+        gr.update(visible=False), job_view.flag_html(None), gr.update(visible=False),
     )
 
 
@@ -551,10 +551,19 @@ def build_ui():
             with gr.Column(elem_classes="mid-col-right"):
                 with gr.Column(elem_classes=["mid-card", "mid-preview-card"]):
                     status = gr.HTML(job_view.idle_html(), elem_id="mid-status")
+                    # Chọn xem từng tệp (chỉ hiện khi có ≥2 tệp đã xong)
+                    file_pick = gr.Radio(
+                        choices=[], value=None, visible=False, show_label=False, elem_id="mid-file-pick",
+                        elem_classes="mid-chips",
+                    )
                     with gr.Tabs(elem_classes="mid-result-tabs"):
                         with gr.Tab("Xem trước"):
                             preview = gr.Markdown(elem_id="mid-preview")
                         with gr.Tab("Mã .md"):
+                            gr.HTML(
+                                '<div class="mid-rawbar"><button type="button" class="mid-copy-btn" data-mid-action="copy-raw">'
+                                '<span data-mid-copy-label>Sao chép Markdown</span></button></div>'
+                            )
                             raw = gr.Code(
                                 language="markdown", show_label=False,
                                 elem_id="mid-raw",
@@ -574,6 +583,8 @@ def build_ui():
                 btn_clear = gr.Button(
                     "Xóa kết quả", variant="secondary", elem_classes="mid-clear-btn"
                 )
+                # Nút ẩn: JS bấm hộ khi người dùng bấm "Chạy lại" trong danh sách tải về
+                btn_rerun = gr.Button("Chạy lại", elem_id="mid-rerun", elem_classes="mid-hidden")
 
         # Ghi nhớ lựa chọn giữa các lần mở (lưu vào localStorage trình duyệt).
         prefs = gr.BrowserState(
@@ -789,7 +800,7 @@ def build_ui():
         job_timer = gr.Timer(job_handlers.TICK_SECONDS, active=False)
         job_outputs = [
             status, preview, raw, downloads, sig_state, job_timer,
-            btn_file, btn_stop, btn_resume, job_flag,
+            btn_file, btn_stop, btn_resume, job_flag, file_pick,
         ]
         creds_inputs = [
             api_key_in, claude_token_in, agy_token_in,
@@ -812,7 +823,11 @@ def build_ui():
             [job_state] + job_outputs,
             show_progress="hidden",
         )
-        job_timer.tick(job_handlers.on_tick, [job_state, sig_state], job_outputs, show_progress="hidden")
+        job_timer.tick(job_handlers.on_tick, [job_state, sig_state, file_pick], job_outputs, show_progress="hidden")
+        file_pick.input(job_handlers.on_tick, [job_state, sig_state, file_pick], job_outputs, show_progress="hidden")
+        btn_rerun.click(
+            job_handlers.on_rerun_job, [job_state] + creds_inputs, [job_state] + job_outputs, show_progress="hidden",
+        )
         demo.load(job_handlers.on_reattach, job_state, job_outputs, show_progress="hidden")
         btn_resume.click(
             job_handlers.on_resume_job, [job_state] + creds_inputs, job_outputs, show_progress="hidden",
@@ -874,7 +889,7 @@ def build_ui():
         ).then(_buttons_after_stop, job_state, [btn_file, btn_stop])
         btn_clear.click(
             on_clear, None,
-            outputs + [picked_state, picked_view, job_state, sig_state, btn_resume, job_flag],
+            outputs + [picked_state, picked_view, job_state, sig_state, btn_resume, job_flag, file_pick],
         )
 
     return demo

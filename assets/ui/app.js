@@ -170,6 +170,16 @@
     if (card){ window.midSelectMode(+card.dataset.midMode); return; }
     var t = e.target.closest('[data-mid-action="toggle-theme"]');
     if (t){ window.midToggleTheme(); return; }
+    var rr = e.target.closest('[data-mid-action="rerun"]');
+    if (rr){ var rb = document.getElementById('mid-rerun'); if (rb) rb.click(); return; }
+    var cp = e.target.closest('[data-mid-action="copy-raw"]');
+    if (cp){
+      var nat = document.querySelector('#mid-raw button[aria-label="Copy"]');
+      if (nat) nat.click();
+      var lb = cp.querySelector('[data-mid-copy-label]');
+      if (lb){ lb.textContent = 'Đã sao chép ✓'; setTimeout(function(){ lb.textContent = 'Sao chép Markdown'; }, 1800); }
+      return;
+    }
     var qa = e.target.closest('[data-mid-queue-add]');
     if (qa){ var up = document.querySelector('#mid-file button.upload-container'); if (up) up.click(); return; }
     var qc = e.target.closest('[data-mid-queue-clear]');
