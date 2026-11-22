@@ -206,6 +206,15 @@ def _merge_footer(chess, chess_lang):
     return _PROMPT_MERGE_INTRO + notation + _CHESS_TAIL
 
 
+def _glossary_block(translate_to):
+    """Khối thuật ngữ (glossary.prompt_block) chỉ khi OCR-gộp-dịch sang tiếng Việt; không thì rỗng -> prompt như cũ."""
+    if translate_to != "vi":
+        return ""
+    import glossary  # import muộn: tránh vòng phụ thuộc (glossary -> jobs -> pipeline -> claude_ocr)
+
+    return glossary.prompt_block()
+
+
 def _build_prompt(img_path, board_fens=None, chess=True, chess_lang="en",
                   translate_to=None):
     """Ghép prompt OCR: có FEN tính sẵn thì yêu cầu dùng nguyên văn.
@@ -225,14 +234,15 @@ def _build_prompt(img_path, board_fens=None, chess=True, chess_lang="en",
         footer = _chess_footer(chess_lang)
     else:
         footer = _PROMPT_FOOTER_PLAIN
+    gloss = _glossary_block(translate_to)
     if not chess:
-        return banner + head + footer
+        return banner + head + gloss + footer
     if board_fens:
         fen_list = "\n".join(f"{i}. {fen}" for i, fen in enumerate(board_fens, 1))
         chess_part = _PROMPT_CHESS_GIVEN.format(n=len(board_fens), fen_list=fen_list)
     else:
         chess_part = _PROMPT_CHESS_SELF
-    return banner + head + chess_part + footer
+    return banner + head + chess_part + gloss + footer
 
 
 # === Gộp nhiều trang vào 1 lần gọi (pages_per_call > 1) ========================
@@ -301,7 +311,7 @@ def _build_prompt_multi(pages, chess=True, chess_lang="en", translate_to=None):
         f"\n\nNHẮC LẠI: in đúng dòng marker `{_PAGE_BREAK}` giữa các trang "
         f"(tổng cộng {n - 1} marker cho {n} trang); KHÔNG in ở đầu hoặc cuối."
     )
-    return banner + head + body + footer + reminder
+    return banner + head + body + _glossary_block(translate_to) + footer + reminder
 
 # --- Hậu kiểm block ```chessboard --------------------------------------------
 

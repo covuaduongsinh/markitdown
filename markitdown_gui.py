@@ -24,6 +24,7 @@ from ai_engine import (
     CLAUDE_TRANSLATE_MODELS,
     get_default_engine,
 )
+import glossary
 import infrastructure
 import claude_login_bridge
 import job_handlers
@@ -145,6 +146,15 @@ def on_clear():
         "", "", "", job_view.idle_html(), [], "", "", "",
         gr.update(visible=False), job_view.flag_html(None), gr.update(visible=False),
     )
+
+
+def on_save_glossary(text):
+    """Lưu bảng thuật ngữ dịch -> thông báo Markdown."""
+    n, warns = glossary.save_text(text)
+    msg = f"✅ Đã lưu **{n}** thuật ngữ. Áp dụng từ lần dịch kế tiếp."
+    if warns:
+        msg += "\n\n⚠️ " + "  \n⚠️ ".join(warns[:8]) + ("  \n…" if len(warns) > 8 else "")
+    return msg
 
 
 def _convert_btn_label(n):
@@ -630,6 +640,30 @@ def build_ui():
                             '• Tab <b>Settings</b>: Bấm <b>Generate Access Token</b> hoặc copy <b>App Key</b> &amp; <b>App Secret</b> để dán vào đây.</div>'
                         )
 
+            with gr.Row(elem_classes="mid-set-grid"):
+                with gr.Column(elem_classes=["mid-card", "mid-set-card"]):
+                    gr.HTML(
+                        '<div style="font-size:13px;font-weight:700;color:var(--c-text);margin-bottom:6px;">'
+                        '📖 5. Bảng thuật ngữ dịch'
+                        '</div>'
+                    )
+                    glossary_in = gr.Textbox(
+                        label="Mỗi dòng một cặp: nguồn → đích",
+                        placeholder="zugzwang → thế bí\nfork → đòn chiếu đôi\ndiscovered check → chiếu lộ",
+                        lines=9, max_lines=20, value=glossary.load_text(), elem_id="mid-glossary",
+                        info="Áp dụng cho mọi lần dịch sang tiếng Việt (cả OCR+dịch gộp lẫn dịch riêng) từ lần chạy kế tiếp. Tối đa 60 thuật ngữ.",
+                    )
+                    btn_glossary_save = gr.Button("💾 Lưu bảng thuật ngữ", variant="secondary", size="sm")
+                    glossary_status = gr.Markdown("", elem_id="mid-glossary-status")
+                    with gr.Accordion("Hướng dẫn chi tiết", open=False, elem_classes="mid-set-guide"):
+                        gr.HTML(
+                            '<div style="font-size:12.5px;line-height:1.6;color:var(--c-text);">'
+                            '• Dạng <code>nguồn → đích</code> (cũng nhận <code>-&gt;</code> hoặc <code>=&gt;</code>); dòng bắt đầu bằng <code>#</code> là chú thích.<br>'
+                            '• AI được yêu cầu <b>luôn</b> dùng đúng bản dịch bạn ghi, không áp dụng trong khối bàn cờ và code.<br>'
+                            '• Bảng nằm trong <code>glossary.md</code> ở thư mục dữ liệu của máy chủ, dùng chung cho mọi người dùng.<br>'
+                            '• Đổi thuật ngữ thì các đoạn đã dịch trước đó (điểm lưu) <b>không</b> được dùng lại — chúng được dịch lại theo bảng mới.</div>'
+                        )
+
         # Ghi nhớ lựa chọn giữa các lần mở (lưu vào localStorage trình duyệt).
         prefs = gr.BrowserState(
             {
@@ -918,6 +952,10 @@ def build_ui():
         btn_cmp_next.click(
             lambda j, s, f, p: review_handlers.cmp_step(j, s, f, p, 1), cmp_ctx, cmp_outputs, show_progress="hidden",
         )
+
+        # Bảng thuật ngữ dịch (G3.3)
+        btn_glossary_save.click(on_save_glossary, glossary_in, glossary_status, show_progress="hidden")
+        demo.load(glossary.load_text, None, glossary_in)
 
         # Lịch sử công việc
         history_outputs = [history_pick, history_usage]

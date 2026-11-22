@@ -378,11 +378,12 @@ def _looks_untranslated(text, chess_lang="en"):
 TRANSLATE_WORKERS = 8
 
 
-def chunk_cache_key(chunk, chess, chess_lang):
-    """Khóa điểm lưu của một đoạn dịch: băm nội dung đoạn + chế độ (đổi chế độ thì không dùng lại)."""
+def chunk_cache_key(chunk, chess, chess_lang, extra=""):
+    """Khóa điểm lưu của một đoạn dịch: băm nội dung đoạn + chế độ + `extra` (dấu vân tay bảng thuật ngữ):
+    đổi chế độ hoặc đổi thuật ngữ thì không dùng lại bản dịch cũ."""
     import hashlib
 
-    raw = f"{int(bool(chess))}|{chess_lang}|{chunk}"
+    raw = f"{int(bool(chess))}|{chess_lang}|{extra}|{chunk}"
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
@@ -457,6 +458,12 @@ def translate_markdown_vn(
         instruction = TRANSLATE_INSTRUCTION_CHESS_ES
     else:
         instruction = TRANSLATE_INSTRUCTION_CHESS
+    import glossary  # bảng thuật ngữ do người dùng soạn (Cài đặt); rỗng -> instruction giữ nguyên
+
+    gloss = glossary.prompt_block()
+    if gloss:
+        instruction = instruction + "\n\n" + gloss
+    gloss_fp = glossary.fingerprint(gloss)
     text, blocks = _extract_boards(md, chess=chess)
     chunks = _split_chunks(text)
     if not chunks:
@@ -476,7 +483,7 @@ def translate_markdown_vn(
                     effort=effort, chess_lang=chess_lang, engine=engine,
                     api_key=api_key, claude_token=claude_token,
                     agy_token=agy_token, cache=chunk_cache,
-                    cache_key=chunk_cache_key(c, chess, chess_lang),
+                    cache_key=chunk_cache_key(c, chess, chess_lang, gloss_fp),
                 ): idx
                 for idx, c in enumerate(chunks)
             }
